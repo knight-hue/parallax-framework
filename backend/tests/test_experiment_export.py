@@ -80,3 +80,68 @@ async def test_claims_json_is_not_capped_by_report_limit(demo_repo, defects, tmp
     assert len(payload) == len(result.claims)
     assert len(payload) > 1, "需要多于 1 条 claim 才能证明落盘不受报告上限约束"
     assert "仅列出前 1 条" in result.report_markdown
+
+
+async def test_summary_does_not_confuse_the_two_redundancy_measures(demo_repo, defects):
+    """汇总里「冗余率」与「命中同一缺陷的重复」必须分开显示。
+
+    曾经把二者都印成"冗余"：无标注仓库的明细会同时出现「冗余率 63%」和「冗余 0」。
+    """
+    from parallax.eval.experiment import render_summary
+
+    task = _task(demo_repo)
+    result = await run_arm(
+        task,
+        _arm("baseline_shared"),
+        make_settings(n_readers=3, redundancy=2, max_rounds=1),
+        client_factory=lambda s: FakeLLMClient(make_responder(defects)),
+    )
+
+    text = render_summary([result])
+    m = result.metrics
+
+    assert m.distinct_fingerprints is not None, "本仓库运行应记录确切指纹数"
+    assert f"独立指纹 {m.distinct_fingerprints}" in text
+    assert f"冗余率 {m.redundancy:.0%}" in text
+    assert "冗余 0" not in text, "裸数字「冗余」是那个自相矛盾的旧印法"
+
+
+def test_old_artifacts_without_distinct_fingerprints_render_dash():
+    """旧产物没有该字段时不许猜一个数出来。"""
+    from parallax.eval.experiment import ArmResult, render_summary
+    from parallax.eval.metrics import ArmMetrics
+
+    result = ArmResult(
+        metrics=ArmMetrics(arm="baseline_shared", task_id="t", total_claims=100, redundancy=0.63)
+    )
+    text = render_summary([result])
+    assert "独立指纹 —（旧产物未记录）" in text
+    assert "独立指纹 0" not in text, "0 会被读成「一条独立结论都没有」"
+
+
+async def test_rerender_rebuilds_summary_without_rerunning(demo_repo, defects, tmp_path):
+    """口径修正后必须能在不重跑实验的前提下刷新汇总表。
+
+    一次两臂真实仓库运行要几美元和近一小时；若刷新一个表格都要重跑，
+    口径就会因为"太贵"而长期停留在错误版本。
+    """
+    from parallax.eval.experiment import rerender_summary
+
+    task = _task(demo_repo)
+    result = await run_arm(
+        task,
+        _arm("baseline_shared"),
+        make_settings(n_readers=3, redundancy=2, max_rounds=1),
+        client_factory=lambda s: FakeLLMClient(make_responder(defects)),
+    )
+    out = tmp_path / "run"
+    save_results([result], out)
+
+    (out / "summary.md").write_text("被改坏了", encoding="utf-8")
+    rerender_summary(out)
+
+    rebuilt = (out / "summary.md").read_text(encoding="utf-8")
+    assert "被改坏了" not in rebuilt
+    assert f"独立指纹 {result.metrics.distinct_fingerprints}" in rebuilt
+    assert f"耗时 {result.elapsed_s}s" in rebuilt, "耗时随 metrics.json 一并落盘，重建后应保留"
+    assert "K*" in rebuilt

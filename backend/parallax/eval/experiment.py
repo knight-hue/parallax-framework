@@ -444,22 +444,34 @@ def render_summary(results: list[ArmResult], arms: list[Arm] | None = None) -> s
         m = result.metrics
         lines.append(f"### `{m.arm}`")
         lines.append("")
+        # 耗时只在确实记录过时才印。从 metrics.json 重新渲染时它是未知的，
+        # 印成 "0.0s" 会被误读成"瞬间完成"。
+        elapsed = f"- 耗时 {result.elapsed_s}s｜" if result.elapsed_s else "- "
         lines.append(
-            f"- 耗时 {result.elapsed_s}s｜LLM 调用 {m.llm_calls} 次"
+            f"{elapsed}LLM 调用 {m.llm_calls} 次"
             f"（输入 {m.prompt_tokens} / 输出 {m.completion_tokens} tokens）"
             f"｜失败 {m.llm_failures}｜schema 重试 {m.schema_retries}"
             f"｜Reader 失败 {m.readers_failed}"
         )
         lines.append(f"- 停止原因 `{m.stop_reason}`｜轮次 {m.rounds}")
+        distinct = (
+            str(m.distinct_fingerprints)
+            if m.distinct_fingerprints is not None
+            else "—（旧产物未记录）"
+        )
         lines.append(
             f"- claim 总数 {m.total_claims}"
-            f"（独立指纹 {m.total_claims - m.duplicates}｜冗余 {m.duplicates}"
+            f"（独立指纹 {distinct}｜冗余率 {m.redundancy:.0%}"
             f"｜未匹配 {m.unmatched}）"
         )
         if m.recall is None:
             lines.append("- 命中情况：**无 ground truth，跳过**（召回/精确不适用）")
         else:
             missed = m.missed_ids()
+            lines.append(
+                f"- 命中 {m.hits}/{m.planted} 个植入缺陷"
+                f"｜命中同一缺陷的重复 claim {m.duplicates} 条"
+            )
             lines.append(f"- 漏检：{', '.join(missed) if missed else '无'}")
         if result.errors:
             lines.append(f"- ⚠️ 错误：{'; '.join(result.errors)}")
@@ -475,7 +487,12 @@ def save_results(results: list[ArmResult], out_dir: Path) -> Path:
 
     raw = {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
-        "arms": [json.loads(r.metrics.model_dump_json()) for r in results],
+        # 同时落 elapsed_s 与 errors：口径修正后要能在**不重跑实验**的前提下
+        # 重新渲染 summary.md。此前只存 metrics，导致每次改口径都要重花几美元。
+        "arms": [
+            {**json.loads(r.metrics.model_dump_json()), "elapsed_s": r.elapsed_s, "errors": r.errors}
+            for r in results
+        ],
     }
     (out_dir / "metrics.json").write_text(
         json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -520,3 +537,23 @@ def save_results(results: list[ArmResult], out_dir: Path) -> Path:
 def default_out_dir(base: Path) -> Path:
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     return base / stamp
+
+
+def rerender_summary(out_dir: Path, arms: list[Arm] | None = None) -> Path:
+    """从 `metrics.json` 重建 `summary.md`，不重跑实验。
+
+    存在的理由：汇总口径已经改过两次（K\\* 可比性、两种"冗余"混用），
+    每次都要重跑实验才能刷新一个表格是不可接受的——一次两臂运行要几美元和近一小时。
+    """
+    raw = json.loads((out_dir / "metrics.json").read_text(encoding="utf-8"))
+    results = [
+        ArmResult(
+            metrics=ArmMetrics.model_validate(entry),
+            elapsed_s=entry.get("elapsed_s", 0.0),
+            errors=entry.get("errors", []),
+        )
+        for entry in raw["arms"]
+    ]
+    summary_path = out_dir / "summary.md"
+    summary_path.write_text(render_summary(results, arms), encoding="utf-8")
+    return summary_path

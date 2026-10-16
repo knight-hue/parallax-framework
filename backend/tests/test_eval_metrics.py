@@ -237,3 +237,33 @@ def test_channels_ratio_is_zero_without_agents():
     from parallax.eval.metrics import ArmMetrics
 
     assert ArmMetrics(arm="x", task_id="t").channels_ratio == 0.0
+
+
+# ---- 两种"冗余"不能混用 ----
+
+
+def test_distinct_fingerprints_and_duplicates_are_different_concepts():
+    """无标注真实仓库上曾同时印出「冗余率 63%」和「冗余 0」，自相矛盾。
+
+    真相是两个不同的量：前者来自指纹去重，后者是"多条 claim 命中同一植入缺陷"
+    （没有 ground truth 时恒为 0）。汇总必须分别呈现。
+    """
+    from parallax.eval.metrics import ArmMetrics
+
+    m = ArmMetrics(
+        arm="x",
+        task_id="t",
+        total_claims=100,
+        distinct_fingerprints=37,
+        redundancy=0.63,
+        duplicates=0,
+    )
+    assert m.redundancy == pytest.approx(1 - m.distinct_fingerprints / m.total_claims)
+    assert m.duplicates == 0, "无 ground truth 时命中重复恒为 0——所以它不能当冗余率印"
+
+
+def test_distinct_fingerprints_counts_unique_claims_only():
+    from parallax.eval.metrics import ArmMetrics
+
+    m = ArmMetrics(arm="x", task_id="t", total_claims=10, distinct_fingerprints=4)
+    assert m.total_claims - m.distinct_fingerprints == 6, "6 条是同一指纹的重复"
