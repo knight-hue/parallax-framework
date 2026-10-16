@@ -311,9 +311,21 @@ class ArmMetrics(BaseModel):
     coverage_fill_rate: float = 0.0
     rounds: int = 0
     total_claims: int = 0
+    distinct_fingerprints: int | None = None
+    """去重后的主体指纹数。**None 表示旧产物未记录该字段**（早于本字段加入）。
+
+    ⚠️ 与 `duplicates` **不是同一个东西**，早先的汇总把它们都印成"冗余"，
+    在无标注的真实仓库上会同时显示「冗余率 63%」和「冗余 0」，自相矛盾。
+    - `distinct_fingerprints`：不同指纹数 → `redundancy = 1 - distinct/total`
+    - `duplicates`：**多条 claim 命中同一个植入缺陷**的条数，只在有 ground truth 时有意义
+
+    不从 `redundancy` 反推：那个值只保留 4 位小数，反推出来的整数可能差 1，
+    把估计值当实测值印出来正是这个项目一直在修的那类错误。
+    """
     hits: int = 0
     planted: int = 0
     duplicates: int = 0
+    """命中同一植入缺陷的重复 claim 数（需要 ground truth；无标注时恒为 0）。"""
     unmatched: int = 0
     llm_calls: int = 0
     llm_failures: int = 0
@@ -388,6 +400,7 @@ def compute_metrics(
         coverage_fill_rate=round(report.coverage.fill_rate(), 4),
         rounds=len(report.manifest.rounds),
         total_claims=total_claims,
+        distinct_fingerprints=distinct_fingerprints,
         hits=match.hits,
         planted=match.total_defects,
         duplicates=match.duplicates,

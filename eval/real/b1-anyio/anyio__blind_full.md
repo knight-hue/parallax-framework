@@ -1,0 +1,567 @@
+# Parallax 运行报告 `41b860a773bb`
+
+**审查目标**：找出这个代码仓库中真实存在的缺陷，并说明触发条件。
+
+## 结论概览
+
+| 结论 | 条数 | 含义 |
+| --- | ---: | --- |
+| 高置信 | 77 | >= 2 个独立 Agent 交叉验证 |
+| 待验证 | 715 | 单一来源孤证 |
+| 争议 | 245 | 存在极性相反的主张，需外部裁决 |
+
+## 运行审计
+
+- 插件：`code_audit`｜轮次：3｜停止原因：`max_rounds_reached`
+- 参与 Reader：18 个（每轮全新身份）
+- 账本条目：2490
+
+| 轮次 | Reader 数 | 本轮新主体 | 证据覆盖 | 矩阵填充 |
+| ---: | ---: | ---: | ---: | ---: |
+| 0 | 6 | 569 | 100% | 78% |
+| 1 | 6 | 264 | 100% | 82% |
+| 2 | 6 | 204 | 100% | 85% |
+
+## 高置信结论
+
+- **[api_misuse/medium]** [api_misuse] __init__.py:155-159 __init__.py 中 set_deprecated_aliases 的键拼写错误 BrokenWorkerIntepreter（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r1-1｜置信度 0.5
+  - 源：`__init__.py:155-159`
+  - 依据：set_deprecated_aliases 的键 'BrokenWorkerIntepreter' 拼写错误（应为 BrokenWorkerInterpreter），而值是 'anyio.BrokenWorkerInterpreter'。这会导致废弃别名指向一个不存在的旧名称，用户使用正确拼写的旧名时无法得到废弃警告，或使用错误拼写时得到指向正确名称的别名。触发条件：访问 anyio.BrokenWorkerIntepreter。
+- **[logic/medium]** [logic] __init__.py:175-179 __init__.py 中 set_deprecated_aliases 的键拼写错误 BrokenWorkerIntepreter（确认存在缺陷）
+  - 独立来源 2 个：reader-r1-2, reader-r2-0｜置信度 0.5
+  - 源：`__init__.py:175-179`
+  - 依据：set_deprecated_aliases 的键 'BrokenWorkerIntepreter' 拼写错误（缺少 'r'，应为 'BrokenWorkerInterpreter'）。该键用于注册已弃用的旧名称别名，拼写错误意味着用户访问 anyio.BrokenWorkerIntepreter（旧拼写）时不会得到弃用警告，而访问正确拼写也不会触发别名。这会导致弃用别名机制失效。
+- **[boundary/medium]** [boundary] _backends/_trio.py:520-530 UNIXSocketStream.receive_fds 中 fds.frombytes 可能接收过多 fd（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-0, reader-r2-1｜置信度 0.5
+  - 源：`_backends/_trio.py:520-530`
+  - 依据：在 receive_fds 中，fds.frombytes(cmsg_data[: len(cmsg_data) - (len(cmsg_data) % fds.itemsize)]) 将 cmsg_data 转换为整数数组。但没有检查接收到的 fd 数量是否超过 maxfds。如果发送方发送了超过 maxfds 个 fd，接收方会接收所有 fd，可能导致资源泄漏或安全问题。
+- **[concurrency/medium]** [concurrency] _backends/_trio.py:745-755 Semaphore.acquire fast path 中 park 后未处理取消（确认存在缺陷）
+  - 独立来源 2 个：reader-r1-2, reader-r2-2｜置信度 0.5
+  - 源：`_backends/_trio.py:745-755`
+  - 依据：与 Lock 类似，Semaphore 的 fast path 中 `await self.__original._lot.park()` 如果被取消，trio 的 park 会处理取消。但这里没有 try/except，如果 park 被取消，Semaphore 的等待者状态可能不一致。不过 trio 内部会处理。
+- **[error_handling/medium]** [error_handling] _backends/_trio.py:1024-1030 TestRunner._call_in_runner_task 中 send_nowait 可能因缓冲区满抛 WouldBlock（确认存在缺陷）
+  - 独立来源 4 个：reader-r1-2, reader-r1-3, reader-r2-2, reader-r2-3｜置信度 0.5
+  - 源：`_backends/_trio.py:1024-1030`
+  - 依据：create_memory_object_stream 缓冲区大小为 1，send_nowait 在缓冲区已满时会抛出 WouldBlock（或 anyio 的 WouldBlock），而此处未捕获。若前一次调用尚未被消费，会直接抛出异常而非等待。触发条件：连续快速调用且接收端未及时消费。
+- **[error_handling/medium]** [error_handling] _backends/_trio.py:548-556 UNIXSocketStream.send_fds 中非 int/IOBase 的 fd 被静默忽略（确认存在缺陷）
+  - 独立来源 2 个：reader-r1-4, reader-r2-2｜置信度 0.5
+  - 源：`_backends/_trio.py:548-556`
+  - 依据：在 `for fd in fds:` 循环中，如果 fd 既不是 int 也不是 IOBase，它会被静默忽略，不会添加到 filenos 中。这可能导致发送的 fd 数量少于预期，且没有错误提示。这是一个错误处理缺陷。
+- **[logic/medium]** [logic] _backends/_trio.py:565-575 TCPSocketListener.accept 中 trio_socket 可能未定义（确认存在缺陷）
+  - 独立来源 2 个：reader-r1-3, reader-r2-1｜置信度 0.5
+  - 源：`_backends/_trio.py:565-575`
+  - 依据：在 accept 中，try 块内调用 await self._trio_socket.accept()，如果抛出异常，_convert_socket_error 会重新抛出（NoReturn）。如果正常返回，trio_socket 被赋值。因此 trio_socket 在 try 块后总是已定义。这是安全的。
+- **[resource_leak/medium]** [resource_leak] _backends/_trio.py:1047-1063 run_asyncgen_fixture 中 asyncgen 未在异常路径关闭（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-0, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`_backends/_trio.py:1047-1063`
+  - 依据：run_asyncgen_fixture 在 yield fixturevalue 后，若调用方在 yield 期间抛出异常（例如测试失败），生成器会被关闭，但 asyncgen 的 aclose 不会被调用，导致异步生成器资源泄漏。此外，若第一次 asend 抛异常，asyncgen 也不会被关闭。
+- **[resource_leak/medium]** [resource_leak] _backends/_trio.py:1180-1195 connect_tcp 中 local_address 绑定失败时未关闭 socket（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-5, reader-r1-4｜置信度 0.5
+  - 源：`_backends/_trio.py:1180-1195`
+  - 依据：connect_tcp 创建 trio_socket 后，若 await trio_socket.bind(local_address) 抛出异常，socket 不会被关闭，因为 try/except 只包裹了 connect 调用。触发条件：local_address 无效或绑定失败。
+- **[resource_leak/medium]** [resource_leak] _backends/_trio.py:1230-1250 create_udp_socket 中 bind/connect 失败时未关闭 socket（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-5, reader-r1-4, reader-r2-2, reader-r2-3｜置信度 0.5
+  - 源：`_backends/_trio.py:1230-1250`
+  - 依据：create_udp_socket 创建 trio_socket 后，若 setsockopt、bind 或 connect 抛出异常，socket 不会被关闭。触发条件：reuse_port 不支持、local_address 无效或 connect 失败。
+- **[resource_leak/medium]** [resource_leak] _backends/_trio.py:1275-1295 create_udp_socket 中 bind/connect 失败时 socket 泄漏（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-4, reader-r0-5, reader-r1-4, reader-r2-2｜置信度 0.5
+  - 源：`_backends/_trio.py:1275-1295`
+  - 依据：在 create_udp_socket 中，如果 bind 或 connect 抛出异常，trio_socket 不会被关闭，导致 socket 泄漏。没有 try/except 包裹这些操作。
+- **[resource_leak/medium]** [resource_leak] _backends/_trio.py:1280-1298 create_udp_socket 中 bind/connect 失败时 socket 未关闭（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-0, reader-r2-3｜置信度 0.5
+  - 源：`_backends/_trio.py:1280-1298`
+  - 依据：create_udp_socket 创建 trio_socket 后，若 setsockopt、bind 或 connect 抛出异常，socket 不会被关闭，导致文件描述符泄漏。
+- **[resource_leak/medium]** [resource_leak] _backends/_trio.py:575-585 TCPSocketListener.accept 中 setsockopt 失败时 socket 泄漏（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-0, reader-r2-2｜置信度 0.5
+  - 源：`_backends/_trio.py:575-585`
+  - 依据：在 accept 成功后，`trio_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)` 如果抛出异常，trio_socket 不会被关闭，导致 socket 泄漏。
+- **[resource_leak/medium]** [resource_leak] _backends/_trio.py:580-590 TCPSocketListener.accept 中 setsockopt 失败会泄漏 trio_socket（确认存在缺陷）
+  - 独立来源 3 个：reader-r1-2, reader-r1-4, reader-r2-3｜置信度 0.5
+  - 源：`_backends/_trio.py:580-590`
+  - 依据：accept 成功后调用 trio_socket.setsockopt(...)。如果 setsockopt 抛异常（例如 socket 已关闭），trio_socket 不会被关闭，导致 fd 泄漏。触发条件：setsockopt 失败。
+- **[security/medium]** [security] _backends/_trio.py:1160-1180 open_process 中 shell=True 对字符串命令存在安全风险（确认存在缺陷）
+  - 独立来源 2 个：reader-r1-4, reader-r2-1｜置信度 0.5
+  - 源：`_backends/_trio.py:1160-1180`
+  - 依据：open_process 中当 command 是 str/bytes/PathLike 时使用 shell=True。如果 command 来自不可信输入，可能导致 shell 注入。触发条件：用户传入包含 shell 元字符的字符串命令。
+- **[error_handling/medium]** [error_handling] _core/_asyncio_selector_thread.py:100-106 remove_reader 在未注册 EVENT_READ 时 del key.data[EVENT_READ] 抛 KeyError（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-4, reader-r1-3, reader-r2-2, reader-r2-3｜置信度 0.5
+  - 源：`_core/_asyncio_selector_thread.py:100-106`
+  - 依据：当 fd 只注册了 EVENT_WRITE 时，key.events ^ EVENT_READ 非零（因为 EVENT_WRITE 位仍在），进入分支后执行 del key.data[EVENT_READ]，但 key.data 中不存在 EVENT_READ 键，抛出 KeyError。调用方（如 asyncio 的 remove_reader）会收到意外异常。
+- **[error_handling/medium]** [error_handling] _core/_asyncio_selector_thread.py:130-138 run() 中 recv 循环在 _receive 关闭后可能抛出 OSError 未被捕获（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-3, reader-r2-2, reader-r2-4｜置信度 0.5
+  - 源：`_core/_asyncio_selector_thread.py:130-138`
+  - 依据：run() 中 while self._receive.recv(4096) 只捕获 BlockingIOError。若 _stop 在另一线程关闭了 _receive（_stop 中 self._receive.close() 在 join 之后，但若 join 超时或异常路径），recv 会抛出 OSError(EBADF)，导致 selector 线程异常退出且未被处理。
+- **[logic/medium]** [logic] _core/_asyncio_selector_thread.py:100-113 remove_reader/remove_writer 使用 XOR 而非清除位，可能误删其他事件（确认存在缺陷）
+  - 独立来源 8 个：reader-r0-3, reader-r0-4, reader-r0-5, reader-r1-3, reader-r1-4, reader-r2-2, reader-r2-3, reader-r2-4｜置信度 0.5
+  - 源：`_core/_asyncio_selector_thread.py:100-113`
+  - 依据：remove_reader 用 key.events ^ EVENT_READ 计算新事件集。XOR 会翻转 EVENT_READ 位：如果该 fd 当前并未注册 EVENT_READ（例如只注册了 EVENT_WRITE），XOR 反而会加上 EVENT_READ 位，导致 selector 被修改为监听读事件，而 key.data 中并没有 EVENT_READ 回调。随后 run() 中若触发 EVENT_READ，会执行 key.data[EVENT_READ] 抛出 KeyError，使 selector 线程崩溃。正确做法应是 key.events & ~EVENT_READ。remove_writer 同理。
+- **[concurrency/high]** [concurrency] _core/_concurrency_utils.py:116-124 as_completed 中 runner 在 finally 里发送 task_handles[index]，但 task_handles 在任务启动前可能尚未填充（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-0, reader-r0-4, reader-r2-3｜置信度 0.5
+  - 源：`_core/_concurrency_utils.py:116-124`
+  - 依据：runner 协程在 finally 中访问 task_handles[index]。虽然 start_soon 返回后才 append，但 runner 可能在 append 之前就开始执行（例如 awaitable 立即完成或调度器立即运行任务），此时 task_handles[index] 会抛 IndexError。触发条件：awaitable 是已完成的协程或调度器在 start_soon 内同步运行任务。
+- **[logic/high]** [logic] _core/_concurrency_utils.py:126-133 as_completed 的 runner 在 finally 中发送 task_handles[index]，但该 handle 在 start_soon 返回前不可用（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-4, reader-r2-5｜置信度 0.5
+  - 源：`_core/_concurrency_utils.py:126-133`
+  - 依据：task_handles.append(tg.start_soon(...)) 中，start_soon 先执行并可能让 runner 运行到完成（若 awaitable 是已完成的协程），此时 task_handles 仍为空，runner 的 finally 访问 task_handles[index] 会抛 IndexError。触发条件：传入一个立即返回的协程（如 async def f(): return 1）。
+- **[error_handling/medium]** [error_handling] _core/_exceptions.py:31-40 BrokenWorkerInterpreter.__init__ 在 excinfo.type 为 None 且 msg 为空时 msg 为 None，super().__init__(None) 导致 str 异常（确认存在缺陷）
+  - 独立来源 6 个：reader-r0-4, reader-r1-2, reader-r1-3, reader-r2-1, reader-r2-2, reader-r2-3｜置信度 0.5
+  - 源：`_core/_exceptions.py:31-40`
+  - 依据：当 excinfo.formatted 为空、excinfo.type 为 None 且 excinfo.msg 为空时，msg 被赋值为 excinfo.type.__name__ or excinfo.msg，即 None or '' = ''，实际为 ''。但若 excinfo.type 为 None 且 excinfo.msg 为 None，则 msg = None or None = None，super().__init__(None) 会使 Exception.args=(None,)，str() 返回 'None'，虽不崩溃但语义错误。更关键的是 excinfo.type.__name__ 在 type 为 None 时会 AttributeError。触发条件：excinfo.type 为 None 且 formatted 为空。
+- **[boundary/medium]** [boundary] _core/_fileio.py:158-161 AsyncFile.seek 的 whence 默认值使用 None 而非 os.SEEK_SET（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-4, reader-r1-4｜置信度 0.5
+  - 源：`_core/_fileio.py:158-161`
+  - 依据：签名 `whence: int | None = os.SEEK_SET` 允许 None，但底层 file.seek(offset, None) 在 CPython 中会抛 TypeError（seek 的 whence 必须是 int）。虽然默认值是 os.SEEK_SET（0），但类型标注允许调用者传 None，且 run_sync 会把 None 原样传给 self._fp.seek，导致 TypeError。更关键的是：当调用者显式传 whence=None 时不会回退到 SEEK_SET，而是直接失败。这是类型标注与实际行为不一致导致的边界缺陷。
+- **[boundary/medium]** [boundary] _core/_fileio.py:268-277 _PathIterator.__anext__ 使用 next(iterator, None) 哨兵，若迭代器实际产出 None 会提前终止（确认存在缺陷）
+  - 独立来源 2 个：reader-r2-2, reader-r2-3｜置信度 0.5
+  - 源：`_core/_fileio.py:268-277`
+  - 依据：使用 None 作为 StopIteration 的哨兵值。如果底层迭代器（pathlib.Path.glob/iterdir/rglob 的生成器）产出的元素恰好是 None，则会被误判为迭代结束。虽然 pathlib 的 glob/iterdir 不会产出 None，但 _PathIterator 是通用类，且 path_cls(nextval) 在 nextval 为 None 时也会失败。更稳妥的做法是捕获 StopIteration。触发条件：任何产出 None 的迭代器。
+- **[logic/medium]** [logic] _core/_fileio.py:1005-1016 Path.rename/replace 返回的 Path 使用原始 target 而非实际结果（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r1-4｜置信度 0.5
+  - 源：`_core/_fileio.py:1005-1016`
+  - 依据：rename 和 replace 在 target 是 Path 时先解包为 pathlib.Path，然后调用 self._path.rename(target)，最后 `return type(self)(target, limiter=self._limiter)`。这里 target 已被重新赋值为 pathlib.Path（或原始 str/PurePath）。当 target 是相对路径时，pathlib.Path.rename 返回的是相对于当前工作目录解析后的路径，而这里返回的是未解析的 target，与 pathlib.Path.rename 的语义（返回新路径）不一致。更重要的是，如果 target 是 PurePath 子类而非 Path，返回的 type(self)(target) 可能丢失 limiter 语义。实际缺陷在于返回值可能与实际重命名结果不符（例如 target 为相对路径时）。
+- **[boundary/medium]** [boundary] _core/_sockets.py:300-310 setup_raw_socket 中 IPv6 地址含 % 时 int(scope_id) 对接口名抛 ValueError（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-3, reader-r1-2, reader-r1-3｜置信度 0.5
+  - 源：`_core/_sockets.py:300-310`
+  - 依据：当 bind_addr[0] 形如 'fe80::1%eth0' 时，split('%', 1) 得到 scope_id='eth0'，int('eth0') 会抛 ValueError。虽然 getaddrinfo 通常返回数字 scope_id，但用户直接传入接口名时（如 local_host='fe80::1%eth0'）会触发。
+- **[boundary/medium]** [boundary] _core/_sockets.py:330-340 create_tcp_listener 中 sockaddrs 为空时直接抛 OSError 而非返回有效监听器（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-5, reader-r1-3｜置信度 0.5
+  - 源：`_core/_sockets.py:330-340`
+  - 依据：如果 gai_res 中所有结果的 res[1] 都不是 SOCK_STREAM（例如 type=0 时返回 SOCK_DGRAM），sockaddrs 为空，外层 for 循环不执行，直接 raise OSError。但错误信息 'Could not create 0 listeners' 可能误导。更严重的是，如果 sockaddrs 为空但 dual-stack 分支未触发，会直接抛异常而非返回有效监听器。
+- **[concurrency/medium]** [concurrency] _core/_sockets.py:730-740 setup_unix_local_socket 中 to_thread.run_sync 使用 abandon_on_cancel=True，取消时 bind 可能仍在后台执行（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-3, reader-r0-4, reader-r0-5｜置信度 0.5
+  - 源：`_core/_sockets.py:730-740`
+  - 依据：使用 abandon_on_cancel=True 时，若任务被取消，run_sync 会立即返回（抛出取消异常），但后台线程中的 bind 操作可能仍在进行。此时 except 块会关闭 raw_socket，而 bind 可能正在使用该 socket，导致竞态条件。更严重的是，如果 bind 在 socket 关闭后完成，可能留下一个已绑定但已关闭的 socket 文件（UNIX socket 文件残留）。
+- **[error_handling/medium]** [error_handling] _core/_sockets.py:233-245 connect_tcp 中 TLS 包装失败时调用 aclose_forcefully(connected_stream)，但 connected_stream 可能为 None（类型标注为 SocketStream | None）（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-5, reader-r1-2｜置信度 0.5
+  - 源：`_core/_sockets.py:233-245`
+  - 依据：在 `if tls or tls_hostname or ssl_context:` 分支中，connected_stream 理论上非 None（因为前面已检查 connected_stream is None 并抛出异常）。但类型检查器无法推断这一点，运行时若 connected_stream 为 None（例如前面逻辑被修改），aclose_forcefully(None) 会失败。当前代码路径下 connected_stream 一定非 None，因此不是运行时缺陷。
+- **[resource_leak/medium]** [resource_leak] _core/_sockets.py:520-530 create_unix_datagram_socket 中 raw_socket 在后续失败时未关闭导致 fd 泄漏（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-4, reader-r1-3｜置信度 0.5
+  - 源：`_core/_sockets.py:520-530`
+  - 依据：setup_unix_local_socket 成功返回 raw_socket 后，如果 get_async_backend().create_unix_datagram_socket(raw_socket, None) 抛异常，raw_socket 不会被关闭，导致 fd 泄漏。
+- **[resource_leak/medium]** [resource_leak] _core/_sockets.py:560-565 create_unix_datagram_socket 中 setup_unix_local_socket 返回的 raw_socket 在 create_unix_datagram_socket 失败时未关闭（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-5, reader-r2-3｜置信度 0.5
+  - 源：`_core/_sockets.py:560-565`
+  - 依据：setup_unix_local_socket 返回 raw_socket 后，调用 get_async_backend().create_unix_datagram_socket(raw_socket, None)。若该调用抛出异常，raw_socket 不会被关闭，导致文件描述符泄漏。这是真实缺陷。
+- **[resource_leak/medium]** [resource_leak] _core/_sockets.py:725-735 setup_unix_local_socket 中 chmod 失败时关闭 socket 但不删除已绑定的路径文件（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-3, reader-r0-5, reader-r1-2｜置信度 0.5
+  - 源：`_core/_sockets.py:725-735`
+  - 依据：bind 成功后 chmod 失败，except 分支关闭 socket 但不删除路径文件。UNIX socket 文件残留。
+- **[boundary/low]** [boundary] _core/_subprocesses.py:96-97 run_process 在 input 非空但 stdin 也为 PIPE 时未校验，且 input 为空 bytes 时静默忽略（确认存在缺陷）
+  - 独立来源 2 个：reader-r1-4, reader-r2-4｜置信度 0.5
+  - 源：`_core/_subprocesses.py:96-97`
+  - 依据：`if stdin is not None and input is not None` 只检查 input 是否为 None，不检查 input 是否为空 bytes。当 input=b'' 且 stdin=None 时不会报错，但 stdin 也不会被设为 PIPE，导致子进程继承父进程 stdin，行为与文档中 'input overrides stdin' 的语义不一致。触发条件：run_process(cmd, input=b'')。
+- **[api_misuse/low]** [api_misuse] _core/_synchronization.py:466-474 SemaphoreAdapter.__new__ 忽略 fast_acquire 参数（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-5, reader-r2-2｜置信度 0.5
+  - 源：`_core/_synchronization.py:466-474`
+  - 依据：SemaphoreAdapter.__new__ 接受 fast_acquire 参数但未存储，__init__ 调用 super().__init__ 时传入了 fast_acquire，但 _semaphore 属性创建内部信号量时未传递 fast_acquire：`get_async_backend().create_semaphore(self._initial_value, max_value=self._max_value)`。这导致在无事件循环时创建 Semaphore 并指定 fast_acquire=True 会被静默忽略，行为与有事件循环时不一致。
+- **[boundary/medium]** [boundary] _core/_synchronization.py:596-599 CapacityLimiterAdapter.total_tokens setter 拒绝 float 值（如 2.5）（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-4, reader-r0-5, reader-r1-4, reader-r2-4｜置信度 0.5
+  - 源：`_core/_synchronization.py:596-599`
+  - 依据：total_tokens 的类型标注为 float，且 CapacityLimiter 文档说明 total_tokens 是 float 属性。但 setter 中 `if not isinstance(value, int) and not math.isinf(value): raise TypeError` 会拒绝任何非 int 且非 inf 的 float（例如 2.5），而 math.isinf(2.5) 为 False。触发条件：在无事件循环时创建 CapacityLimiter（走 Adapter 路径）并设置 total_tokens=2.5，会抛出 TypeError，而真实后端实现允许 float 令牌数。这造成 Adapter 与真实后端行为不一致。
+- **[boundary/medium]** [boundary] _core/_synchronization.py:640-645 CapacityLimiterAdapter.total_tokens setter 使用 isinstance(value, int) 拒绝 float 值（确认存在缺陷）
+  - 独立来源 2 个：reader-r1-2, reader-r2-3｜置信度 0.5
+  - 源：`_core/_synchronization.py:640-645`
+  - 依据：total_tokens 的类型标注是 float，文档也说明可以设置为 0 或 math.inf。但 setter 中 `if not isinstance(value, int) and not math.isinf(value): raise TypeError`。对于合法的 float 值（如 2.5），isinstance(2.5, int) 为 False 且 math.isinf(2.5) 为 False，因此会抛出 TypeError，拒绝了一个文档允许的 float 值。触发条件：用户设置 total_tokens = 2.5。
+- **[boundary/medium]** [boundary] _core/_synchronization.py:700-703 CapacityLimiterAdapter.total_tokens setter 拒绝 float 类型的有限值（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r1-3｜置信度 0.5
+  - 源：`_core/_synchronization.py:700-703`
+  - 依据：setter 检查 `if not isinstance(value, int) and not math.isinf(value): raise TypeError`。这意味着任何非 int 且非无穷的 float（如 2.5）都会被拒绝。但 CapacityLimiter.total_tokens 的类型标注是 float，且文档说明 total_tokens 是 float。虽然实际语义上 token 数应为整数或 inf，但类型标注为 float 且基类属性为 float，这里拒绝 float 有限值可能导致与类型系统不一致。更关键的是：`math.isinf(value)` 对非数值类型（如字符串）会抛 TypeError 而非预期的 TypeError 消息。触发条件：传入字符串时 math.isinf 抛 TypeError。
+- **[concurrency/medium]** [concurrency] _core/_synchronization.py:396-407 Condition.wait 在取消时可能将通知错误地传递给下一个等待者（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r1-2｜置信度 0.5
+  - 源：`_core/_synchronization.py:396-407`
+  - 依据：当 wait() 被取消且 event 已被 set（即已被 notify 唤醒但尚未重新获取锁）时，代码执行 `elif self._waiters: self._waiters.popleft().set()`，把通知转交给队列中的下一个等待者。但此时当前任务在 finally 中仍会通过 `await self.acquire()` 重新获取锁，而它已经消费了这次通知。结果是：一个通知被同时用于唤醒当前任务（它重新获取锁后继续执行）和下一个等待者，导致 notify(1) 实际唤醒了两个任务，破坏了 Condition 的语义（notify 应恰好唤醒 n 个等待者）。触发条件：任务 A 在 wait() 中已被 notify 但尚未从 event.wait() 返回时被取消，且队列中还有任务 B。
+- **[error_handling/medium]** [error_handling] _core/_synchronization.py:374-375 Condition.wait 中 _waiters.remove(event) 可能抛出 ValueError（确认存在缺陷）
+  - 独立来源 2 个：reader-r1-3, reader-r2-2｜置信度 0.5
+  - 源：`_core/_synchronization.py:374-375`
+  - 依据：在异常处理分支中，当 `not event.is_set()` 时执行 `self._waiters.remove(event)`。考虑竞态：notify() 从 _waiters 中 popleft 取出 event 并调用 event.set()，但在 set() 生效前（或 is_set 检查与 remove 之间）任务被取消。此时 event.is_set() 可能仍为 False（取决于 Event 实现是否同步设置标志），而 event 已被移出 _waiters，remove 会抛出 ValueError，掩盖原始取消异常。即使 Event.set() 是同步的，也存在 notify 与 wait 的取消处理交错导致 event 不在队列中的可能。
+- **[logic/medium]** [logic] _core/_synchronization.py:296-298 Condition.release 未清除 _owner_task，导致 _check_acquired 误判（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-4, reader-r1-4, reader-r2-3, reader-r2-4｜置信度 0.5
+  - 源：`_core/_synchronization.py:296-298`
+  - 依据：Condition.acquire 会设置 self._owner_task = get_current_task()，但 release() 只调用 self._lock.release()，从不把 _owner_task 重置为 None。触发条件：任务 A 通过 Condition 获取锁后调用 release()，此时底层锁已释放，但 _owner_task 仍指向 A。随后任务 B 调用 notify()/notify_all()/wait() 时，_check_acquired 会比较 self._owner_task != get_current_task()，由于 _owner_task 仍是 A 而当前任务是 B，会错误地抛出 RuntimeError("The current task is not holding the underlying lock")，即使 B 已经合法地通过 acquire() 获得了锁。这破坏了 Condition 的正常使用。
+- **[logic/medium]** [logic] _core/_synchronization.py:330-344 Condition.wait 在取消路径中移除 waiter 后未重新检查是否已被通知，可能丢失通知（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-5, reader-r1-4, reader-r2-2, reader-r2-4｜置信度 0.5
+  - 源：`_core/_synchronization.py:330-344`
+  - 依据：wait() 中 event 被 append 到 _waiters，然后 release 锁并 await event.wait()。在 except BaseException 分支中，如果 event 未被 set（not event.is_set()），则从 _waiters 中移除该 event。但存在竞态：notify() 可能已经 popleft 取出该 event 并调用 event.set()，此时 is_set() 为 True，走 elif 分支把通知传递给下一个 waiter。然而如果 notify() 已经 popleft 但尚未执行 event.set()（即取出与 set 之间被取消打断），则 is_set() 为 False，代码会执行 self._waiters.remove(event)，但该 event 已不在 deque 中，remove 会抛出 ValueError，掩盖原始取消异常。触发条件：notify() 在 popleft 之后、event.set() 之前被取消/切换，等待任务同时被取消。
+- …另有 37 条未列出
+
+## 待验证（孤证）
+
+- **[api_misuse/low]** [api_misuse] __init__.py:168-172 set_deprecated_aliases 中拼写错误的别名 BrokenWorkerIntepreter（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`__init__.py:168-172`
+  - 依据：set_deprecated_aliases 的键 'BrokenWorkerIntepreter'（缺少 r）是故意保留的历史拼写错误别名，用于向后兼容旧版本中曾存在的错误拼写。这是有意的兼容性处理，不是缺陷。
+- **[error_handling/low]** [error_handling] __init__.py:10-10 __init__.py 中 install_lazy_importer 失败时回退导入可能不完整（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`__init__.py:10-10`
+  - 依据：`if TYPE_CHECKING or not install_lazy_importer():` 在 install_lazy_importer 返回 False（安装失败）时执行完整导入，作为回退方案。这是有意的设计：懒加载失败时退回到急切导入，保证模块可用。逻辑正确。
+- **[logic/low]** [logic] __init__.py:9-152 __init__.py 中 install_lazy_importer 失败时静默回退到直接导入，但 fix_package_names 和 set_deprecated_aliases 仅在成功分支执行（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`__init__.py:9-152`
+  - 依据：当 install_lazy_importer() 返回 False 时，条件 `TYPE_CHECKING or not install_lazy_importer()` 为 True，会执行直接导入分支，包括 fix_package_names() 和 set_deprecated_aliases()。当返回 True 时，这些函数已在 install_lazy_importer 内部或后续被调用。逻辑上两条路径都会执行必要的初始化。经确认不是缺陷。
+- **[performance/low]** [performance] _backends/_asyncio.py:1-1 CancelScope.__exit__ 中 _parent_cancellation_is_visible_to_us 属性访问可能递归（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_asyncio.py:1-1`
+  - 依据：_effectively_cancelled 遍历父链，深度有限，性能可接受。不构成缺陷。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1050-1060 TrioTaskInfo.has_pending_cancellation 访问私有 _cancel_status 可能因属性缺失抛 AttributeError（确认存在缺陷）
+  - 独立来源 1 个：reader-r1-2｜置信度 0.5
+  - 源：`_backends/_trio.py:1050-1060`
+  - 依据：has_pending_cancellation 访问 self._task._cancel_status.effectively_cancelled，依赖 trio 私有属性。若 trio 版本变更导致 _cancel_status 不存在，会抛 AttributeError 而非返回 False。仅捕获 ReferenceError。触发条件：trio 内部结构变化。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1075-1082 TrioTaskInfo.has_pending_cancellation 访问私有属性 _cancel_status（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1075-1082`
+  - 依据：访问 Trio 内部 _cancel_status 是 AnyIO 有意为之的实现细节，且用 ReferenceError 捕获任务已销毁的情况。虽然依赖私有 API，但这是已知的权衡，不是缺陷。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1124-1140 TrioBackend.checkpoint 等直接委托（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1124-1140`
+  - 依据：直接委托给 trio.lowlevel 的对应函数，行为正确。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1156-1158 TrioBackend.create_task_group 返回 TaskGroup（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1156-1158`
+  - 依据：返回 TaskGroup 实例，行为正确。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1180-1185 TrioBackend.check_cancelled 在非 Trio 线程调用可能失败（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1180-1185`
+  - 依据：check_cancelled 设计为在工作线程中调用，trio.from_thread.check_cancelled 会正确处理。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:130-140 CancelScope.__new__ 忽略 kwargs（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:130-140`
+  - 依据：__new__ 只负责创建实例，__init__ 会处理 kwargs。这是正确的模式。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1200-1225 TrioBackend.open_process 中 stdin/stdout/stderr 为 int 时直接传递（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1200-1225`
+  - 依据：trio.lowlevel.open_process 接受 int 类型的 stdin/stdout/stderr，行为正确。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1230-1250 TrioBackend.create_udp_socket 中 reuse_port 在非 Unix 平台可能失败（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1230-1250`
+  - 依据：reuse_port 使用 SO_REUSEPORT，在 Windows 上可能不可用，但这是调用者的责任。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1271-1273 TrioBackend.create_unix_listener 返回 UNIXSocketListener（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1271-1273`
+  - 依据：返回 UNIXSocketListener 实例，行为正确。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1287-1290 TrioBackend.getnameinfo 中返回类型正确（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1287-1290`
+  - 依据：返回 trio.socket.getnameinfo 的结果，类型正确。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1330-1355 TrioBackend.getaddrinfo 返回类型与 trio.socket.getaddrinfo 一致（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1330-1355`
+  - 依据：返回 trio.socket.getaddrinfo 的结果，类型一致。不是缺陷。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1355-1357 TrioBackend.notify_closing 直接委托（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1355-1357`
+  - 依据：直接委托给 trio.lowlevel.notify_closing，行为正确。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1370-1375 TrioBackend.getnameinfo 直接委托（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1370-1375`
+  - 依据：正确。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1410-1415 open_signal_receiver 中 signals 参数传递（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1410-1415`
+  - 依据：`return _SignalReceiver(signals)` 正确传递了参数。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1435-1435 backend_class 赋值（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1435-1435`
+  - 依据：将 TrioBackend 赋值给 backend_class，行为正确。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1442-1447 TrioBackend.wrap_connected_unix_datagram_socket 返回 ConnectedUNIXDatagramSocket（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1442-1447`
+  - 依据：返回 ConnectedUNIXDatagramSocket，符合 API。不是缺陷。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1475-1480 TrioBackend.open_signal_receiver 返回 _SignalReceiver（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1475-1480`
+  - 依据：返回 _SignalReceiver，符合 API。不是缺陷。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1482-1485 TrioBackend.get_current_task 返回 TrioTaskInfo（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1482-1485`
+  - 依据：返回 TrioTaskInfo，符合 API。不是缺陷。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1517-1517 backend_class 赋值 TrioBackend（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1517-1517`
+  - 依据：backend_class = TrioBackend 是模块级导出。不是缺陷。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:160-175 CancelScope.__new__ 忽略 kwargs 导致参数丢失（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:160-175`
+  - 依据：CancelScope.__new__ 接收 kwargs 但不使用，__init__ 中才使用 kwargs 创建 trio.CancelScope。这是 Python 对象创建的正常模式，__new__ 不需要处理参数。不是缺陷。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:340-355 ReceiveStreamWrapper.receive 中 max_bytes 为 None 时传给 receive_some（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:340-355`
+  - 依据：trio.abc.ReceiveStream.receive_some 接受 max_bytes=None 表示无限制。这是正确的用法。不是缺陷。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:360-375 ReceiveStreamWrapper.receive 中 max_bytes 为 None 时传递给 receive_some（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:360-375`
+  - 依据：receive_some 接受 None 作为参数，表示读取任意数量。这是正确的。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:535-555 UNIXSocketStream.send_fds 中 fdarray 作为 ancillary data 传递可能被修改（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:535-555`
+  - 依据：sendmsg 接受 array.array 作为 ancillary data，这是合法的。trio 的 sendmsg 会处理 array。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:540-555 UNIXSocketStream.send_fds 中 fdarray 作为 SCM_RIGHTS 数据传递（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:540-555`
+  - 依据：array.array('i', filenos) 作为 SCM_RIGHTS 的 cmsg_data 是标准做法。不是缺陷。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:560-585 UNIXSocketStream.send_fds 中 fdarray 作为可变 array 传给 sendmsg 可能被修改（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:560-585`
+  - 依据：sendmsg 不会修改传入的 array，且每次循环重新使用同一 fdarray 是安全的。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:660-665 Event.__new__ 忽略参数（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:660-665`
+  - 依据：Event 不接受参数，__new__ 只创建实例。这是正确的。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:680-685 Lock.__new__ 忽略 fast_acquire 参数（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:680-685`
+  - 依据：__new__ 只创建实例，__init__ 会处理 fast_acquire。这是正确的模式。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:720-730 Semaphore.__new__ 忽略参数（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:720-730`
+  - 依据：__new__ 只创建实例，__init__ 会处理参数。这是正确的模式。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:770-780 CapacityLimiter.__new__ 忽略参数（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:770-780`
+  - 依据：__new__ 只创建实例，__init__ 会处理参数。这是正确的模式。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:790-800 CapacityLimiter.__new__ 忽略参数（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:790-800`
+  - 依据：__new__ 接收参数但不使用，__init__ 中处理。这是 Python 对象创建的正常模式。不是缺陷。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:870-880 _SignalReceiver.__exit__ 返回类型可能为 None（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:870-880`
+  - 依据：__exit__ 返回 bool | None，这是合法的。trio 的 open_signal_receiver 的 __exit__ 返回 bool | None。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:900-910 _SignalReceiver.__exit__ 返回类型标注为 bool | None（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:900-910`
+  - 依据：__exit__ 返回 self._cm.__exit__(...) 的结果，类型标注 bool | None 是合理的。不是缺陷。
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:990-1000 _SignalReceiver.__exit__ 返回类型标注为 bool | None 但实际可能返回 None（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:990-1000`
+  - 依据：trio.open_signal_receiver 的 __exit__ 返回 bool | None，直接透传是正确的。
+- **[boundary/medium]** [boundary] _backends/_trio.py:1035-1045 TestRunner._call_in_runner_task 中 send_nowait 可能因缓冲区满抛 WouldBlock（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 源：`_backends/_trio.py:1035-1045`
+  - 依据：create_memory_object_stream(1) 缓冲区为 1。send_nowait 在缓冲区满时抛 WouldBlock。虽然正常情况下每次调用后都会等待 outcome_holder 被填充，但若前一次调用的 awaitable 尚未被消费（例如 guest run 尚未处理），send_nowait 会抛 WouldBlock 而非阻塞等待，导致测试运行器崩溃。
+- **[boundary/low]** [boundary] _backends/_trio.py:1125-1127 TrioBackend.sleep 中 delay 为负数时行为未定义（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1125-1127`
+  - 依据：trio.sleep 对负数 delay 会立即返回（或抛异常），这是 Trio 的行为。不是缺陷。
+- **[boundary/low]** [boundary] _backends/_trio.py:1145-1150 TrioBackend.create_cancel_scope 中 deadline 默认 math.inf 与 trio 默认一致（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_backends/_trio.py:1145-1150`
+  - 依据：math.inf 是 trio.CancelScope 的默认 deadline，正确。
+- …另有 675 条未列出
+
+## 争议（需裁决）
+
+- **[logic/medium]** [logic] __init__.py:148-152 __init__.py 中 set_deprecated_aliases 的键名拼写错误 BrokenWorkerIntepreter（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-1, reader-r0-2, reader-r1-0, reader-r2-1｜置信度 0.5
+  - 源：`__init__.py:148-152`
+  - 依据：set_deprecated_aliases 的字典键 'BrokenWorkerIntepreter' 拼写错误（应为 'BrokenWorkerInterpreter'，缺少 'r'）。该键是旧版（已废弃）名称，用于将旧名称映射到新名称。如果用户代码引用了正确的旧名称 'BrokenWorkerInterpreter'，则不会触发废弃别名映射，导致 AttributeError 而非预期的 DeprecationWarning。触发条件：任何使用旧名称 anyio.BrokenWorkerInterpreter 的代码。
+  - 争议对手：4a6ec719f7a8, f97533d58cde
+- **[api_misuse/medium]** [api_misuse] _backends/_asyncio.py:1-1 find_root_task 中 add_done_callback 的 context 参数在 Python < 3.12 不可用（重复确认）（确认存在缺陷）
+  - 独立来源 2 个：reader-r1-2, reader-r2-1｜置信度 0.5
+  - 源：`_backends/_asyncio.py:1-1`
+  - 依据：add_done_callback 的 context 参数是 Python 3.12 新增。在 Python 3.11 及更早版本上调用会抛出 TypeError。触发条件：Python < 3.12 上 find_root_task 找到带 _run_until_complete_cb 的任务。
+  - 争议对手：824e21ab671a, 824e21ab671a, 824e21ab671a, 824e21ab671a, 824e21ab671a, 8f7498e1c992, 8f7498e1c992, c3558f9f5a3f, c3558f9f5a3f, c3558f9f5a3f, c3558f9f5a3f, c3558f9f5a3f, c3558f9f5a3f, c3558f9f5a3f
+- **[boundary/medium]** [boundary] _backends/_asyncio.py:1-1 UNIXSocketStream.send_fds 中 sendmsg 部分发送未处理（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 源：`_backends/_asyncio.py:1-1`
+  - 依据：sendmsg 可能只发送部分数据（返回发送字节数），但代码忽略返回值并直接 break，认为消息已完整发送。对于 SOCK_STREAM UNIX 套接字，sendmsg 可能短写，导致消息截断。触发条件：消息较大且套接字缓冲区不足。
+  - 争议对手：1f47c1e32010, 1f47c1e32010, 9d35784d93e9, db3cc5106ffb, db3cc5106ffb, db3cc5106ffb, ff043c6362fe, ff043c6362fe, ff043c6362fe
+- **[concurrency/high]** [concurrency] _backends/_asyncio.py:1-1 StreamProtocol.pause_writing 替换 Event 导致等待者永久挂起（重复确认）（确认存在缺陷）
+  - 独立来源 5 个：reader-r0-0, reader-r1-2, reader-r2-1, reader-r2-2, reader-r2-3｜置信度 0.5
+  - 源：`_backends/_asyncio.py:1-1`
+  - 依据：pause_writing 替换 write_event 为新 Event，已 await 旧 Event 的协程永久挂起。触发条件：发送数据时传输层暂停写入。
+  - 争议对手：30c26d5275da, 30c26d5275da, 30c26d5275da, 30c26d5275da, 4888ad0e9db0, 4edc5aa89f1c, 4edc5aa89f1c, 4edc5aa89f1c, 4edc5aa89f1c, 4edc5aa89f1c, 9a0d1dd54adf, 9a0d1dd54adf, a8233174da5f, d5b0ab87eadf, d5b0ab87eadf, d5b0ab87eadf, d5b0ab87eadf, d5b0ab87eadf, d5b0ab87eadf, d5b0ab87eadf
+- **[error_handling/medium]** [error_handling] _backends/_asyncio.py:1-1 WorkerThread.run 中 call_soon_threadsafe 失败时未设置 future 结果（确认存在缺陷）
+  - 独立来源 8 个：reader-r0-0, reader-r0-4, reader-r1-2, reader-r1-3, reader-r1-4, reader-r2-1, reader-r2-2, reader-r2-3｜置信度 0.5
+  - 源：`_backends/_asyncio.py:1-1`
+  - 依据：当 loop.call_soon_threadsafe 抛出 RuntimeError 且 loop 未关闭时重新 raise，但若 loop 已关闭则静默吞掉异常，此时 future 永远不会被 set_result/set_exception，等待该 future 的协程会永久挂起。触发条件：事件循环在 worker 线程投递结果前关闭。
+  - 争议对手：4c8ade65a38e, 4c8ade65a38e, 4c8ade65a38e, 514882f6a4dd, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, 88aa4ba4b6c5, a58c3c58d1fc, a58c3c58d1fc, b6aee88ed14e, b6aee88ed14e, bc540d27150b, bc540d27150b, bc540d27150b, e9fa81f55d1f, e9fa81f55d1f, e9fa81f55d1f, e9fa81f55d1f, e9fa81f55d1f, e9fa81f55d1f, e9fa81f55d1f, e9fa81f55d1f, e9fa81f55d1f, ef49b34aa497, ef49b34aa497, ef49b34aa497, ef49b34aa497, ef49b34aa497, ef49b34aa497, ef49b34aa497, ef49b34aa497, ef49b34aa497, ef49b34aa497, ef49b34aa497, ef49b34aa497, ef49b34aa497
+- **[logic/medium]** [logic] _backends/_asyncio.py:1-1 CancelScope.__exit__ 中 _pending_uncancellations 转移给可能已退出的父作用域（重复确认）（确认存在缺陷）
+  - 独立来源 7 个：reader-r0-4, reader-r1-2, reader-r1-3, reader-r1-4, reader-r2-1, reader-r2-2, reader-r2-3｜置信度 0.5
+  - 源：`_backends/_asyncio.py:1-1`
+  - 依据：将 _pending_uncancellations 转移给 _parent_scope，但父作用域可能已退出，导致 uncancel 计数错乱。触发条件：嵌套取消作用域退出顺序异常。
+  - 争议对手：1cebff43bb54, 1cebff43bb54, 1cebff43bb54, 1cebff43bb54, 1cebff43bb54, 1cebff43bb54, 1cebff43bb54, 1cebff43bb54, 1cebff43bb54, 1cebff43bb54, 1cebff43bb54, 1cebff43bb54, 1cebff43bb54, 1cebff43bb54, 1cebff43bb54, 1cebff43bb54, 1cebff43bb54, 230464cb9e7a, 230464cb9e7a, 230464cb9e7a, 230464cb9e7a, 230464cb9e7a, 230464cb9e7a, 230464cb9e7a, 230464cb9e7a, 230464cb9e7a, 230464cb9e7a, 4e26e7fd4fd1, 50cbdf3e1fe6, 50cbdf3e1fe6, 50cbdf3e1fe6, 5c71eaca7716, 5c71eaca7716, 5c71eaca7716, 648eadfeca4a, 648eadfeca4a, 648eadfeca4a, 648eadfeca4a, 648eadfeca4a, 648eadfeca4a, 7296eeab925f, 7296eeab925f, 7296eeab925f, 7296eeab925f, 7296eeab925f, 7296eeab925f, 7296eeab925f, 7296eeab925f, 7296eeab925f, 7296eeab925f, 7296eeab925f, 7296eeab925f, 7296eeab925f, 7296eeab925f, 7296eeab925f, 7296eeab925f, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, 928f2bbbb7ec, b580d77e4f69
+- **[resource_leak/medium]** [resource_leak] _backends/_asyncio.py:1-1 UNIXSocketListener.accept 中 f 被取消时 remove_reader 可能未执行（确认存在缺陷）
+  - 独立来源 7 个：reader-r0-0, reader-r1-2, reader-r1-3, reader-r1-4, reader-r2-1, reader-r2-2, reader-r2-3｜置信度 0.5
+  - 源：`_backends/_asyncio.py:1-1`
+  - 依据：若 `await f` 被取消，f 本身未被取消（仅 await 被取消），f 的 done_callback 不会执行，reader 残留。触发条件：accept 被取消。
+  - 争议对手：3bebdacbd52a, af482cbedcb9, af482cbedcb9, af482cbedcb9, af482cbedcb9, af482cbedcb9, b7656e2b43ae, b7656e2b43ae, b7656e2b43ae, b7656e2b43ae, b7656e2b43ae, b7656e2b43ae, ebc514af669d, ebc514af669d, ebc514af669d, ebc514af669d
+- **[api_misuse/medium]** [api_misuse] _backends/_trio.py:100-120 ensure_returns_coro 中 awaitable 不是 Coroutine 也不是 Awaitable 时返回 awaitable（确认存在缺陷）
+  - 独立来源 2 个：reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`_backends/_trio.py:100-120`
+  - 依据：在 `elif not isinstance(awaitable, Awaitable): return awaitable` 中，如果 awaitable 既不是 Coroutine 也不是 Awaitable，函数会返回 awaitable 本身。但函数的返回类型标注是 Coroutine，调用者会期望一个协程。如果返回的是非协程对象，调用者可能会出错。注释说这是为了传递给 Trio 以引发适当的错误，但这可能导致类型不一致。
+  - 争议对手：16628424a4b4, 4dfe17fafb5b, 5fe2bc629531, 82040b36c4a9, daf7b49cf8d6
+- **[api_misuse/low]** [api_misuse] _backends/_trio.py:1085-1092 TrioTaskInfo.has_pending_cancellation 访问私有属性 _cancel_status（确认存在缺陷）
+  - 独立来源 3 个：reader-r1-4, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`_backends/_trio.py:1085-1092`
+  - 依据：has_pending_cancellation 访问 self._task._cancel_status.effectively_cancelled，这是 trio 的内部私有属性。如果 trio 版本更新导致该属性名或结构变化，代码会抛出 AttributeError。虽然捕获了 ReferenceError，但没有捕获 AttributeError。
+  - 争议对手：1a93ce4d1b00, 8e6c5cff72b4
+- **[api_misuse/medium]** [api_misuse] _backends/_trio.py:1100-1120 TrioBackend.run_sync_in_worker_thread 中 limiter 被 cast 为 trio.CapacityLimiter 但可能是包装类型（确认存在缺陷）
+  - 独立来源 1 个：reader-r1-2｜置信度 0.5
+  - 源：`_backends/_trio.py:1100-1120`
+  - 依据：limiter 参数类型为 BaseCapacityLimiter | None，但直接 cast 为 trio.CapacityLimiter 传给 run_sync。若调用方传入的是 anyio 的 CapacityLimiter 包装对象（非 trio 原生），run_sync 内部会访问其属性/方法，可能因接口不匹配而失败。触发条件：传入非 trio 原生的 CapacityLimiter。
+  - 争议对手：1db2b8a9f496, 1db2b8a9f496, 761debb6a4c5, 761debb6a4c5, 761debb6a4c5, 761debb6a4c5, 95c463755d4d, 95c463755d4d
+- **[api_misuse/medium]** [api_misuse] _backends/_trio.py:1160-1180 run_sync_in_worker_thread 中 limiter 被 cast 为 trio.CapacityLimiter 但可能是 anyio 包装类型（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-3｜置信度 0.5
+  - 源：`_backends/_trio.py:1160-1180`
+  - 依据：limiter 参数类型为 BaseCapacityLimiter | None，但直接 cast 为 trio.CapacityLimiter 传给 run_sync。如果调用者传入的是 anyio 的 CapacityLimiter 包装（非 trio 原生），run_sync 会因类型不匹配而失败。虽然 current_default_thread_limiter 返回的是包装了 trio 原生的 CapacityLimiter，但用户可传入任意 BaseCapacityLimiter 实现。
+  - 争议对手：352ed00cba8c, 352ed00cba8c, 352ed00cba8c, 78f8a4ead287, 8234e01147dc, 8234e01147dc, 8234e01147dc, 8234e01147dc, 8234e01147dc, 8234e01147dc, e61fece2d9ab
+- **[boundary/medium]** [boundary] _backends/_trio.py:470-480 SocketStream.send 中 bytes_sent 可能为 0 导致死循环（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 源：`_backends/_trio.py:470-480`
+  - 依据：SocketStream.send 中 while view 循环，若 trio_socket.send(view) 返回 0（例如对端关闭或缓冲区满但未阻塞），view = view[0:] 不变，导致无限循环。虽然 Trio 的 send 通常不会返回 0，但在某些边界情况下可能发生。
+  - 争议对手：493b4742dcfb, a1932a763fdf, acfbf250939e
+- **[boundary/medium]** [boundary] _backends/_trio.py:510-535 UNIXSocketStream.receive_fds 中 msglen 为 0 时可能无限循环（确认存在缺陷）
+  - 独立来源 1 个：reader-r1-4｜置信度 0.5
+  - 源：`_backends/_trio.py:510-535`
+  - 依据：receive_fds 中 msglen 允许为 0（检查 msglen < 0 才报错）。当 msglen=0 时，recvmsg(0, ...) 可能返回空消息和空 ancdata，此时 if not message and not ancdata: raise EndOfStream 会触发。但如果返回空消息但有 ancdata，会 break 并返回空消息。这本身不是无限循环，但 msglen=0 的语义可能不符合预期。触发条件：msglen=0。
+  - 争议对手：1642d4033fd0, 247737af0dab
+- **[concurrency/medium]** [concurrency] _backends/_trio.py:1290-1300 TrioBackend.current_default_thread_limiter 中 RunVar 缓存可能导致跨运行状态泄漏（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-1｜置信度 0.5
+  - 源：`_backends/_trio.py:1290-1300`
+  - 依据：current_default_thread_limiter 使用 RunVar _capacity_limiter_wrapper 缓存 CapacityLimiter。RunVar 是 trio 的运行变量，在每次 trio.run 时重置。但如果同一个线程中多次调用 trio.run，RunVar 会被重置，缓存失效，这是正确的。然而，如果 CapacityLimiter 被缓存后，trio 的默认线程限制器发生变化（例如通过 trio.to_thread.current_default_thread_limiter().total_tokens 修改），缓存不会更新。这可能导致不一致。
+  - 争议对手：65828a0e5bfb, 87df1971f77e
+- **[concurrency/medium]** [concurrency] _backends/_trio.py:270-290 TaskGroup.create_task 中 context.run 包裹 start_soon 可能不传递 context（确认存在缺陷）
+  - 独立来源 2 个：reader-r2-1, reader-r2-3｜置信度 0.5
+  - 源：`_backends/_trio.py:270-290`
+  - 依据：context.run(partial(self._nursery.start_soon, ...)) 在指定 context 中调用 start_soon，但 start_soon 本身会捕获当前 context 作为新任务的 context。由于 context.run 临时切换了 context，start_soon 捕获的是传入的 context，这实际上是正确的。但 partial 包装可能导致参数传递问题。实际上这是 anyio 实现 context 传递的标准方式，安全。
+  - 争议对手：ae3ec4a714d2
+- **[concurrency/medium]** [concurrency] _backends/_trio.py:700-712 Lock.acquire fast path 中 park 后未处理取消导致锁状态不一致（确认存在缺陷）
+  - 独立来源 5 个：reader-r0-5, reader-r1-2, reader-r1-4, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`_backends/_trio.py:700-712`
+  - 依据：在 fast_acquire 路径中，先 checkpoint_if_cancelled，然后 acquire_nowait。如果 WouldBlock，则 await self.__original._lot.park()。trio.Lock 的 _lot.park() 在取消时会抛出 Cancelled，但此时锁并未被获取，这是正确的。然而，如果 park 成功返回，锁已经被 acquire_nowait 获取了吗？实际上 acquire_nowait 在 WouldBlock 时没有获取锁，park 只是等待，等待结束后锁的所有权转移给当前任务。但这里缺少对 park 返回后锁状态的确认。更关键的是，trio.Lock.acquire 的 fast path 实现通常需要在 park 之后重新检查，而这里直接依赖 _lot.park() 的语义。如果 park 被取消，锁不会被获取，这是正确的。但如果 park 返回后锁被其他任务抢走（理论上不会，因为 park 返回意味着锁已转移），则可能有问题。实际上 trio 的 _lot.park() 在锁可用时会直接返回并转移所有权，所以这里逻辑是正确的。
+  - 争议对手：bd855a56fc16, e24bf7039c93, edef4366ff64, f3dbb3c0700b
+- **[concurrency/medium]** [concurrency] _backends/_trio.py:760-770 Semaphore.acquire fast path 同样直接 park 到 _lot 而未重新获取（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-5, reader-r1-4, reader-r2-1｜置信度 0.5
+  - 源：`_backends/_trio.py:760-770`
+  - 依据：与 Lock 相同，fast_acquire 路径在 WouldBlock 后直接 await self.__original._lot.park()，未在 park 返回后重新尝试 acquire_nowait。若 park 因取消或竞争返回，信号量可能并未被当前任务获取，导致计数错误。触发条件：fast_acquire=True 且存在竞争/取消。
+  - 争议对手：1a229ea8f27b, 3ff6b897051b, d0b5e6203d34
+- **[error_handling/low]** [error_handling] _backends/_trio.py:1100-1110 TrioBackend.run 中 assert not kwargs 在优化模式下被移除（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-1｜置信度 0.5
+  - 源：`_backends/_trio.py:1100-1110`
+  - 依据：在 run 中，assert not kwargs 检查 kwargs 为空。但在 -O 模式下 assert 被移除，如果 kwargs 非空，trio.run 会忽略它们，导致静默错误。
+  - 争议对手：76ca950b8a5c, b9d997e184e6, d05aa9b9ee28
+- **[error_handling/medium]** [error_handling] _backends/_trio.py:230-250 TaskGroup.__aexit__ 中 Cancelled 异常组处理可能丢失原始异常（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-3｜置信度 0.5
+  - 源：`_backends/_trio.py:230-250`
+  - 依据：当捕获到 BaseExceptionGroup 且其中不含 Cancelled 时，直接 raise 重新抛出。但若异常组只含 Cancelled，则 raise trio.Cancelled._create() from exc。这会将整个异常组替换为单个 Cancelled，可能丢失其他信息。不过这是 anyio 为兼容 asyncio 后端行为的有意设计。
+  - 争议对手：0f250df8f9e3, 9212b690bc91, cea1649500c5
+- **[error_handling/medium]** [error_handling] _backends/_trio.py:380-395 Process.aclose 中 wait 失败后 kill 并再次 wait 可能无限阻塞（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-2｜置信度 0.5
+  - 源：`_backends/_trio.py:380-395`
+  - 依据：在 `except BaseException:` 中，调用 `self.kill()` 然后 `with CancelScope(shield=True): await self.wait()`。如果 kill 后进程没有正确退出，wait 会永久阻塞。虽然 shield 保护了取消，但如果进程变成僵尸或无法被杀死，这会导致挂起。
+  - 争议对手：2822f94a4d88, f2651159a6db
+- **[error_handling/medium]** [error_handling] _backends/_trio.py:490-500 SocketStream.send 中 bytes_sent 在异常路径未定义（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-3｜置信度 0.5
+  - 源：`_backends/_trio.py:490-500`
+  - 依据：在 while view 循环中，若 self._trio_socket.send(view) 抛出异常，_convert_socket_error 会重新抛出（NoReturn），因此不会到达 view = view[bytes_sent:]。但若 _convert_socket_error 因某种原因返回（它标注 NoReturn 但实际总是 raise），bytes_sent 未定义。实际上 _convert_socket_error 总是 raise，所以安全。
+  - 争议对手：8bdae645539b
+- **[error_handling/low]** [error_handling] _backends/_trio.py:500-502 SocketStream.send_eof 中 shutdown 可能抛出异常（确认存在缺陷）
+  - 独立来源 2 个：reader-r2-2, reader-r2-3｜置信度 0.5
+  - 源：`_backends/_trio.py:500-502`
+  - 依据：`self._trio_socket.shutdown(socket.SHUT_WR)` 如果 socket 已关闭或已 shutdown，会抛出 OSError。这里没有异常处理，可能导致调用者收到意外的 OSError 而不是 ClosedResourceError。
+  - 争议对手：43da04fb9f8c
+- **[error_handling/medium]** [error_handling] _backends/_trio.py:520-528 UNIXSocketStream.send_fds 对非 int/IOBase 的 fd 静默跳过（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-4｜置信度 0.5
+  - 源：`_backends/_trio.py:520-528`
+  - 依据：在 send_fds 中，遍历 fds 时只处理 int 和 IOBase 两种情况，其他类型（如实现了 fileno() 的自定义对象）会被静默忽略，导致 filenos 列表比传入的 fds 短，最终发送的 fd 数量与用户预期不符，且不会报错。触发条件：传入一个既不是 int 也不是 IOBase 但实现了 fileno() 的对象（例如某些第三方文件类对象）。
+  - 争议对手：99e3bb2fb259, 9d28470822e4
+- **[error_handling/low]** [error_handling] _backends/_trio.py:810-820 CapacityLimiter.__init__ 中 assert total_tokens is not None 在优化模式下被移除（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-1｜置信度 0.5
+  - 源：`_backends/_trio.py:810-820`
+  - 依据：在 __init__ 中，如果 original 为 None 且 total_tokens 也为 None，则 assert total_tokens is not None 会失败。但在 Python -O 优化模式下，assert 被移除，导致 trio.CapacityLimiter(None) 被调用，可能抛出 TypeError 或产生意外行为。
+  - 争议对手：bbfcb2ccf630, ee67fa4c2996
+- **[logic/medium]** [logic] _backends/_trio.py:1010-1016 TestRunner.__exit__ 中 while 循环可能无限阻塞（确认存在缺陷）
+  - 独立来源 7 个：reader-r0-0, reader-r0-5, reader-r1-3, reader-r1-4, reader-r2-1, reader-r2-2, reader-r2-3｜置信度 0.5
+  - 源：`_backends/_trio.py:1010-1016`
+  - 依据：__exit__ 中先 close send_stream，然后 while self._send_stream is not None: self._call_queue.get()()。_send_stream 只在 _main_task_finished 回调中被设为 None。如果 guest run 已经结束或回调未被调用，循环会永久阻塞在 _call_queue.get()。触发条件：guest run 异常结束或 done_callback 未被触发。
+  - 争议对手：d057c07c8079
+- **[logic/medium]** [logic] _backends/_trio.py:1035-1045 TestRunner._call_in_runner_task 中 outcome_holder 可能永远为空（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-1｜置信度 0.5
+  - 源：`_backends/_trio.py:1035-1045`
+  - 依据：在 _call_in_runner_task 中，发送 awaitable 后，while not outcome_holder: self._call_queue.get()()。如果 guest run 已经结束或 _run_tests_and_fixtures 协程异常退出，outcome_holder 永远不会被填充，导致死循环。特别是当 awaitable 抛出异常时，_run_tests_and_fixtures 会捕获并放入 Error，这是正常的。但如果 _run_tests_and_fixtures 本身崩溃（例如 receive_stream 被关闭），则 outcome_holder 永远为空。
+  - 争议对手：2181dba35cac, 4c4ed1223c17, 4c4ed1223c17, f3bf78feb695
+- **[logic/medium]** [logic] _backends/_trio.py:1190-1205 TrioBackend.connect_tcp 中 family 判断仅基于 host 是否包含冒号（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-1｜置信度 0.5
+  - 源：`_backends/_trio.py:1190-1205`
+  - 依据：connect_tcp 中通过 ':' in host 判断是否使用 AF_INET6。这对于 IPv6 地址是正确的，但对于主机名（如 'localhost'）会错误地选择 AF_INET。如果 localhost 解析为 IPv6 地址，连接会失败。此外，如果 host 是 IPv4 地址但包含冒号（例如带端口），也会错误选择 AF_INET6。
+  - 争议对手：7eeda5f01d0c, a74f67986101, b453cd2eafeb
+- **[logic/medium]** [logic] _backends/_trio.py:296-316 TaskGroup.start 中 final_name 在闭包内引用但定义在闭包外之后（确认存在缺陷）
+  - 独立来源 9 个：reader-r0-0, reader-r0-4, reader-r0-5, reader-r1-2, reader-r1-3, reader-r1-4, reader-r2-1, reader-r2-2, reader-r2-3｜置信度 0.5
+  - 源：`_backends/_trio.py:296-316`
+  - 依据：run_coro_with_task_status 内部使用 final_name，但 final_name 是在 self._nursery.start(...) 调用之前才赋值的（第 314 行）。由于闭包捕获变量，在协程实际执行时 final_name 应该已经被赋值，因此这里通常不会出错。但结合上一条，如果 early_start_value 路径下 task_status.started() 被调用，nursery.start 可能在 run_coro_with_task_status 执行到 handle = TaskHandle(coro, final_name) 之前就返回，此时外层 handle 未定义。
+  - 争议对手：01b8c9e2d702, 0faf95d4000c, 7087a304c1d7
+- **[logic/medium]** [logic] _backends/_trio.py:470-480 SocketStream.send 中 bytes_sent 可能未定义（确认存在缺陷）
+  - 独立来源 2 个：reader-r1-2, reader-r2-1｜置信度 0.5
+  - 源：`_backends/_trio.py:470-480`
+  - 依据：在 send 方法中，try 块内调用 await self._trio_socket.send(view)，如果抛出异常，_convert_socket_error 会重新抛出异常（NoReturn），因此 bytes_sent 不会被使用。但如果 send 正常返回，bytes_sent 被赋值。这里的问题是，如果 _convert_socket_error 没有抛出异常（理论上不会，因为它是 NoReturn），则 bytes_sent 可能未定义。实际上 _convert_socket_error 总是抛出异常，所以这是安全的。
+  - 争议对手：d1b51aa53f93
+- **[logic/medium]** [logic] _backends/_trio.py:495-520 UNIXSocketStream.receive_fds 中 message 变量在异常路径下可能未定义（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-0, reader-r1-4, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`_backends/_trio.py:495-520`
+  - 依据：在 receive_fds 中，while True 循环内 try 块调用 recvmsg，如果抛出异常，_convert_socket_error 会重新抛出（NoReturn）。如果正常返回，message 被赋值并 break。因此 message 在循环后总是已定义。这是安全的。
+  - 争议对手：65f7e140ef91
+- **[logic/medium]** [logic] _backends/_trio.py:595-605 UDPSocket.receive 中 data 和 addr 在异常路径下可能未定义（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-1｜置信度 0.5
+  - 源：`_backends/_trio.py:595-605`
+  - 依据：在 receive 中，try 块内调用 recvfrom，如果抛出异常，_convert_socket_error 会重新抛出（NoReturn）。如果正常返回，data 和 addr 被赋值并返回。因此这是安全的。
+  - 争议对手：e2350084da1f
+- **[logic/medium]** [logic] _backends/_trio.py:645-655 UNIXDatagramSocket.receive 中 data 和 addr 在异常路径下可能未定义（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-1｜置信度 0.5
+  - 源：`_backends/_trio.py:645-655`
+  - 依据：在 receive 中，try 块内调用 recvfrom，如果抛出异常，_convert_socket_error 会重新抛出（NoReturn）。如果正常返回，data 和 addr 被赋值并返回。因此这是安全的。
+  - 争议对手：40bc1cea0d9e
+- **[logic/medium]** [logic] _backends/_trio.py:745-752 Lock.statistics 中 TrioTaskInfo 可能未定义（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-1｜置信度 0.5
+  - 源：`_backends/_trio.py:745-752`
+  - 依据：在 Lock.statistics 中，使用 TrioTaskInfo(orig_statistics.owner)。TrioTaskInfo 类定义在文件后面（第 1075 行左右），但在运行时，由于 Python 在函数调用时才解析名称，TrioTaskInfo 在模块加载完成后已经定义，因此这是安全的。
+  - 争议对手：4490819f9db9, d2855d2b724c
+- **[resource_leak/medium]** [resource_leak] _backends/_trio.py:1240-1252 connect_tcp 中 local_address 绑定失败时 socket 未关闭（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-0, reader-r0-4｜置信度 0.5
+  - 源：`_backends/_trio.py:1240-1252`
+  - 依据：connect_tcp 中先创建 trio_socket，然后 await trio_socket.bind(local_address)。如果 bind 抛出异常（例如地址已被占用），socket 不会被关闭，因为 try/except 只包裹了 connect 调用。这会导致文件描述符泄漏。
+  - 争议对手：1258972230a0, 1b47abd23e18
+- **[resource_leak/medium]** [resource_leak] _backends/_trio.py:1310-1320 create_unix_datagram_socket 中 connect 失败时 socket 泄漏（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-0, reader-r0-4, reader-r2-2｜置信度 0.5
+  - 源：`_backends/_trio.py:1310-1320`
+  - 依据：在 create_unix_datagram_socket 中，如果 connect 抛出异常，trio_socket 不会被关闭，导致 socket 泄漏。
+  - 争议对手：06bd6cf2e581
+- **[security/medium]** [security] _backends/_trio.py:1200-1225 open_process 中 shell=True 可能引发安全问题（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-2｜置信度 0.5
+  - 源：`_backends/_trio.py:1200-1225`
+  - 依据：当 command 是字符串时，使用 `shell=True` 执行。如果 command 来自不可信来源，可能导致 shell 注入。虽然这是 anyio 的设计（与 asyncio 后端一致），但这是一个潜在的安全问题。
+  - 争议对手：03f5d6a5b905, 7bf206ad48ac, 8b4699dcf4e4
+- **[concurrency/high]** [concurrency] _core/_asyncio_selector_thread.py:52-62 _stop 中 join 线程前关闭 _send 可能导致 run 线程中 select 永久阻塞（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-3｜置信度 0.5
+  - 源：`_core/_asyncio_selector_thread.py:52-62`
+  - 依据：_stop 设置 _closed=True 后调用 _notify_self() 唤醒 selector 线程，然后立即 self._send.close() 并 self._thread.join()。若 _notify_self 的 send 因缓冲区满而抛出 BlockingIOError 被吞掉，selector 线程可能仍在 select() 中阻塞，而 _send 已关闭，_receive 端不会收到数据，导致 join() 永久挂起。此外关闭 _send 后 run 线程若再次尝试 recv 或 select 可能出错。
+  - 争议对手：b6e3be48af3e
+- **[concurrency/medium]** [concurrency] _core/_asyncio_selector_thread.py:72-100 add_reader/add_writer 在 selector 线程外修改 selector 未加锁（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r0-5｜置信度 0.5
+  - 源：`_core/_asyncio_selector_thread.py:72-100`
+  - 依据：add_reader/add_writer 由事件循环线程调用，直接对 self._selector 执行 register/modify，而 selector 线程同时在 run 中调用 self._selector.select() 以及 remove_reader/remove_writer。DefaultSelector 的底层 epoll/kqueue 在并发 register 与 select 时并非线程安全，可能导致事件丢失或内部状态损坏。虽然 _notify_self 用于唤醒，但注册动作本身与 select 并发执行没有同步保护。触发条件：多线程事件循环或回调中并发注册 fd。
+  - 争议对手：a0098f49e43e, bd70149ebe20, cce89baad0bc
+- **[error_handling/low]** [error_handling] _core/_asyncio_selector_thread.py:47-58 _stop 中 _selector.unregister 在 selector 已关闭或 fd 已注销时抛异常（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-3｜置信度 0.5
+  - 源：`_core/_asyncio_selector_thread.py:47-58`
+  - 依据：_stop 在 join 线程后调用 self._selector.unregister(self._receive)。如果 run() 线程在退出前已经处理过 _receive 的读事件（例如 _notify_self 发送的数据被处理），_receive 仍注册着，unregister 正常。但若 _stop 被多次调用（threading._register_atexit 注册后又被显式调用），第二次调用时 _receive 已关闭且已 unregister，会抛 KeyError。此外 _send.close() 后 _notify_self 若再次调用会抛 OSError。
+  - 争议对手：430b2e4f2419, 878a118c6f26
+- **[logic/medium]** [logic] _core/_asyncio_selector_thread.py:128-158 run() 中处理 EVENT_READ 后未检查 EVENT_WRITE 是否仍存在，remove_reader 可能删除整个注册（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-3｜置信度 0.5
+  - 源：`_core/_asyncio_selector_thread.py:128-158`
+  - 依据：当同一 fd 同时注册了 EVENT_READ 和 EVENT_WRITE 且两者同时就绪时，先处理 EVENT_READ 调用 remove_reader，XOR 后 new_events 为 EVENT_WRITE，modify 保留写事件，正确。但若 events 同时包含读写而 remove_reader 后 key.data 中 EVENT_WRITE 仍在，随后 remove_writer 使用 key.events（此时已更新）XOR EVENT_WRITE 得到 0，unregister，正确。然而若 select() 返回的 events 包含 EVENT_READ 但 key.data 中实际没有 EVENT_READ（例如已被其他线程 remove），key.data[EVENT_READ] 会 KeyError。这是竞态，但 add/remove 由事件循环线程调用，run 在 selector 线程，存在跨线程访问 self._selector 的竞态。
+  - 争议对手：3dac59c3a4d7
+- …另有 205 条未列出
+
+## 覆盖率矩阵
+
+| 维度 \ 类型 | logic | concurrency | boundary | error_handling | resource_leak | security | performance | api_misuse |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `_backends` | 9 | 9 | 7 | 9 | 9 | 7 | 2 | 9 |
+| `_core` | 15 | 11 | 14 | 15 | 13 | 2 | 6 | 15 |
+| `abc` | 9 | 0 | 7 | 9 | 4 | 0 | 1 | 9 |
+| `root` | 12 | 10 | 9 | 12 | 11 | 0 | 6 | 12 |
+| `streams` | 9 | 6 | 9 | 9 | 7 | 0 | 1 | 9 |
+
+矩阵填充率 90%（单元格值 = 独立 Agent 数）

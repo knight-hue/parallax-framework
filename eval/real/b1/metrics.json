@@ -23,7 +23,9 @@
       "prompt_tokens": 2477733,
       "completion_tokens": 414628,
       "stop_reason": "max_rounds_reached",
-      "defects": []
+      "defects": [],
+      "elapsed_s": 1798.2,
+      "errors": []
     },
     {
       "arm": "blind_full",
@@ -47,7 +49,9 @@
       "prompt_tokens": 1409935,
       "completion_tokens": 770288,
       "stop_reason": "max_rounds_reached",
-      "defects": []
+      "defects": [],
+      "elapsed_s": 1378.41,
+      "errors": []
     }
   ]
 }

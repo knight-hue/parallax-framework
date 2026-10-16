@@ -112,8 +112,20 @@ def build_parser() -> argparse.ArgumentParser:
     real.add_argument("--max-files", type=int, default=300, help="每个仓库最多扫描多少文件")
     real.add_argument("--out", default=None, help="结果输出目录（默认 eval/real/<时间戳>）")
     real.add_argument(
+        "--repeat",
+        type=int,
+        default=1,
+        help="重复次数。>1 时每次重复独立成子目录，并另出 variance.md（稳定性统计）",
+    )
+    real.add_argument(
         "--visibility", default=None, choices=["blind", "shared"], help="覆盖可见性（一般不用）"
     )
+
+    rerender = sub.add_parser(
+        "rerender",
+        help="从已有运行的 metrics.json 重建 summary.md（不重跑实验、不调模型）",
+    )
+    rerender.add_argument("run_dir", help="包含 metrics.json 的结果目录")
     return parser
 
 
@@ -297,52 +309,84 @@ async def _run_real_cli(args: argparse.Namespace) -> int:
         raise SystemExit("未配置 PARALLAX_LLM_API_KEY（真实仓库实验必须调用真实模型）")
 
     print("真实仓库对照实验（无 ground truth）")
-    print(f"仓库：{len(repos)} 个｜实验臂：{len(arms)} 个｜总运行数：{len(repos) * len(arms)}")
+    print(f"仓库：{len(repos)} 个｜实验臂：{len(arms)} 个｜重复：{args.repeat} 次")
+    print(f"总运行数：{len(repos) * len(arms) * args.repeat}")
     print(f"Reader 数：{settings.n_readers}｜模型：{settings.llm_model}")
     print(f"分组深度：{args.group_depth}｜文件上限：{args.max_files}")
     print()
 
-    results: list = []
-    for repo in repos:
-        print(f"── {repo.name} ──")
-        for arm in arms:
-            try:
-                result = await run_repo_arm(
-                    repo,
-                    arm,
-                    settings,
-                    lambda s: OpenAICompatClient(s),
-                    group_depth=args.group_depth,
-                    max_files=args.max_files,
-                )
-            except Exception as exc:  # noqa: BLE001 - 单臂失败不阻断其余
-                print(f"  ✗ {arm.name:24s} {type(exc).__name__}: {exc}")
-                continue
-            m = result.metrics
-            flag = "" if m.readers_failed == 0 else f"｜⚠️ Reader 失败 {m.readers_failed}"
-            print(
-                f"  ✓ {arm.name:24s} claims {m.total_claims:3d}"
-                f"｜K*={m.effective_channels:.2f}"
-                f"｜冗余 {m.redundancy:.0%}"
-                f"｜覆盖 {m.coverage_fill_rate:.0%}"
-                f"｜轮次 {m.rounds}"
-                f"｜调用 {m.llm_calls}"
-                f"｜{result.elapsed_s}s{flag}"
-            )
-            results.append(result)
-        print()
-
-    if not results:
-        raise SystemExit("没有任何成功的实验臂")
-
     base = Path(args.out) if args.out else _framework_root() / "eval" / "real"
     out_dir = base if args.out else default_out_dir(base)
     out_dir.mkdir(parents=True, exist_ok=True)
-    summary_path = save_results(results, out_dir)
 
-    print(render_summary(results, arms))
-    print(f"\n结果已写入：{out_dir}")
-    print(f"摘要：{summary_path}")
+    # 每次重复独立成目录：产物可逐次核对，而不是只留一个被平均过的总表。
+    repetitions: list[list] = []
+    for rep_index in range(1, args.repeat + 1):
+        rep_dir = out_dir if args.repeat == 1 else out_dir / f"rep{rep_index}"
+        rep_dir.mkdir(parents=True, exist_ok=True)
+        if args.repeat > 1:
+            print(f"══ 第 {rep_index}/{args.repeat} 次重复 ══")
+
+        results: list = []
+        for repo in repos:
+            print(f"── {repo.name} ──")
+            for arm in arms:
+                try:
+                    result = await run_repo_arm(
+                        repo,
+                        arm,
+                        settings,
+                        lambda s: OpenAICompatClient(s),
+                        group_depth=args.group_depth,
+                        max_files=args.max_files,
+                    )
+                except Exception as exc:  # noqa: BLE001 - 单臂失败不阻断其余
+                    print(f"  ✗ {arm.name:24s} {type(exc).__name__}: {exc}")
+                    continue
+                m = result.metrics
+                flag = "" if m.readers_failed == 0 else f"｜⚠️ Reader 失败 {m.readers_failed}"
+                print(
+                    f"  ✓ {arm.name:24s} claims {m.total_claims:3d}"
+                    f"｜K*={m.effective_channels:.2f}"
+                    f"／{m.agent_count}"
+                    f"｜占比 {m.channels_ratio:.0%}"
+                    f"｜冗余 {m.redundancy:.0%}"
+                    f"｜覆盖 {m.coverage_fill_rate:.0%}"
+                    f"｜轮次 {m.rounds}"
+                    f"｜调用 {m.llm_calls}"
+                    f"｜{result.elapsed_s}s{flag}"
+                )
+                results.append(result)
+            print()
+
+        if not results:
+            raise SystemExit("没有任何成功的实验臂")
+
+        summary_path = save_results(results, rep_dir)
+        print(render_summary(results, arms))
+        print(f"\n第 {rep_index} 次结果已写入：{rep_dir}")
+        print(f"摘要：{summary_path}")
+        repetitions.append(results)
+
+    if args.repeat > 1:
+        from parallax.eval.variance import render_variance
+
+        repo_label = ", ".join(r.name for r in repos)
+        (out_dir / "variance.md").write_text(
+            render_variance(repetitions, repo=repo_label), encoding="utf-8"
+        )
+        print(f"\n稳定性统计：{out_dir / 'variance.md'}")
+    return 0
+
+
+def _run_rerender_cli(args: argparse.Namespace) -> int:
+    from parallax.eval.experiment import rerender_summary
+
+    run_dir = Path(args.run_dir)
+    if not (run_dir / "metrics.json").exists():
+        raise SystemExit(f"{run_dir} 下没有 metrics.json")
+    summary_path = rerender_summary(run_dir)
+    print(f"已重建：{summary_path}")
     return 0
 
 
@@ -367,6 +411,8 @@ def main(argv: list[str] | None = None) -> int:
         except KeyboardInterrupt:
             print("已中断", file=sys.stderr)
             return 130
+    if args.command == "rerender":
+        return _run_rerender_cli(args)
     parser.error(f"未知命令 {args.command}")
     return 2
 
