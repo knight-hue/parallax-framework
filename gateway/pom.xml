@@ -24,7 +24,23 @@
     <bucket4j.version>8.10.1</bucket4j.version>
     <resilience4j.version>2.2.0</resilience4j.version>
     <springdoc.version>2.8.9</springdoc.version>
+    <!--
+      默认跳过集成测试：它们要 Docker（Testcontainers 起真实 PostgreSQL 与 Redis）。
+      不跳的话，没有 Docker 的机器 `mvn verify` 就会失败——本地开发会被基础设施卡住。
+      需要真实基础设施时用 `-Pit`，CI 上的 gateway-it 任务就是这么做。
+    -->
+    <skipITs>true</skipITs>
   </properties>
+
+  <profiles>
+    <profile>
+      <!-- 真实 PostgreSQL + Redis 的集成测试 -->
+      <id>it</id>
+      <properties>
+        <skipITs>false</skipITs>
+      </properties>
+    </profile>
+  </profiles>
 
   <dependencies>
     <!--
@@ -93,6 +109,19 @@
       <artifactId>bucket4j-core</artifactId>
       <version>${bucket4j.version}</version>
     </dependency>
+    <!--
+      分布式限流：两个网关实例共享同一份配额。
+      bucket4j-redis 对 Jedis/Redisson/Lettuce 都是 provided，必须显式带上 Lettuce。
+    -->
+    <dependency>
+      <groupId>com.bucket4j</groupId>
+      <artifactId>bucket4j-redis</artifactId>
+      <version>${bucket4j.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.lettuce</groupId>
+      <artifactId>lettuce-core</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>io.github.resilience4j</groupId>
@@ -107,6 +136,11 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <!-- /actuator/prometheus：运行量、token 用量、配额拒绝都必须能被外部看到 -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-registry-prometheus</artifactId>
     </dependency>
 
     <!-- API 文档。演示与评审需要在浏览器里直接看到端点契约，而不是读源码。 -->
@@ -156,6 +190,21 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <configuration>
+          <skipITs>${skipITs}</skipITs>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

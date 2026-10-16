@@ -490,7 +490,11 @@ def save_results(results: list[ArmResult], out_dir: Path) -> Path:
         # 同时落 elapsed_s 与 errors：口径修正后要能在**不重跑实验**的前提下
         # 重新渲染 summary.md。此前只存 metrics，导致每次改口径都要重花几美元。
         "arms": [
-            {**json.loads(r.metrics.model_dump_json()), "elapsed_s": r.elapsed_s, "errors": r.errors}
+            {
+                **json.loads(r.metrics.model_dump_json()),
+                "elapsed_s": r.elapsed_s,
+                "errors": r.errors,
+            }
             for r in results
         ],
     }

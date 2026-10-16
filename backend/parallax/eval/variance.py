@@ -60,10 +60,7 @@ class Stat:
             return "—"
         if self.n < 2:
             return f"{fmt.format(self.mean)}（n=1，无方差）"
-        return (
-            f"{fmt.format(self.mean)} ± {fmt.format(self.std)}"
-            f"（极差 {fmt.format(self.spread)}）"
-        )
+        return f"{fmt.format(self.mean)} ± {fmt.format(self.std)}（极差 {fmt.format(self.spread)}）"
 
 
 #: 参与稳定性统计的指标，以及它们的渲染小数位。
@@ -157,9 +154,7 @@ def pairwise_verdict(
     elif all(d < 0 for d in diffs):
         lines.append(f"**判定：反向且一致。** `{treatment}` 在每次重复里都低于 `{control}`。")
     else:
-        lines.append(
-            "**判定：不稳定。** 出现了方向相反的重复——该指标上的差异不能归因于机制。"
-        )
+        lines.append("**判定：不稳定。** 出现了方向相反的重复——该指标上的差异不能归因于机制。")
     return lines
 
 

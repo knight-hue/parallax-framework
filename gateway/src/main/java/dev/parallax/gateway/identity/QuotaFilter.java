@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import dev.parallax.gateway.auth.AuthPrincipal;
 import dev.parallax.gateway.config.ParallaxProperties;
+import dev.parallax.gateway.observability.ParallaxMetrics;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -39,11 +40,14 @@ public class QuotaFilter extends OncePerRequestFilter {
     private final QuotaService quota;
     private final ParallaxProperties props;
     private final ObjectMapper mapper;
+    private final ParallaxMetrics metrics;
 
-    public QuotaFilter(QuotaService quota, ParallaxProperties props, ObjectMapper mapper) {
+    public QuotaFilter(
+            QuotaService quota, ParallaxProperties props, ObjectMapper mapper, ParallaxMetrics metrics) {
         this.quota = quota;
         this.props = props;
         this.mapper = mapper;
+        this.metrics = metrics;
     }
 
     @Override
@@ -74,6 +78,7 @@ public class QuotaFilter extends OncePerRequestFilter {
 
     private void writeRejection(HttpServletResponse response, QuotaService.Decision decision, Instant now)
             throws IOException {
+        metrics.quotaRejected(decision.metric());
         response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");

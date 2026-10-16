@@ -91,7 +91,9 @@ def test_a_failed_arm_is_excluded_not_counted_as_zero():
 
 def test_verdict_stable_when_gap_exceeds_noise_twice_over():
     lines = pairwise_verdict(
-        collect(repetitions([1.00, 1.02, 0.98], [1.50, 1.52, 1.48])), "baseline_shared", "blind_full"
+        collect(repetitions([1.00, 1.02, 0.98], [1.50, 1.52, 1.48])),
+        "baseline_shared",
+        "blind_full",
     )
     assert any("判定：稳定" in ln for ln in lines)
     assert any("逐次差距" in ln for ln in lines)
@@ -118,14 +120,14 @@ def test_verdict_reports_instability_when_a_repetition_reverses():
 
 
 def test_verdict_refuses_when_single_repetition():
-    lines = pairwise_verdict(
-        collect(repetitions([1.0], [3.0])), "baseline_shared", "blind_full"
-    )
+    lines = pairwise_verdict(collect(repetitions([1.0], [3.0])), "baseline_shared", "blind_full")
     assert any("重复次数不足" in ln for ln in lines)
 
 
 def test_verdict_refuses_when_arm_missing():
-    lines = pairwise_verdict(collect(repetitions([1.0, 2.0], [3.0, 4.0])), "baseline_shared", "nope")
+    lines = pairwise_verdict(
+        collect(repetitions([1.0, 2.0], [3.0, 4.0])), "baseline_shared", "nope"
+    )
     assert any("缺少" in ln for ln in lines)
 
 
@@ -133,9 +135,7 @@ def test_verdict_refuses_on_uneven_arm_counts():
     """两臂有效次数不同时逐次配对无意义，必须拒绝而不是拿短的截断。"""
     stats = collect(repetitions([1.0, 1.1], [3.0, 3.1]))
     stats["blind_full"]["effective_channels"] = Stat([3.0, 3.1, 3.2])
-    lines = pairwise_verdict(
-        stats, "baseline_shared", "blind_full", metric="effective_channels"
-    )
+    lines = pairwise_verdict(stats, "baseline_shared", "blind_full", metric="effective_channels")
     assert any("有效次数不同" in ln for ln in lines)
 
 
