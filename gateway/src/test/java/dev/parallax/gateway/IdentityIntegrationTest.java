@@ -112,7 +112,6 @@ class IdentityIntegrationTest {
         return rest.exchange(path, method, new HttpEntity<>(body, headers), mapType());
     }
 
-    @SuppressWarnings("unchecked")
     private String adminToken() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);

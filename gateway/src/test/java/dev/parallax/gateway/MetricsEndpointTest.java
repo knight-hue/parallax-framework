@@ -93,7 +93,6 @@ class MetricsEndpointTest {
         return headers;
     }
 
-    @SuppressWarnings("unchecked")
     private String adminToken() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);

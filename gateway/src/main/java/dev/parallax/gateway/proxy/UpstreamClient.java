@@ -12,7 +12,6 @@ import java.util.Map;
 import dev.parallax.gateway.common.ApiException;
 import dev.parallax.gateway.common.TraceFilter;
 import dev.parallax.gateway.config.ParallaxProperties;
-import dev.parallax.gateway.proxy.CredentialHeaders;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

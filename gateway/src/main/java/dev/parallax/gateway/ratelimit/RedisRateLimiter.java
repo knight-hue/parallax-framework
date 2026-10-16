@@ -74,7 +74,9 @@ public class RedisRateLimiter implements RateLimiter {
                         .refillGreedy(spec.capacity(), spec.window()))
                 .build();
         try {
-            BucketProxy bucket = buckets().build(redisKey(key, spec), configuration);
+            // 用 Supplier 重载：`build(K, BucketConfiguration)` 在 bucket4j 8.10.1 已废弃。
+            // 语义上 Supplier 也更好——桶已存在时不必先构造一份配置。
+            BucketProxy bucket = buckets().build(redisKey(key, spec), () -> configuration);
             return bucket.tryConsume(1);
         } catch (RuntimeException ex) {
             // 连接可能在故障期间失效：置空让下一次调用重建，
