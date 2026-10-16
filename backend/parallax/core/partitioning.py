@@ -31,6 +31,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import random
 from dataclasses import dataclass
 
@@ -60,9 +61,30 @@ class BlindPartitioner:
 
     分组感知的含义：同一个 group（代码审计里=同一个模块）尽量整体分给同一批
     Reader，而不是把文件劈成两半——让 Reader 读到残缺上下文会制造假缺陷。
+
+    ## 但分组必须设上限（真实仓库逼出来的修正）
+
+    「同组整体分配」在**模块大小不均**时会退化。实测 anyio（46 文件 / 5 模块 /
+    最大模块 18）在 R=3、K=2 下，三个 Reader 拿到的文件数是 33 / 38 / 21——
+    前两个读了 72%~83% 的全部文件，盲读失去意义，而这种退化**看起来像"从众"**，
+    实际是分区不均衡造成的假象。
+
+    修正是给分组设一个单元数上限 `ceil(N / R)`，超过就切成连续块：
+    块沿用同一个 `group` 标签（覆盖率矩阵的行不变），但旋转下标加上块序号，
+    于是同组各块分给不同 Reader，负载回到理论值附近（K=2、R=3 时约 67%）。
+
+    上限取 `ceil(N / R)` 而不是更小的值，是为了**不改变结构均匀的语料**：
+    seed_c 是 6 个模块各 8 个文件，R=6 时上限恰好为 8，不触发切块，
+    因此此前发布的实验结果仍然成立。
     """
 
-    def __init__(self, n_readers: int = 3, redundancy: int = 2, seed: int = 0) -> None:
+    def __init__(
+        self,
+        n_readers: int = 3,
+        redundancy: int = 2,
+        seed: int = 0,
+        max_units_per_group: int = 0,
+    ) -> None:
         if n_readers < 1:
             raise ConfigurationError("n_readers 至少为 1")
         if redundancy < 1 or redundancy > n_readers:
@@ -72,6 +94,8 @@ class BlindPartitioner:
         self.n_readers = n_readers
         self.redundancy = redundancy
         self.seed = seed
+        self.max_units_per_group = max_units_per_group
+        """0 = 自动（ceil(N / n_readers)）。显式给值可覆盖，便于实验对比。"""
 
     def reader_ids(self, round_index: int) -> list[str]:
         """**每一轮生成全新的 Reader 身份**。
@@ -99,8 +123,10 @@ class BlindPartitioner:
         reader_ids = self.reader_ids(round_index)
         buckets: dict[str, list[EvidenceUnit]] = {rid: [] for rid in reader_ids}
 
-        for group, group_units in self._by_group(candidates):
-            offset = self._rotation_offset(group, round_index)
+        for group, group_units, chunk_index in self._chunked_groups(candidates):
+            # 块序号参与旋转：否则同组的各块会分给同一批 Reader，切块就白做了。
+            # 未切块的组 chunk_index 恒为 0，旋转结果与旧实现完全一致。
+            offset = (self._rotation_offset(group, round_index) + chunk_index) % self.n_readers
             for k in range(self.redundancy):
                 rid = reader_ids[(offset + k) % self.n_readers]
                 buckets[rid].extend(group_units)
@@ -129,6 +155,37 @@ class BlindPartitioner:
         for unit in units:
             grouped.setdefault(unit.group, []).append(unit)
         return [(g, sorted(grouped[g], key=lambda u: u.evidence_id)) for g in sorted(grouped)]
+
+    def _group_cap(self, total_units: int) -> int:
+        """单个分组的单元数上限。"""
+        if self.max_units_per_group > 0:
+            return self.max_units_per_group
+        return max(1, math.ceil(total_units / self.n_readers))
+
+    def _chunked_groups(
+        self, units: list[EvidenceUnit]
+    ) -> list[tuple[str, list[EvidenceUnit], int]]:
+        """把过大的分组切成连续块。
+
+        返回 `(group, units, chunk_index)`。`chunk_index` 在同一组内从 0 递增，
+        未切块时为 0——这保证了与旧实现的行为兼容。
+        """
+        cap = self._group_cap(len(units))
+        out: list[tuple[str, list[EvidenceUnit], int]] = []
+        for group, group_units in self._by_group(units):
+            if len(group_units) <= cap:
+                out.append((group, group_units, 0))
+                continue
+            n_chunks = math.ceil(len(group_units) / cap)
+            # 均分而不是"前 n-1 块满、最后一块剩"：后者会给末块极小的负载，
+            # 让该块的 Reader 几近空跑。
+            base, extra = divmod(len(group_units), n_chunks)
+            cursor = 0
+            for i in range(n_chunks):
+                size = base + (1 if i < extra else 0)
+                out.append((group, group_units[cursor : cursor + size], i))
+                cursor += size
+        return out
 
     def _rotation_offset(self, group: str, round_index: int) -> int:
         """由 (seed, round_index, group) 派生起始 Reader 下标。

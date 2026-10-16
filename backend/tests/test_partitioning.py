@@ -3,6 +3,9 @@
 重点验证「不重叠」这个说法被落在两条可验证的约束上：
   ① 每条证据恰好被 redundancy 个 Reader 看到
   ② 同一轮的 Reader 身份互不相同，且跨轮一定换新身份
+
+外加一条后来补上的约束（真实仓库逼出来的）：
+  ③ 单个模块过大时必须切块，否则某个 Reader 会拿到绝大部分证据、盲读退化
 """
 
 from __future__ import annotations
@@ -132,3 +135,76 @@ def test_focus_restricts_to_the_first_groups():
         pool, round_index=0, focus_groups=groups[:1]
     )
     assert {u.group for p in parts for u in p.units} == {groups[0]}
+
+
+# ---- 模块过大时切块（真实仓库逼出来的修正）----
+
+
+def skewed_units(big: int, small: int = 1, n_small: int = 2) -> list:
+    """构造一个"一个巨块 + 若干小块"的仓库形态。
+
+    真实仓库就是这样：anyio 的模块文件数是 [18, 10, 8, 7, 3]，
+    而合成语料是均匀的 [8, 8, 8, 8, 8, 8]。旧实现只按整模块轮转，
+    在偏斜分布下会让某个 Reader 拿到全部证据。
+    """
+    out = [make_unit(f"big/f{i}.py", f"# {i}\n", "big") for i in range(big)]
+    for g in range(n_small):
+        out.append(make_unit(f"small{g}/f.py", "# s\n", f"small{g}"))
+    return out
+
+
+def test_oversized_group_is_split_and_still_exactly_redundant():
+    """切块后 ① 每条证据仍恰好被 K 个 Reader 看到（这是机制 3 的前提）。"""
+    pool = skewed_units(big=18)
+    partitioner = BlindPartitioner(n_readers=3, redundancy=2, seed=0)
+    parts = partitioner.partition(pool, round_index=0)
+
+    counts = partitioner.redundancy_of(parts)
+    assert len(counts) == len(pool)
+    assert set(counts.values()) == {2}, "切块不得破坏冗余度"
+
+
+def test_oversized_group_splitting_balances_the_load():
+    """切块的核心目的：最重的 Reader 不该拿到绝大部分证据。"""
+    pool = skewed_units(big=18)
+    new = BlindPartitioner(n_readers=3, redundancy=2, seed=0)
+    old = BlindPartitioner(n_readers=3, redundancy=2, seed=0, max_units_per_group=10**9)
+
+    heaviest_new = max(len(p.units) for p in new.partition(pool, 0))
+    heaviest_old = max(len(p.units) for p in old.partition(pool, 0))
+
+    assert heaviest_old == len(pool), "旧实现下最重 Reader 拿到全部证据（这就是缺陷）"
+    assert heaviest_new < len(pool), "切块后不应再有 Reader 拿到全部证据"
+    assert heaviest_new < heaviest_old
+
+
+def test_split_chunks_keep_the_group_label():
+    """块必须沿用原 group 标签，否则覆盖率矩阵的行会被切碎。"""
+    pool = skewed_units(big=18)
+    parts = BlindPartitioner(n_readers=3, redundancy=2, seed=0).partition(pool, 0)
+    assert {u.group for p in parts for u in p.units} == {"big", "small0", "small1"}
+
+
+def test_uniform_corpus_is_unaffected_by_chunking():
+    """结构均匀的语料不得被改动——已发布的实验结果依赖这一点。
+
+    seed_c 是 6 个模块各 8 个文件，R=6 时上限恰好为 8，不该触发切块。
+    """
+    pool = [make_unit(f"mod{i % 6}/f{i}.py", f"# {i}\n", f"mod{i % 6}") for i in range(48)]
+    new = BlindPartitioner(n_readers=6, redundancy=2, seed=0)
+    old = BlindPartitioner(n_readers=6, redundancy=2, seed=0, max_units_per_group=10**9)
+
+    def sig(p):
+        return [(x.reader_id, tuple(u.locator for u in x.units)) for x in p.partition(pool, 0)]
+
+    assert sig(new) == sig(old), "均匀语料的分区结果必须与旧实现完全一致"
+
+
+def test_explicit_cap_overrides_the_auto_value():
+    pool = skewed_units(big=12)
+    partitioner = BlindPartitioner(n_readers=3, redundancy=2, seed=0, max_units_per_group=3)
+    parts = partitioner.partition(pool, 0)
+    assert set(partitioner.redundancy_of(parts).values()) == {2}
+    # 上限收紧后负载应更均衡
+    loads = sorted(len(p.units) for p in parts)
+    assert loads[-1] - loads[0] <= 6

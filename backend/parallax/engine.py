@@ -80,6 +80,7 @@ class ParallaxEngine:
             visibility=settings.reader_visibility,
             max_output_tokens=settings.llm_max_output_tokens,
             max_evidence_per_call=settings.max_evidence_per_call,
+            max_chars_per_call=settings.llm_max_batch_chars,
         )
         store = reputation_store or InMemoryReputationStore()
 

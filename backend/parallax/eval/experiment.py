@@ -45,7 +45,7 @@ from pathlib import Path
 
 from parallax.config import Settings
 from parallax.engine import ParallaxEngine
-from parallax.eval.corpus import Task
+from parallax.eval.corpus import GroundTruth, Task
 from parallax.eval.metrics import ArmMetrics, compute_metrics
 from parallax.infra.llm_openai_compat import OpenAICompatClient
 from parallax.plugins.code_audit import CodeAuditReader, RepoAdapter
@@ -242,6 +242,126 @@ async def run_experiment(
 # ---- 报告 ----
 
 
+def _render_recall(m: ArmMetrics) -> str:
+    """召回率单元格。无 ground truth 时显示 N/A，而不是伪装成 0%。"""
+    if m.recall is None:
+        return "N/A"
+    return f"{m.recall:.0%} ({m.hits}/{m.planted})"
+
+
+def _render_precision(m: ArmMetrics) -> str:
+    if m.precision is None:
+        return "N/A"
+    return f"{m.precision:.0%}"
+
+
+# ---- 真实仓库（无 ground truth）----
+
+REAL_REPO_QUESTION = "找出这个代码仓库中真实存在的缺陷，并说明触发条件。"
+
+
+def make_repo_task(
+    repo_path: str | Path,
+    *,
+    task_id: str | None = None,
+    question: str = REAL_REPO_QUESTION,
+) -> Task:
+    """把一个真实代码仓库包装成 Task——**带一个空的 ground truth**。
+
+    这不是"作弊式复用"，而是刻意的：让真实仓库走与合成语料**完全相同**的执行路径，
+    唯一差别就是 `defects=[]`。如果为真实仓库另写一条执行链，
+    那两边的结果就不可比了，而"可比"正是这项验证的全部意义。
+    """
+    root = Path(repo_path).resolve()
+    if not root.is_dir():
+        raise FileNotFoundError(f"仓库目录不存在：{root}")
+    return Task(
+        task_id=task_id or root.name,
+        root=root,
+        repo_path=root,
+        ground_truth=GroundTruth(task_id=task_id or root.name, description="真实仓库（无标注）"),
+        question=question,
+    )
+
+
+async def run_repo_arm(
+    repo_path: str | Path,
+    arm: Arm,
+    base_settings: Settings,
+    client_factory,
+    *,
+    group_depth: int = 2,
+    max_files: int = 300,
+    task_id: str | None = None,
+) -> ArmResult:
+    """在真实仓库上跑一个实验臂。
+
+    与 `run_arm` 的区别只有两处：适配器参数可调（真实仓库目录结构更深、文件更多），
+    以及 ground truth 为空。
+    """
+    task = make_repo_task(repo_path, task_id=task_id)
+    settings = make_settings(base_settings, arm)
+    client: LLMClient = client_factory(settings)
+    engine = ParallaxEngine.build(
+        adapter=RepoAdapter(
+            task.repo_path,
+            extensions=(".py",),
+            group_depth=group_depth,
+            max_files=max_files,
+        ),
+        plugin=CodeAuditReader(),
+        client=client,
+        settings=settings,
+    )
+
+    started = time.perf_counter()
+    errors: list[str] = []
+    try:
+        report = await engine.run(task.question)
+    except Exception as exc:  # noqa: BLE001 - 单臂失败不应中断整轮
+        logger.exception("真实仓库实验臂 %s 在 %s 上失败", arm.name, task.task_id)
+        errors.append(f"{type(exc).__name__}: {exc}")
+        from parallax.domain.models import Report, RunManifest
+
+        report = Report(
+            run_id=f"failed-{arm.name}",
+            question=task.question,
+            manifest=RunManifest(
+                run_id=f"failed-{arm.name}",
+                question=task.question,
+                plugin="code_audit",
+                seed=settings.seed,
+                max_rounds=settings.max_rounds,
+                support_threshold=settings.support_threshold,
+            ),
+        )
+    elapsed = time.perf_counter() - started
+
+    claims = engine.runtime.ledger.claims
+    metrics = compute_metrics(
+        arm=arm.name,
+        task_id=task.task_id,
+        report=report,
+        claims=claims,
+        defects=(),  # ← 真实仓库没有标注
+        usage=engine.usage_snapshot(),
+        reader_count=settings.n_readers,
+        readers_failed=len(engine.runtime.pool.failed_readers),
+    )
+
+    from parallax.reporting import render_markdown
+
+    if hasattr(client, "aclose"):
+        await client.aclose()  # type: ignore[attr-defined]
+
+    return ArmResult(
+        metrics=metrics,
+        elapsed_s=round(elapsed, 2),
+        report_markdown=render_markdown(report),
+        errors=errors,
+    )
+
+
 def render_summary(results: list[ArmResult], arms: list[Arm] | None = None) -> str:
     arms = arms or ARMS
     descriptions = {a.name: a.description for a in arms}
@@ -253,24 +373,44 @@ def render_summary(results: list[ArmResult], arms: list[Arm] | None = None) -> s
     lines.append("## 主指标对照")
     lines.append("")
     lines.append(
-        "| 实验臂 | 召回率 | 精确率 | 冗余率 | 有效独立通道 K* | 覆盖率 | 轮次 | 调用 | Reader 失败 |"
+        "| 实验臂 | 召回率 | 精确率 | 冗余率 | 有效独立通道 K* / Agent 数 | 独立通道占比 | 覆盖率 | 轮次 | 调用 | Reader 失败 |"
     )
-    lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+    lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
     for result in results:
         m = result.metrics
         lines.append(
-            f"| `{m.arm}` | {m.recall:.0%} ({m.hits}/{m.planted}) | {m.precision:.0%} | "
-            f"{m.redundancy:.0%} | {m.effective_channels} | {m.coverage_fill_rate:.0%} | "
+            f"| `{m.arm}` | {_render_recall(m)} | {_render_precision(m)} | "
+            f"{m.redundancy:.0%} | {m.effective_channels} / {m.agent_count} | "
+            f"{m.channels_ratio:.0%} | {m.coverage_fill_rate:.0%} | "
             f"{m.rounds} | {m.llm_calls} | {m.readers_failed} |"
         )
     lines.append("")
 
-    lines.append("## 逐缺陷命中矩阵")
-    lines.append("")
-    lines.append("每一格是该缺陷被几个 Agent 独立发现。**只被 1 个 Agent 发现 = 孤证**，")
-    lines.append("被 0 个发现 = 漏检。这一栏是从众现象最直接的证据。")
-    lines.append("")
-    if results:
+    if any(m.metrics.recall is None for m in results):
+        lines.append(
+            "> **召回率与精确率为 `N/A` 说明该任务没有 ground truth。** "
+            "这不会削弱 K\\* 的价值——它由 Agent 之间的**重叠矩阵**算出，"
+            "不需要知道哪条结论是对的，因此是这类无标注任务上唯一仍可测的核心指标。"
+        )
+        lines.append("")
+
+    agent_counts = {m.metrics.agent_count for m in results if m.metrics.agent_count}
+    if len(agent_counts) > 1:
+        lines.append(
+            "> ⚠️ **本表各臂的 Agent 数不同，请勿直接比较裸 K\\*。** "
+            "每一轮都会生成全新 Reader 身份（这是补检不破坏盲读的前提），"
+            "所以 3 轮 × 6 Reader 的臂实际有 18 个 Agent，它的 K\\* 上限是 18 而不是 6。"
+            "跨臂比较应看 **K\\*/N 占比**，或只比较 Agent 数相同的臂。"
+        )
+        lines.append("")
+
+    # 无标注时逐缺陷矩阵无意义（没有缺陷可比）
+    if results and results[0].metrics.defects:
+        lines.append("## 逐缺陷命中矩阵")
+        lines.append("")
+        lines.append("每一格是该缺陷被几个 Agent 独立发现。**只被 1 个 Agent 发现 = 孤证**，")
+        lines.append("被 0 个发现 = 漏检。这一栏是从众现象最直接的证据。")
+        lines.append("")
         defect_ids = [d.defect_id for d in results[0].metrics.defects]
         header = "| 实验臂 | " + " | ".join(defect_ids) + " | 孤证数 | 漏检 |"
         lines.append(header)
@@ -284,7 +424,7 @@ def render_summary(results: list[ArmResult], arms: list[Arm] | None = None) -> s
                 f"| `{m.arm}` | " + " | ".join(cells) + f" | {m.sole_source_defects} | "
                 f"{len(m.missed_ids())} |"
             )
-    lines.append("")
+        lines.append("")
 
     lines.append("## 实验臂说明")
     lines.append("")
@@ -306,11 +446,15 @@ def render_summary(results: list[ArmResult], arms: list[Arm] | None = None) -> s
         )
         lines.append(f"- 停止原因 `{m.stop_reason}`｜轮次 {m.rounds}")
         lines.append(
-            f"- claim 总数 {m.total_claims}（命中 {m.hits}｜冗余 {m.duplicates}"
+            f"- claim 总数 {m.total_claims}"
+            f"（独立指纹 {m.total_claims - m.duplicates}｜冗余 {m.duplicates}"
             f"｜未匹配 {m.unmatched}）"
         )
-        missed = m.missed_ids()
-        lines.append(f"- 漏检：{', '.join(missed) if missed else '无'}")
+        if m.recall is None:
+            lines.append("- 命中情况：**无 ground truth，跳过**（召回/精确不适用）")
+        else:
+            missed = m.missed_ids()
+            lines.append(f"- 漏检：{', '.join(missed) if missed else '无'}")
         if result.errors:
             lines.append(f"- ⚠️ 错误：{'; '.join(result.errors)}")
         lines.append("")

@@ -266,3 +266,52 @@ async def test_reputation_is_snapshotted_on_claims():
 def test_invalid_visibility_rejected():
     with pytest.raises(ValueError):
         ReaderPool(FakeLLMClient(), StubPlugin(), visibility="whatever")
+
+
+# ---- 按累计字符数分批（真实仓库逼出来的修正）----
+
+
+def fake_units(sizes: list[int]):
+    """构造指定字符数的证据单元。"""
+    return [make_unit(f"mod/f{i}.py", "x" * n, "mod") for i, n in enumerate(sizes)]
+
+
+def chunk_sizes(units, *, max_chars: int, per_call: int = 6):
+    pool = ReaderPool(
+        FakeLLMClient(),
+        StubPlugin(),
+        max_evidence_per_call=per_call,
+        max_chars_per_call=max_chars,
+    )
+    return [len(c) for c in pool._chunks(units)]
+
+
+def test_char_limit_off_keeps_count_only_batching():
+    """max_chars=0 必须退回旧行为，老结果才能复现。"""
+    units = fake_units([50_000] * 7)
+    assert chunk_sizes(units, max_chars=0) == [6, 1]
+
+
+def test_char_limit_shrinks_batches_for_large_files():
+    """真实仓库的文件平均大 8 倍，只按条数分批会让输出撞上 token 上限。"""
+    units = fake_units([12_000] * 6)  # 贴近 anyio 的真实均值
+    assert chunk_sizes(units, max_chars=36_000) == [3, 3]
+
+
+def test_char_limit_does_not_touch_small_file_corpora():
+    """合成语料（约 1.5k 字符/文件）必须完全不受影响——已发布结果依赖这一点。"""
+    units = fake_units([1_500] * 12)
+    assert chunk_sizes(units, max_chars=36_000) == chunk_sizes(units, max_chars=0) == [6, 6]
+
+
+def test_oversized_single_file_still_gets_its_own_batch():
+    """单个超大文件不会被切开——切文件会破坏 claim 的路径与行号语义。"""
+    units = fake_units([200_000, 1_000, 1_000])
+    assert chunk_sizes(units, max_chars=36_000) == [1, 2]
+
+
+def test_every_unit_appears_exactly_once_across_batches():
+    units = fake_units([9_000, 4_000, 20_000, 1_000, 15_000, 2_000])
+    pool = ReaderPool(FakeLLMClient(), StubPlugin(), max_chars_per_call=25_000)
+    flat = [u.evidence_id for c in pool._chunks(units) for u in c]
+    assert sorted(flat) == sorted(u.evidence_id for u in units)

@@ -1,0 +1,53 @@
+{
+  "generated_at": "2026-10-16T06:13:30+00:00",
+  "arms": [
+    {
+      "arm": "baseline_shared",
+      "task_id": "urllib3",
+      "reader_count": 6,
+      "recall": null,
+      "precision": null,
+      "redundancy": 0.6355,
+      "effective_channels": 1.8439,
+      "coverage_fill_rate": 0.775,
+      "rounds": 1,
+      "total_claims": 1221,
+      "hits": 0,
+      "planted": 0,
+      "duplicates": 0,
+      "unmatched": 1221,
+      "llm_calls": 120,
+      "llm_failures": 0,
+      "schema_retries": 5,
+      "readers_failed": 0,
+      "prompt_tokens": 2477733,
+      "completion_tokens": 414628,
+      "stop_reason": "max_rounds_reached",
+      "defects": []
+    },
+    {
+      "arm": "blind_full",
+      "task_id": "urllib3",
+      "reader_count": 6,
+      "recall": null,
+      "precision": null,
+      "redundancy": 0.5608,
+      "effective_channels": 7.7148,
+      "coverage_fill_rate": 0.875,
+      "rounds": 3,
+      "total_claims": 2079,
+      "hits": 0,
+      "planted": 0,
+      "duplicates": 0,
+      "unmatched": 2079,
+      "llm_calls": 182,
+      "llm_failures": 0,
+      "schema_retries": 14,
+      "readers_failed": 0,
+      "prompt_tokens": 1409935,
+      "completion_tokens": 770288,
+      "stop_reason": "max_rounds_reached",
+      "defects": []
+    }
+  ]
+}

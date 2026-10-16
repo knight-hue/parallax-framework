@@ -276,10 +276,38 @@ class ArmMetrics(BaseModel):
     arm: str
     task_id: str
     reader_count: int = 0
-    recall: float = 0.0
-    precision: float = 0.0
+    recall: float | None = None
+    """召回率。**None 表示无 ground truth**——真实仓库没有标注，这个值算不出来。
+
+    早先这里默认 0.0，那会把"没标注"和"一个都没找到"混成同一个数字，
+    是最容易自欺的一类指标错误（0% 召回看起来像机制失效，其实只是没标尺）。
+    """
+    precision: float | None = None
+    """精确率。同样在无标注时为 None：没有 ground truth 时"命中"无从判定。"""
     redundancy: float = 0.0
     effective_channels: float = 0.0
+    """K\\*：有效独立通道数。值域 [1, agent_count]。
+
+    ⚠️ **必须与 `agent_count` 一起读**。多轮运行的每一轮都会生成全新 Reader 身份
+    （见 `BlindPartitioner.reader_ids`），所以 3 轮 × 6 Reader 的臂实际有 18 个不同 Agent，
+    它的 K\\* 上限是 18 而不是 6。直接拿"1 轮 6 Agent"与"3 轮 18 Agent"的 K\\* 比大小
+    **不是同口径比较**——这个坑在真实仓库验证阶段才发现，此前的文档确实踩了它。
+    """
+    agent_count: int = 0
+    """实际产出过 claim 的不同 Agent 数（多轮下 = 每轮读者数之和）。K\\* 的上限。"""
+
+    @property
+    def channels_ratio(self) -> float:
+        """归一化独立通道占比 = K\\* / agent_count，值域 (0, 1]。
+
+        跨臂比较应当用这个而不是裸 K\\*：它回答的是
+        「这 N 个 Agent 发挥出了几成独立性」，
+        从而让轮次不同、读者数不同的两个臂可比。
+        """
+        if not self.agent_count:
+            return 0.0
+        return round(self.effective_channels / self.agent_count, 4)
+
     coverage_fill_rate: float = 0.0
     rounds: int = 0
     total_claims: int = 0
@@ -338,14 +366,25 @@ def compute_metrics(
     for claim in claims:
         per_agent.setdefault(claim.extracted_by, set()).add(claim.fingerprint)
 
+    # 只统计"产出过 claim"的 Agent：空跑的 Reader 不构成通道，
+    # 把它们算进分母会把占比无端拉低。
+    agent_count = len([s for s in per_agent.values() if s])
+
     return ArmMetrics(
         arm=arm,
         task_id=task_id,
         reader_count=reader_count,
-        recall=round(match.hits / match.total_defects, 4) if match.total_defects else 0.0,
-        precision=round(match.matched_claims / total_claims, 4) if total_claims else 0.0,
+        # 无标注时留 None 而不是 0.0：0% 召回会被误读成"机制失效"，
+        # 而真相是"没有标尺可量"。
+        recall=round(match.hits / match.total_defects, 4) if match.total_defects else None,
+        precision=(
+            round(match.matched_claims / total_claims, 4)
+            if match.total_defects and total_claims
+            else None
+        ),
         redundancy=round(1.0 - distinct_fingerprints / total_claims, 4) if total_claims else 0.0,
         effective_channels=effective_channels(per_agent),
+        agent_count=agent_count,
         coverage_fill_rate=round(report.coverage.fill_rate(), 4),
         rounds=len(report.manifest.rounds),
         total_claims=total_claims,

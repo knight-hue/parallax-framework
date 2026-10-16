@@ -1,0 +1,567 @@
+# Parallax 运行报告 `41b860a773bb`
+
+**审查目标**：找出这个代码仓库中真实存在的缺陷，并说明触发条件。
+
+## 结论概览
+
+| 结论 | 条数 | 含义 |
+| --- | ---: | --- |
+| 高置信 | 52 | >= 2 个独立 Agent 交叉验证 |
+| 待验证 | 646 | 单一来源孤证 |
+| 争议 | 215 | 存在极性相反的主张，需外部裁决 |
+
+## 运行审计
+
+- 插件：`code_audit`｜轮次：3｜停止原因：`max_rounds_reached`
+- 参与 Reader：18 个（每轮全新身份）
+- 账本条目：2079
+
+| 轮次 | Reader 数 | 本轮新主体 | 证据覆盖 | 矩阵填充 |
+| ---: | ---: | ---: | ---: | ---: |
+| 0 | 6 | 463 | 100% | 70% |
+| 1 | 6 | 286 | 100% | 78% |
+| 2 | 6 | 164 | 100% | 82% |
+
+## 高置信结论
+
+- **[api_misuse/medium]** [api_misuse] _collections.py:168-186 HTTPHeaderDictItemView 继承 set 但未实现 set 的构造/更新语义，导致 __init__ 后集合为空（确认存在缺陷）
+  - 独立来源 6 个：reader-r0-2, reader-r0-4, reader-r1-2, reader-r1-3, reader-r2-1, reader-r2-3｜置信度 0.5
+  - 源：`_collections.py:168-186`
+  - 依据：HTTPHeaderDictItemView 继承自 set[tuple[str,str]]，但 __init__ 只保存 _headers 引用，没有调用 set.__init__ 也没有向底层 set 填充任何元素。因此该对象作为 set 的底层存储始终为空：len(view) 返回的是重写的 __len__（正确），但 set 自带的 __contains__ 被重写（正确），然而 set 的其他方法如 __eq__、__and__、__or__、add、discard、pop、clear 等仍使用空的底层 set。例如 HTTPHeaderDict().items() == {('a','b')} 会返回 False，即使 __contains__ 返回 True；view | {('a','b')} 会丢失所有 header。这是继承 set 却未同步底层存储导致的真实行为不一致。
+- **[boundary/medium]** [boundary] _collections.py:44-58 ensure_can_construct_http_header_dict 对 str 类型返回 Iterable cast，导致后续构造异常（确认存在缺陷）
+  - 独立来源 2 个：reader-r1-1, reader-r2-1｜置信度 0.5
+  - 源：`_collections.py:44-58`
+  - 依据：str 是 Iterable，因此 isinstance(potential, typing.Iterable) 为真，函数返回 cast 后的 str。调用方（如 __eq__、__or__、__ior__）随后用该值构造 HTTPHeaderDict，extend 中 `for key, value in other` 会尝试解包字符串的每个字符，若字符数不为 2 则抛 ValueError。触发条件：`HTTPHeaderDict() == "abc"` 或 `HTTPHeaderDict() | "abc"`。
+- **[logic/medium]** [logic] _request_methods.py:232-234 request_encode_body 中 urlopen_kw 的 body 检查在 extra_kw.update 之前被覆盖（确认存在缺陷）
+  - 独立来源 3 个：reader-r1-2, reader-r1-3, reader-r2-1｜置信度 0.5
+  - 源：`_request_methods.py:232-234`
+  - 依据：当 fields 非空且 urlopen_kw 中包含 'body' 时，代码先检查并抛出 TypeError，这是正确的。但 request() 方法在 body 非 None 时会把 body 放入 urlopen_kw，然后调用 request_encode_body。若同时传入 fields 和 body，request() 不会提前报错，而是由 request_encode_body 的检查捕获。然而 request_encode_body 的检查只在 fields 为真时执行；若 fields 为空但 body 存在，则 extra_kw.update(urlopen_kw) 会覆盖 extra_kw['body']，行为不一致。更关键的是：request() 在 json 非 None 时设置 body 并放入 urlopen_kw，若同时传入 fields，request_encode_body 会因 'body' in urlopen_kw 抛 TypeError，但错误信息指向 'fields' 和 'body'，而用户实际传的是 json 和 fields，错误信息误导。
+- **[logic/medium]** [logic] _request_methods.py:270-275 request_encode_body 中 extra_kw.update(urlopen_kw) 可能覆盖已设置的 body 和 headers（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r2-2｜置信度 0.5
+  - 源：`_request_methods.py:270-275`
+  - 依据：当 fields 为真值时，代码设置 extra_kw['body'] 和 extra_kw['headers']。随后执行 extra_kw.update(urlopen_kw)。如果 urlopen_kw 中包含 'headers' 键（例如调用者通过 request() 传入 headers 后又以关键字形式重复传入，或直接调用 request_encode_body 时 headers 同时出现在显式参数和 urlopen_kw 中），则会用 urlopen_kw 中的 headers 覆盖已构建的 HTTPHeaderDict，导致 Content-Type 丢失。触发条件：调用 request_encode_body 时 headers 参数为 None 或显式传入，同时 urlopen_kw 中又包含 headers 键。
+- **[error_handling/medium]** [error_handling] connection.py:640-645 request() 中 self.sock.settimeout 在 sock 为 None 时抛 AttributeError（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r1-1｜置信度 0.5
+  - 源：`connection.py:640-645`
+  - 依据：request() 开头 `if self.sock is not None: self.sock.settimeout(self.timeout)` 有 None 检查，安全。但 getresponse() 中 `self.sock.settimeout(self.timeout)` 没有 None 检查（见另一 finding）。此处 request 是安全的。
+- **[error_handling/medium]** [error_handling] connectionpool.py:700-710 urlopen 中 headers 为 None 且 http_tunnel_required 为 True 时 headers 仍为 None 导致后续迭代失败（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r2-2｜置信度 0.5
+  - 源：`connectionpool.py:700-710`
+  - 依据：当 headers 为 None 时，headers = self.headers。self.headers 在 RequestMethods.__init__ 中初始化为 HTTPHeaderDict()，因此非 None。后续 headers.copy() 和 headers.update() 安全。这不是缺陷。
+- **[resource_leak/medium]** [resource_leak] connectionpool.py:950-960 urlopen 中 response.drain_conn() 在 raise_on_redirect 为 False 时未调用（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r2-2｜置信度 0.5
+  - 源：`connectionpool.py:950-960`
+  - 依据：在重定向处理中，如果 retries.increment 抛出 MaxRetryError 且 retries.raise_on_redirect 为 False，则直接 `return response`，此时没有调用 response.drain_conn()。触发条件：重定向次数耗尽且 raise_on_redirect=False。这会导致连接未被排空，可能泄漏连接。
+- **[api_misuse/low]** [api_misuse] contrib/emscripten/connection.py:163-164 EmscriptenHTTPSConnection 未定义 default_socket_options 类属性（确认存在缺陷）
+  - 独立来源 3 个：reader-r1-0, reader-r1-1, reader-r2-1｜置信度 0.5
+  - 源：`contrib/emscripten/connection.py:163-164`
+  - 依据：EmscriptenHTTPConnection 声明了 default_socket_options: typing.ClassVar[_TYPE_SOCKET_OPTIONS] 但从未赋值，EmscriptenHTTPSConnection 也未定义。BaseHTTPConnection 协议要求该 ClassVar 存在。任何访问 EmscriptenHTTPConnection.default_socket_options 的代码都会抛 AttributeError。
+- **[boundary/medium]** [boundary] contrib/emscripten/connection.py:100-106 EmscriptenHTTPConnection.request 中 port 为 0 时构造出非法 URL（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-0, reader-r1-0, reader-r2-1, reader-r2-5｜置信度 0.5
+  - 源：`contrib/emscripten/connection.py:100-106`
+  - 依据：port 默认值为 0（__init__ 中 port: int = 0）。当 url 以 '/' 开头且 self.port 为 0 时，条件 `if self.port is not None` 为真（0 is not None），于是 port = ':0'，构造出 'http://host:0/path' 这样的非法 URL。触发条件：使用默认端口 0 创建连接并传入相对路径 URL。虽然实际使用中通常会传入真实端口，但默认值 0 与 is not None 检查的组合是明确的边界缺陷。
+- **[boundary/medium]** [boundary] contrib/emscripten/connection.py:66-66 EmscriptenHTTPConnection.timeout 将非 float 的 timeout 静默转为 0.0（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-1, reader-r1-0, reader-r1-1, reader-r2-0｜置信度 0.5
+  - 源：`contrib/emscripten/connection.py:66-66`
+  - 依据：timeout 参数类型为 _TYPE_TIMEOUT（通常为 None | float | _DEFAULT_TIMEOUT 哨兵）。当传入 _DEFAULT_TIMEOUT 哨兵或 int 类型（如 timeout=5）时，isinstance(timeout, float) 为 False，timeout 被设为 0.0。0.0 在后续 request() 中作为 '无超时' 传给 EmscriptenRequest（timeout=self.timeout if self.timeout else 0），导致用户显式设置的超时被静默忽略。触发条件：调用方传入整数超时或默认哨兵值。
+- **[logic/medium]** [logic] contrib/emscripten/connection.py:113-120 EmscriptenHTTPConnection.request 中 preload_content=False 时仍可能回退到 send_request（确认存在缺陷）
+  - 独立来源 5 个：reader-r0-1, reader-r1-0, reader-r1-2, reader-r2-0, reader-r2-1｜置信度 0.5
+  - 源：`contrib/emscripten/connection.py:113-120`
+  - 依据：当 preload_content=False 时调用 send_streaming_request(request)，若其返回 None（例如流式请求不可用或失败但未抛异常），则 `if self._response is None` 为真，代码会回退调用 send_request(request) 进行完整预加载。这违背了调用方 preload_content=False 的意图（期望流式、不预加载），可能导致大响应被完整缓冲到内存。触发条件：send_streaming_request 返回 None 且调用方请求了非预加载模式。
+- **[logic/medium]** [logic] contrib/emscripten/connection.py:148-150 EmscriptenHTTPConnection.is_connected 始终返回 True，即使连接已关闭（确认存在缺陷）
+  - 独立来源 7 个：reader-r0-1, reader-r1-0, reader-r1-1, reader-r1-2, reader-r2-0, reader-r2-1, reader-r2-5｜置信度 0.5
+  - 源：`contrib/emscripten/connection.py:148-150`
+  - 依据：is_closed 属性返回 self._closed，而 is_connected 无条件返回 True。根据 _base_connection.py 中 BaseHTTPConnection 的文档约定：'If this property is True then both is_connected and has_connected_to_proxy properties must be False.' 即当 is_closed 为 True 时 is_connected 必须为 False。但此处 close() 将 _closed 设为 True 后，is_connected 仍返回 True，违反协议契约。触发条件：调用 close() 后访问 is_connected。上层代码（如 urllib3 的连接池/重试逻辑）可能据此误判连接可用。
+- **[logic/medium]** [logic] contrib/emscripten/connection.py:66-66 EmscriptenHTTPConnection.timeout 将非 float 超时静默置为 0.0（确认存在缺陷）
+  - 独立来源 3 个：reader-r1-2, reader-r2-1, reader-r2-5｜置信度 0.5
+  - 源：`contrib/emscripten/connection.py:66-66`
+  - 依据：`self.timeout = timeout if isinstance(timeout, float) else 0.0`。当调用方传入 int（如 timeout=5）或 _DEFAULT_TIMEOUT（一个特殊 sentinel 对象）时，isinstance(timeout, float) 为 False，timeout 被强制设为 0.0。0.0 在后续 request() 中传给 EmscriptenRequest 表示无超时（`timeout=self.timeout if self.timeout else 0`），导致用户显式设置的整数超时被静默忽略，请求可能无限挂起。触发条件：任何以 int 形式传入 timeout 的调用。
+- **[boundary/medium]** [boundary] contrib/emscripten/fetch.py:545-548 send_jspi_request 中 timeout 为 None 时 _JSPIReadStream 超时逻辑失效（确认存在缺陷）
+  - 独立来源 2 个：reader-r2-0, reader-r2-5｜置信度 0.5
+  - 源：`contrib/emscripten/fetch.py:545-548`
+  - 依据：即使 _run_sync_with_timeout 修复了 None 比较，_JSPIReadStream 的 timeout 参数也会是 None，后续 _get_next_buffer 调用 _run_sync_with_timeout 时同样会触发 None > 0 的 TypeError。触发条件：JSPI 流式读取且 request.timeout 为 None。
+- **[boundary/medium]** [boundary] contrib/emscripten/fetch.py:590-594 _run_sync_with_timeout 中 timeout 为 None 时比较会抛 TypeError（确认存在缺陷）
+  - 独立来源 6 个：reader-r0-5, reader-r1-0, reader-r1-1, reader-r1-2, reader-r2-0, reader-r2-1｜置信度 0.5
+  - 源：`contrib/emscripten/fetch.py:590-594`
+  - 依据：send_jspi_request 传入的 timeout 来自 request.timeout，若其为 None（未设置超时），则 `if timeout > 0` 在 Python 中会抛 TypeError: '>' not supported between instances of 'NoneType' and 'int'。EmscriptenRequest.timeout 可能为 None，导致无超时请求直接崩溃。
+- **[error_handling/medium]** [error_handling] contrib/emscripten/fetch.py:415-421 模块导入时创建 _StreamingFetcher 可能抛异常导致导入失败（确认存在缺陷）
+  - 独立来源 2 个：reader-r2-0, reader-r2-1｜置信度 0.5
+  - 源：`contrib/emscripten/fetch.py:415-421`
+  - 依据：模块级代码在满足条件时直接调用 _StreamingFetcher()，其 __init__ 会读取 worker 文件、创建 Blob/Worker/Promise。若这些操作失败（例如 SharedArrayBuffer 不可用、Worker 创建失败），异常会在 import 时抛出，导致整个模块无法导入，而不是优雅降级到 XHR。触发条件：环境声称支持 Worker/Blob 且 crossOriginIsolated 但实际创建失败。
+- **[logic/medium]** [logic] contrib/emscripten/fetch.py:262-269 _StreamingFetcher.send 中 Atomics.wait 返回值未检查，超时判断依赖缓冲区值（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-0, reader-r1-0, reader-r2-5｜置信度 0.5
+  - 源：`contrib/emscripten/fetch.py:262-269`
+  - 依据：代码忽略 Atomics.wait 的返回值，仅通过 js_int_buffer[0] == ERROR_TIMEOUT 判断超时。若 worker 在超时边界恰好写入 ERROR_TIMEOUT 之外的值，或 wait 因 'not-equal' 立即返回但缓冲区仍为 ERROR_TIMEOUT（例如 worker 尚未写入），会误判为超时。更关键的是：当 timeout 为 None 时 Atomics.wait 会无限等待，若 worker 崩溃则永久挂起。触发条件：worker 异常或超时竞态。
+- **[resource_leak/medium]** [resource_leak] contrib/emscripten/fetch.py:168-176 _ReadStream.readinto 中 Atomics.wait 超时后未清理 worker 状态（确认存在缺陷）
+  - 独立来源 5 个：reader-r0-5, reader-r1-0, reader-r1-2, reader-r2-0, reader-r2-5｜置信度 0.5
+  - 源：`contrib/emscripten/fetch.py:168-176`
+  - 依据：当 Atomics.wait 返回 'timed-out' 时直接 raise _TimeoutError，但没有向 worker 发送 close 消息，也没有将 is_live 置为 False。worker 端仍持有该 connection_id 的流，导致连接/缓冲区泄漏，后续 close() 虽会发送 close 消息但此时已抛出异常，调用方可能不会调用 close。
+- **[resource_leak/medium]** [resource_leak] contrib/emscripten/fetch.py:253-259 _StreamingFetcher.send 中 Atomics.wait 超时后未通知 worker 取消（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-5, reader-r2-1｜置信度 0.5
+  - 源：`contrib/emscripten/fetch.py:253-259`
+  - 依据：send() 在连接阶段超时后抛出 _TimeoutError，但没有向 worker 发送 close 消息，也没有释放 js_shared_buffer。worker 仍会继续执行 fetch 并尝试写入该 buffer，连接 ID 也未被回收，导致 worker 端连接泄漏。
+- **[logic/medium]** [logic] contrib/emscripten/request.py:18-19 emscripten EmscriptenRequest.set_header 使用 capitalize 破坏 header 名（确认存在缺陷）
+  - 独立来源 7 个：reader-r0-0, reader-r0-5, reader-r1-0, reader-r1-1, reader-r1-2, reader-r2-0, reader-r2-1｜置信度 0.5
+  - 源：`contrib/emscripten/request.py:18-19`
+  - 依据：str.capitalize() 会把整个字符串首字母大写并将其余字母小写，例如 'Content-Type'.capitalize() -> 'Content-type'，'X-API-Key'.capitalize() -> 'X-api-key'。这会改变 header 名称的大小写，可能覆盖或产生与预期不一致的 header 键（如与已存在的 'Content-Type' 不匹配，导致重复 header 或查找失败）。应使用 title() 或保留原样。
+- **[logic/medium]** [logic] contrib/emscripten/response.py:155-160 EmscriptenHttpResponseWrapper.read 中 length_remaining 被错误重置为 body 长度（确认存在缺陷）
+  - 独立来源 5 个：reader-r0-0, reader-r0-1, reader-r1-1, reader-r1-2, reader-r2-5｜置信度 0.5
+  - 源：`contrib/emscripten/response.py:155-160`
+  - 依据：当 body 不是 IOBase（即预加载的 bytes）时，每次 read() 都会执行 `self.length_remaining = len(self._response.body)`，但此时 body 已被替换为 BytesIO，len() 对 BytesIO 会抛 TypeError；即便在替换前，若之前已部分读取，length_remaining 会被重置为完整长度而非剩余长度，导致 length_remaining 计算错误。触发条件：对预加载 bytes body 的响应调用 read()。
+- **[resource_leak/medium]** [resource_leak] contrib/emscripten/response.py:210-215 release_conn 未检查连接是否已关闭（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-1, reader-r2-1｜置信度 0.5
+  - 源：`contrib/emscripten/response.py:210-215`
+  - 依据：release_conn() 将连接放回池中，但没有检查连接是否已经关闭。如果连接已被 close() 关闭（例如在 _error_catcher 的 finally 中先关闭了 body 再 release_conn），将已关闭的连接放回池中会导致后续请求使用已关闭的连接。触发条件：异常路径下 _error_catcher 调用 release_conn，而连接可能已被关闭。
+- **[resource_leak/medium]** [resource_leak] contrib/emscripten/response.py:258-268 _error_catcher 中 clean_exit 为 True 但 body 未关闭时不释放连接（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-1, reader-r1-1, reader-r2-1｜置信度 0.5
+  - 源：`contrib/emscripten/response.py:258-268`
+  - 依据：当正常退出（clean_exit=True）但 body 尚未关闭时，不调用 release_conn()，连接保留在 self._connection 中。若调用方未显式调用 close() 或 release_conn()，连接会泄漏。触发条件：读取部分内容后正常退出 _error_catcher，且未读取到流末尾。
+- **[logic/medium]** [logic] contrib/pyopenssl.py:155-165 inject_into_urllib3 重复调用会覆盖 orig_util_SSLContext（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r2-1｜置信度 0.5
+  - 源：`contrib/pyopenssl.py:155-165`
+  - 依据：inject_into_urllib3 将 util.SSLContext 设置为 PyOpenSSLContext，但 orig_util_SSLContext 是在模块加载时保存的。若 inject_into_urllib3 被调用两次，第二次调用时 util.SSLContext 已经是 PyOpenSSLContext，但 orig_util_SSLContext 仍保存原始值，所以 extract_from_urllib3 仍能正确恢复。然而，若在 inject 之后又调用了其他修改 util.SSLContext 的代码，再调用 inject，orig_util_SSLContext 不会更新，导致 extract 恢复到错误的上下文。触发条件：多次 inject 或与其他 monkey-patch 交互。
+- **[api_misuse/medium]** [api_misuse] exceptions.py:253-257 IncompleteRead.__init__ 未调用父类构造，导致 args 为空且 httplib_IncompleteRead 属性未初始化（确认存在缺陷）
+  - 独立来源 2 个：reader-r1-2, reader-r2-3｜置信度 0.5
+  - 源：`exceptions.py:253-257`
+  - 依据：IncompleteRead 继承自 HTTPError 和 http.client.IncompleteRead。其 __init__ 只设置 self.partial 和 self.expected，没有调用 super().__init__()。http.client.IncompleteRead.__init__ 会设置 self.partial 和 self.expected 并调用 Exception.__init__(self, partial, expected)，从而填充 self.args。这里跳过父类构造后，self.args 为空元组。任何依赖 e.args 的代码（例如日志格式化、pickle 默认协议、或捕获后 str(e) 的通用处理）会得到空信息；同时 http.client.IncompleteRead 的其它初始化逻辑被绕过。触发条件：任何抛出 IncompleteRead 的读取路径。
+- **[api_misuse/low]** [api_misuse] exceptions.py:263-268 InvalidChunkLength.__init__ 未调用父类 __init__，Exception.args 为空（确认存在缺陷）
+  - 独立来源 2 个：reader-r1-2, reader-r2-3｜置信度 0.5
+  - 源：`exceptions.py:263-268`
+  - 依据：InvalidChunkLength 同样继承 httplib_IncompleteRead，但 __init__ 未调用 super().__init__()，因此 Exception.args 为空，str(e) 返回空字符串。虽然定义了 __repr__，但 str() 与日志输出会丢失信息。触发条件：捕获该异常并调用 str() 或记录日志。
+- **[logic/medium]** [logic] exceptions.py:253-258 IncompleteRead.__init__ 未调用父类构造函数，导致 args 为空且 httplib_IncompleteRead 内部状态未初始化（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r2-2｜置信度 0.5
+  - 源：`exceptions.py:253-258`
+  - 依据：IncompleteRead 继承自 HTTPError 和 http.client.IncompleteRead。其 __init__ 只设置 self.partial 和 self.expected，没有调用 super().__init__()。http.client.IncompleteRead.__init__ 会设置 self.partial 和 self.expected 并调用 Exception.__init__(self, partial, expected)，从而填充 self.args。这里跳过父类初始化后，self.args 为空元组。任何依赖 args 的代码（如日志格式化、pickle 默认行为、str(e)）都会得到空字符串而非有意义的信息。触发条件：任何抛出 IncompleteRead 的读取路径。
+- **[logic/medium]** [logic] exceptions.py:266-271 InvalidChunkLength.__init__ 未调用父类构造函数，args 为空（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-2, reader-r2-2｜置信度 0.5
+  - 源：`exceptions.py:266-271`
+  - 依据：与 IncompleteRead 相同：InvalidChunkLength 继承 httplib_IncompleteRead，但 __init__ 只赋值属性，未调用 super().__init__()。因此 self.args 为空，str(异常) 返回空字符串，且 http.client.IncompleteRead 的初始化逻辑（设置 partial/expected 并调用 Exception.__init__）被绕过。触发条件：解析到非法 chunk 长度时抛出该异常。
+- **[logic/medium]** [logic] exceptions.py:281-286 InvalidChunkLength.__init__ 未调用父类构造，args 为空（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-2, reader-r0-3, reader-r1-1, reader-r2-1｜置信度 0.5
+  - 源：`exceptions.py:281-286`
+  - 依据：InvalidChunkLength 同样继承 httplib_IncompleteRead，但 __init__ 只赋值实例属性，未调用 super().__init__()。因此 self.args 为空，str(异常) 返回空字符串，且 http.client.IncompleteRead 的初始化逻辑（设置 partial/expected 并调用 Exception.__init__）被绕过。触发条件：分块响应中出现非法 chunk length 时抛出该异常。
+- **[logic/medium]** [logic] exceptions.py:308-313 InvalidChunkLength.__init__ 未调用父类构造，args 为空（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-3, reader-r1-1, reader-r2-1｜置信度 0.5
+  - 源：`exceptions.py:308-313`
+  - 依据：InvalidChunkLength 同样继承 httplib_IncompleteRead，但 __init__ 只赋值属性而未调用 super().__init__()。因此 Exception.args 为空，str(e) 为空字符串，异常消息丢失。触发条件：分块传输中解析到非法 chunk 长度时抛出该异常。
+- **[boundary/low]** [boundary] http2/__init__.py:17-23 http2 版本检查使用 startswith('4.') 会误判 40.x 等版本（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-3, reader-r2-0, reader-r2-1｜置信度 0.5
+  - 源：`http2/__init__.py:17-23`
+  - 依据：h2_version.startswith("4.") 对 '4.0.0' 正确，但对 '40.0.0' 或 '4' 这类版本字符串判断不严谨：'40.0.0' 会通过检查但主版本并非 4。虽然实际 h2 版本号不太可能出现 40.x，但这是基于字符串前缀而非解析主版本的边界判断缺陷。
+- **[error_handling/medium]** [error_handling] http2/__init__.py:47-57 extract_from_urllib3 在 inject 未调用时用 None 覆盖 HTTPSConnection（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r0-4｜置信度 0.5
+  - 源：`http2/__init__.py:47-57`
+  - 依据：orig_HTTPSConnection 初始为 None。如果 extract_from_urllib3() 在 inject_into_urllib3() 之前被调用（或 inject 失败后），`HTTPSConnectionPool.ConnectionCls = orig_HTTPSConnection` 和 `urllib3_connection.HTTPSConnection = orig_HTTPSConnection` 会把连接类设为 None，导致后续所有 HTTPS 连接创建失败（TypeError: 'NoneType' object is not callable）。触发条件：用户先调用 extract_from_urllib3() 而未先调用 inject_into_urllib3()，或 inject 过程中抛异常后调用 extract。
+- **[logic/medium]** [logic] http2/__init__.py:36-37 http2 inject 重复调用会覆盖 orig_HTTPSConnection 为 HTTP2Connection（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-3, reader-r1-1, reader-r1-3, reader-r2-1｜置信度 0.5
+  - 源：`http2/__init__.py:36-37`
+  - 依据：inject_into_urllib3() 每次调用都会把当前 urllib3_connection.HTTPSConnection 保存到 orig_HTTPSConnection。若 inject 被调用两次（例如用户代码与 urllib3 自动注入同时触发），第二次保存的是 HTTP2Connection 而非原始 HTTPSConnection，之后 extract_from_urllib3() 无法恢复原始类，HTTPS 连接将永久使用 HTTP2Connection。触发条件：inject_into_urllib3() 被调用两次。
+- **[logic/low]** [logic] http2/__init__.py:40-56 http2 注入后未恢复 ALPN_PROTOCOLS 的原始值（确认存在缺陷）
+  - 独立来源 7 个：reader-r0-5, reader-r1-1, reader-r1-2, reader-r1-3, reader-r2-0, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`http2/__init__.py:40-56`
+  - 依据：inject_into_urllib3 把 urllib3_util.ALPN_PROTOCOLS 与 urllib3_util_ssl.ALPN_PROTOCOLS 硬编码为 ['h2']，extract_from_urllib3 又硬编码回 ['http/1.1']，而不是保存并恢复注入前的原值。若用户在注入前自定义过 ALPN_PROTOCOLS，extract 会静默丢弃其配置，造成行为不一致。
+- **[boundary/medium]** [boundary] http2/connection.py:130-145 HTTP2Connection.putrequest 中 :path 使用原始 url 而非 self._request_url（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-5, reader-r2-0｜置信度 0.5
+  - 源：`http2/connection.py:130-145`
+  - 依据：self._request_url = url or "/" 将空 url 转为 "/"，但 :path 头使用 url.encode()。当 url 为空字符串时，:path 为空字符串，违反 HTTP/2 规范（:path 不能为空）。触发条件：调用 putrequest 时 url 为空字符串。
+- **[boundary/high]** [boundary] http2/connection.py:258-285 getresponse 中 recv 返回空字节时无限循环（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-4, reader-r1-3｜置信度 0.5
+  - 源：`http2/connection.py:258-285`
+  - 依据：当对端关闭连接时，self.sock.recv(65535) 返回 b''（falsy），if 分支被跳过，end_stream 保持 False，while 循环永不退出，导致 CPU 空转死循环。触发条件：服务器在发送 StreamEnded 之前关闭 TCP 连接。
+- **[boundary/medium]** [boundary] http2/connection.py:340-344 request 中 body 为空 bytes 时未发送 end_stream（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-5, reader-r1-1, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`http2/connection.py:340-344`
+  - 依据：当 body 为 b'' 或空字符串时，if body 为假，走 else 分支调用 endheaders()，endheaders 中 end_stream=(message_body is None) 为 True，因此空 body 会被当作无 body 处理。对于需要显式发送空 body 的请求（如 POST 带 Content-Length: 0），语义上仍可接受，但若调用者期望发送空数据帧则行为不一致。
+- **[error_handling/low]** [error_handling] http2/connection.py:232-243 send 中 TypeError 捕获范围过宽掩盖真实错误（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-5, reader-r2-1｜置信度 0.5
+  - 源：`http2/connection.py:232-243`
+  - 依据：try 块中调用 conn.send_data 和 self.sock.sendall，若这些调用内部因其他原因抛出 TypeError（例如 h2 库内部类型错误或 socket 错误），会被 except TypeError 捕获并重新抛出误导性的 'data should be str, bytes, iterable, or file' 消息，掩盖真实错误原因。触发条件：conn.send_data 或 sock.sendall 内部抛出 TypeError。
+- **[error_handling/medium]** [error_handling] http2/connection.py:253-285 getresponse 中 headers 变量在 ResponseReceived 事件缺失时未定义（确认存在缺陷）
+  - 独立来源 7 个：reader-r0-3, reader-r0-4, reader-r0-5, reader-r1-1, reader-r2-0, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`http2/connection.py:253-285`
+  - 依据：headers 仅在 ResponseReceived 事件分支内被赋值。若服务器在未发送响应头的情况下结束流（例如 StreamReset 或直接 StreamEnded），循环退出后 headers 未绑定，构造 HTTP2Response 时抛 UnboundLocalError。
+- **[logic/high]** [logic] http2/connection.py:258-285 getresponse 中 recv 返回空字节时无限循环（确认存在缺陷）
+  - 独立来源 7 个：reader-r0-3, reader-r1-1, reader-r1-2, reader-r1-3, reader-r2-0, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`http2/connection.py:258-285`
+  - 依据：当对端关闭连接时，self.sock.recv(65535) 返回 b''（空字节）。if received_data 为假，跳过事件处理，end_stream 保持 False，while not end_stream 循环永不退出，导致 CPU 100% 忙等死循环。应检测空 recv 并抛出 ConnectionError。
+- …另有 12 条未列出
+
+## 待验证（孤证）
+
+- **[api_misuse/low]** [api_misuse] __init__.py:100-104 disable_warnings 使用 simplefilter 会覆盖用户已有过滤器（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`__init__.py:100-104`
+  - 依据：warnings.simplefilter('ignore', category) 会重置过滤器列表，但这是该 API 的既定语义（禁用该类警告），且与 urllib3 历史行为一致。不构成缺陷。
+- **[api_misuse/low]** [api_misuse] __init__.py:137-137 __init__.py 顶层 request 的 timeout 默认值 3 与文档/其他 API 不一致（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`__init__.py:137-137`
+  - 依据：顶层 request() 的 timeout 默认值为 3 秒，这是该便捷函数有意的设计（与 PoolManager 默认不同），文档中也未承诺与 urlopen 一致。属于设计选择而非缺陷。
+- **[api_misuse/low]** [api_misuse] __init__.py:196-199 __init__.py 在 emscripten 平台导入时执行注入副作用（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`__init__.py:196-199`
+  - 依据：在 sys.platform == 'emscripten' 时自动调用 inject_into_urllib3() 是 urllib3 的既定行为，用于在 Pyodide 等环境下启用 fetch 后端。这是有意的平台适配，不是缺陷。
+- **[api_misuse/low]** [api_misuse] __init__.py:52-53 __init__.py 中 __version__ 被 _version 导入覆盖后又重新赋值，但 __all__ 未包含 __version__（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`__init__.py:52-53`
+  - 依据：__version__ 通过 from ._version import __version__ 导入并再次赋值给模块级 __version__，这是常见做法。__all__ 不包含 __version__ 不影响 from urllib3 import __version__ 或 urllib3.__version__ 的访问，只是影响 from urllib3 import *。不构成缺陷。
+- **[error_handling/low]** [error_handling] __init__.py:199-202 __init__.py 在 emscripten 平台导入时调用 inject_into_urllib3 可能抛异常（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`__init__.py:199-202`
+  - 依据：在 sys.platform == 'emscripten' 时导入 contrib.emscripten 并注入。若注入失败会抛异常导致导入失败，但这是平台特定的预期行为（emscripten 环境需要该注入），且注入函数本身设计为在环境不满足时明确报错。不构成缺陷。
+- **[error_handling/low]** [error_handling] __init__.py:36-45 OpenSSL 版本检查在 OPENSSL_VERSION_INFO 缺失时抛 AttributeError（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`__init__.py:36-45`
+  - 依据：ssl.OPENSSL_VERSION_INFO 自 Python 2.7/3.2 起即存在，且代码已先检查 OPENSSL_VERSION.startswith('OpenSSL ')，非 OpenSSL 实现（如 LibreSSL）会走 warn 分支而非 elif。实际不会触发 AttributeError。
+- **[error_handling/medium]** [error_handling] __init__.py:213-216 __init__.py 在 emscripten 平台导入时调用 inject_into_urllib3 可能抛异常（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-1｜置信度 0.5
+  - 源：`__init__.py:213-216`
+  - 依据：在 sys.platform == 'emscripten' 时，模块导入末尾直接调用 inject_into_urllib3()。若 contrib.emscripten 的注入过程抛异常（例如依赖缺失或初始化失败），整个 urllib3 包导入失败，用户无法使用任何功能。触发条件：emscripten 环境下注入失败。
+- **[logic/low]** [logic] __init__.py:14-14 __init__.py 中 __version__ 被重复赋值，遮蔽导入的版本（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`__init__.py:14-14`
+  - 依据：第 14 行 from ._version import __version__ 导入版本，第 55 行 __version__ = __version__ 是自赋值，保持原值不变，属于冗余但无错误行为。
+- **[logic/low]** [logic] __init__.py:100-104 disable_warnings 使用 simplefilter 而非 filterwarnings，会清除已有过滤器（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`__init__.py:100-104`
+  - 依据：warnings.simplefilter 会重置过滤器列表，但这是 urllib3 长期以来的既定行为，且 disable_warnings 的语义就是全局忽略该类警告。文档和测试均依赖此行为。不构成缺陷。
+- **[logic/low]** [logic] __init__.py:128-128 request() 的 timeout 默认值为 3 秒，与文档描述不一致（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`__init__.py:128-128`
+  - 依据：顶层 request() 的 timeout 默认值确实为 3，这是该便捷函数的既定默认值（与 PoolManager.request 的默认不同）。文档字符串未声称默认值，因此不构成行为与文档不符的缺陷。
+- **[logic/low]** [logic] __init__.py:55-55 __init__.py 中 __version__ 自引用赋值（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`__init__.py:55-55`
+  - 依据：__version__ 先从 ._version 导入，随后 `__version__ = __version__` 是自赋值，值不变，不会报错。虽然冗余但无功能缺陷。
+- **[resource_leak/low]** [resource_leak] __init__.py:115-115 模块级 _DEFAULT_POOL 在导入时创建，可能造成资源与副作用共享（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`__init__.py:115-115`
+  - 依据：模块级 PoolManager 是 urllib3 顶层 request() 的既定设计，文档字符串已明确说明其副作用会被共享，并建议需要隔离时自行创建 PoolManager。连接池在进程生命周期内保持是预期行为，不构成资源泄漏缺陷。
+- **[resource_leak/low]** [resource_leak] __init__.py:125-125 模块级 _DEFAULT_POOL 在导入时创建，可能产生副作用（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`__init__.py:125-125`
+  - 依据：PoolManager 在导入时创建是 urllib3 的既定设计，文档字符串也明确说明 request() 使用模块级 PoolManager 且副作用可能被共享。连接池按需创建连接，导入本身不打开 socket，因此不构成资源泄漏。
+- **[logic/medium]** [logic] _base_connection.py:13-17 ProxyConfig 引用 ssl.SSLContext 但 ssl 仅在 TYPE_CHECKING 下导入（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-2｜置信度 0.5
+  - 源：`_base_connection.py:13-17`
+  - 依据：ProxyConfig 是一个 typing.NamedTuple，其字段注解 ssl_context: ssl.SSLContext | None 在类定义时会被求值（NamedTuple 会调用 typing 处理注解）。但 ssl 模块只在文件后面的 `if typing.TYPE_CHECKING:` 块中导入（第 33 行），运行时并不存在。由于文件顶部有 `from __future__ import annotations`，普通函数/类的注解会被字符串化而延迟求值，但 NamedTuple 的字段注解会被 typing.NamedTuple 元类实际求值以构建 __annotations__，因此运行时会抛出 NameError: name 'ssl' is not defined。触发条件：任何在运行时导入 _base_connection 模块（例如 import urllib3._base_connection）都会失败。
+- **[api_misuse/low]** [api_misuse] _collections.py:144-146 RecentlyUsedContainer.keys 返回 set，但 MutableMapping.keys 期望 KeysView（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:144-146`
+  - 依据：keys 返回 set 以提供线程安全的快照，类型标注用 type: ignore 覆盖。这是有意的设计选择。非缺陷。
+- **[api_misuse/low]** [api_misuse] _collections.py:271-281 HTTPHeaderDict.__eq__ 对不可构造对象返回 False 而非 NotImplemented（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:271-281`
+  - 依据：返回 False 对于 __eq__ 是合法且常见的做法（表示不相等），不会导致错误行为。虽然返回 NotImplemented 可让 Python 尝试反向比较，但此处语义上确实不相等，返回 False 可接受。
+- **[api_misuse/low]** [api_misuse] _collections.py:283-292 HTTPHeaderDict.__eq__ 对不可构造对象返回 False 而非 NotImplemented（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:283-292`
+  - 依据：__eq__ 在 other 无法构造为 HTTPHeaderDict 时返回 False，这是合理的相等语义（不同类型不相等），并非必须返回 NotImplemented。Python 数据模型允许返回 False。不视为缺陷。
+- **[api_misuse/low]** [api_misuse] _collections.py:373-390 HTTPHeaderDict.getlist 的 overload 签名与实现一致（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:373-390`
+  - 依据：overload 声明与实现签名匹配，运行时行为正确。
+- **[api_misuse/low]** [api_misuse] _collections.py:395-400 HTTPHeaderDict 的 getheaders/getallmatchingheaders/iget/get_all 别名指向 getlist，逻辑正确（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:395-400`
+  - 依据：这些别名用于向后兼容 httplib 和 http.cookiejar，指向 getlist 行为一致。
+- **[api_misuse/low]** [api_misuse] _collections.py:437-445 HTTPHeaderDict.__ior__/__or__/__ror__ 返回 NotImplemented 但类型标注为 HTTPHeaderDict/Self（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:437-445`
+  - 依据：返回 NotImplemented 是二元运算符协议的正确做法，Python 会回退到另一操作数或抛出 TypeError。类型标注不精确属于静态类型问题，不影响运行时行为。不视为缺陷。
+- **[api_misuse/low]** [api_misuse] _collections.py:495-520 HTTPHeaderDict.__ior__/__or__/__ror__ 返回 NotImplemented 时类型标注为 HTTPHeaderDict/Self（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:495-520`
+  - 依据：返回 NotImplemented 是 Python 运算符协议的正确做法，解释器会据此回退到反射方法或抛 TypeError。类型标注不精确属于静态类型问题，不影响运行时行为。不认定为缺陷。
+- **[api_misuse/low]** [api_misuse] _collections.py:500-530 HTTPHeaderDict.__ior__/__or__/__ror__ 返回 NotImplemented 违反类型标注但运行时由 Python 处理（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:500-530`
+  - 依据：返回 NotImplemented 是 Python 数据模型规定的协议，解释器会据此回退到另一操作数或抛 TypeError。类型标注为 HTTPHeaderDict/Self 不精确，但运行时行为正确，不构成缺陷。
+- **[api_misuse/low]** [api_misuse] _collections.py:88-92 RecentlyUsedContainer.__getitem__ 在 key 不存在时抛 KeyError 而非返回默认值（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:88-92`
+  - 依据：MutableMapping 的 __getitem__ 约定在 key 不存在时抛 KeyError，这是正确行为。
+- **[boundary/low]** [boundary] _collections.py:100-120 RecentlyUsedContainer.__setitem__ 在 maxsize 为负数时每次插入都驱逐（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:100-120`
+  - 依据：maxsize 为负数时 len(self._container) > self._maxsize 恒为真，每次插入都会 popitem(last=False) 驱逐刚插入的项（因为 OrderedDict 只有一个元素）。这会导致容器始终为空，但不会崩溃。maxsize 为负数属于调用方传入非法参数，行为虽不理想但可预测。
+- **[boundary/low]** [boundary] _collections.py:178-184 HTTPHeaderDictItemView.__contains__ 对非二元组返回 False，逻辑正确（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:178-184`
+  - 依据：检查 item 是长度为 2 的元组且元素均为 str，否则返回 False。逻辑正确。
+- **[boundary/low]** [boundary] _collections.py:184-190 HTTPHeaderDictItemView.__contains__ 对非 tuple 或长度不为 2 的 item 返回 False，行为正确（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:184-190`
+  - 依据：对非 tuple、长度不为 2、或元素非 str 的情况返回 False，符合 set 的 __contains__ 语义。非缺陷。
+- **[boundary/medium]** [boundary] _collections.py:232-240 HTTPHeaderDict.__init__ 对 headers 为 str 时走 extend 导致按字符解包（确认存在缺陷）
+  - 独立来源 1 个：reader-r1-2｜置信度 0.5
+  - 源：`_collections.py:232-240`
+  - 依据：构造函数接受 ValidHTTPHeaderSource，其中包含 Iterable[tuple[str,str]]。由于 str 是 Iterable，HTTPHeaderDict('ab') 会进入 extend 的 Iterable 分支，把 'a'、'b' 当作 (key, value) 解包，抛出 ValueError（not enough values to unpack）或对偶数长度字符串静默插入错误数据。这是边界输入未校验导致的真实缺陷。
+- **[boundary/low]** [boundary] _collections.py:258-261 HTTPHeaderDict.__delitem__ 对 bytes 键解码后删除，逻辑正确（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:258-261`
+  - 依据：bytes 键解码后 lower() 删除，与 __setitem__ 一致。
+- **[boundary/low]** [boundary] _collections.py:274-277 HTTPHeaderDict.__delitem__ 对 bytes key 解码后删除，行为正确（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:274-277`
+  - 依据：对 bytes 解码后 lower 删除，与存储方式一致。非缺陷。
+- **[boundary/low]** [boundary] _collections.py:283-288 HTTPHeaderDict.__contains__ 对 bytes key 解码后判断，但非 str 非 bytes 返回 False，行为正确（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:283-288`
+  - 依据：对 bytes 解码，对 str 做 lower 查询，其他类型返回 False，符合 Mapping 语义。非缺陷。
+- **[boundary/medium]** [boundary] _collections.py:322-326 HTTPHeaderDict.extend 对 Iterable 分支未排除 str/bytes，可能把字符串按字符解包（确认存在缺陷）
+  - 独立来源 1 个：reader-r1-3｜置信度 0.5
+  - 源：`_collections.py:322-326`
+  - 依据：extend 接受 ValidHTTPHeaderSource，其中 Iterable[tuple[str,str]] 分支用 `for key, value in other` 解包。若传入字符串（str 也是 Iterable），会尝试把每个字符解包为 (key, value)，对长度不为 2 的字符抛 ValueError，对长度为 2 的字符则错误地添加头部。虽然类型签名不鼓励传 str，但运行时无防护。触发条件：HTTPHeaderDict('ab') 或 extend('ab')。
+- **[boundary/low]** [boundary] _collections.py:355-372 HTTPHeaderDict.getlist 对 bytes key 解码后 default 判断使用 _Sentinel.not_passed，但 default 为 _Sentinel 实例时无法区分（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:355-372`
+  - 依据：使用 Enum 单例作为哨兵是标准做法，调用方无法传入 _Sentinel.not_passed 作为有意义的 default，因为该类型是私有的。逻辑正确。
+- **[boundary/low]** [boundary] _collections.py:375-377 HTTPHeaderDict.extend 对非 Mapping 的 Iterable 直接解包，元素长度非 2 时抛 ValueError（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:375-377`
+  - 依据：extend 的签名声明 other 为 ValidHTTPHeaderSource，其中 Iterable 分支期望 tuple[str, str]。若传入元素长度非 2 的可迭代对象，解包会抛 ValueError，这是调用方违反类型约定的结果，属于合理的错误传播。
+- **[boundary/low]** [boundary] _collections.py:397-425 HTTPHeaderDict.extend 对非 Mapping 的 Iterable 直接解包，字符串会被逐字符解包（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:397-425`
+  - 依据：若传入字符串，isinstance(other, typing.Iterable) 为 True，for key, value in other 会尝试把每个字符解包为二元组，抛 ValueError。但类型签名 ValidHTTPHeaderSource 已限定为 Mapping/Iterable[tuple[str,str]]/HasGettableStringKeys，传入字符串属于调用方违反契约。不认定为缺陷。
+- **[boundary/low]** [boundary] _collections.py:400-415 HTTPHeaderDict.getlist 对 bytes key 解码后未处理非 str 类型（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:400-415`
+  - 依据：getlist 签名声明 key: str，bytes 分支是兼容处理。非 str/bytes 类型会抛 AttributeError，属于调用方违反类型约定。
+- **[boundary/low]** [boundary] _collections.py:420-440 HTTPHeaderDict.getlist 对 bytes key 解码后查询，但 _container 键为 lower 字符串，行为正确（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:420-440`
+  - 依据：getlist 先将 bytes 解码为 latin-1 字符串再 lower 查询，与 __setitem__/add 的存储方式一致，无缺陷。
+- **[boundary/low]** [boundary] _collections.py:96-101 RecentlyUsedContainer.__getitem__ 在 key 不存在时抛 KeyError，符合 Mapping 语义（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:96-101`
+  - 依据：pop(key) 在 key 不存在时抛 KeyError，符合 MutableMapping 契约。非缺陷。
+- **[concurrency/low]** [concurrency] _collections.py:108-130 RecentlyUsedContainer.__setitem__ 在 maxsize 为 0 时仍会插入并立即驱逐，但 dispose 在锁外调用，存在竞态（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:108-130`
+  - 依据：dispose_func 在释放锁后调用是刻意设计（注释明确说明），避免在持锁时执行用户回调造成死锁。虽然理论上同一 value 可能被并发 dispose，但容器本身保证每个 value 只被驱逐一次，回调的并发安全由调用方负责。不认定为缺陷。
+- **[concurrency/low]** [concurrency] _collections.py:133-142 RecentlyUsedContainer.clear 在锁外调用 dispose_func，行为正确（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:133-142`
+  - 依据：先复制值列表并清空容器，再在锁外调用 dispose_func，避免死锁。非缺陷。
+- **[concurrency/low]** [concurrency] _collections.py:439-444 HTTPHeaderDict.iteritems 对每个 key 重新查询 _container，若迭代中修改会出错但属调用方责任（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`_collections.py:439-444`
+  - 依据：iteritems 在迭代 self（即 _container.values()）的同时查询 _container，若迭代过程中修改容器会抛 RuntimeError，但这是 Python 迭代器的通用约束，非本模块缺陷。
+- …另有 606 条未列出
+
+## 争议（需裁决）
+
+- **[logic/low]** [logic] __init__.py:33-41 OpenSSL 版本检查在非 OpenSSL 实现（如 LibreSSL/BoringSSL）下会误报警告（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-3, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`__init__.py:33-41`
+  - 依据：当 ssl 模块由 LibreSSL 或 BoringSSL 编译时，ssl.OPENSSL_VERSION 不以 'OpenSSL ' 开头（例如 'LibreSSL 3.5.0'），代码会进入第一个分支发出 NotOpenSSLWarning，而不是走 elif 分支进行版本比较。这会导致在功能完全可用的 LibreSSL 上产生误导性警告。触发条件：Python 链接到 LibreSSL/BoringSSL 时导入 urllib3。
+  - 争议对手：080b3dbea175, 9bc50dc8259b, ca90d0e880b9
+- **[api_misuse/medium]** [api_misuse] _base_connection.py:14-18 ProxyConfig 使用 ssl.SSLContext 但 ssl 仅在 TYPE_CHECKING 下导入（确认存在缺陷）
+  - 独立来源 1 个：reader-r1-2｜置信度 0.5
+  - 源：`_base_connection.py:14-18`
+  - 依据：ProxyConfig 是一个 NamedTuple，其字段注解在类定义时会被求值（NamedTuple 会调用 typing.get_type_hints 或类似机制解析注解）。文件顶部没有 `import ssl`，ssl 只在 `if typing.TYPE_CHECKING:` 块内导入。由于文件启用了 `from __future__ import annotations`，注解本身是字符串，但 NamedTuple 在运行时需要解析这些注解来构建 __annotations__，此时 `ssl` 名称在模块全局命名空间中不存在，会抛出 NameError。触发条件：任何在运行时实例化 ProxyConfig 或访问其注解的代码路径。
+  - 争议对手：f4208a8a46c8
+- **[error_handling/high]** [error_handling] _base_connection.py:14-18 ProxyConfig 使用 ssl.SSLContext 但 ssl 仅在 TYPE_CHECKING 下导入，运行时求值会 NameError（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-2, reader-r0-3, reader-r2-0, reader-r2-1｜置信度 0.5
+  - 源：`_base_connection.py:14-18`
+  - 依据：ProxyConfig 是一个 typing.NamedTuple，其字段注解在类创建时会被求值（NamedTuple 会调用 typing 的元类处理注解）。文件顶部没有在运行时导入 ssl，ssl 只在 `if typing.TYPE_CHECKING:` 块内导入（第 31 行）。虽然文件有 `from __future__ import annotations`，但 NamedTuple 的字段注解会被 typing.NamedTupleMeta 通过 `_type_check` 处理，实际上在 Python 3.10+ 中 NamedTuple 会尝试解析字符串注解（通过 get_type_hints 风格的求值），当 ssl 不在模块命名空间中时会抛出 NameError。触发条件：任何 `import urllib3._base_connection` 或使用 ProxyConfig 的场景。
+  - 争议对手：32724a943484, 3e90eac8c7ba
+- **[api_misuse/medium]** [api_misuse] _collections.py:122-125 RecentlyUsedContainer.__iter__ 抛 NotImplementedError 但继承 MutableMapping 的 keys/values/items 会调用它（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-1｜置信度 0.5
+  - 源：`_collections.py:122-125`
+  - 依据：RecentlyUsedContainer 继承 MutableMapping，但 __iter__ 抛 NotImplementedError。MutableMapping 的 values()、items()、__eq__、__contains__ 等默认实现都依赖 __iter__。虽然类重写了 keys()，但 values()、items()、get()、pop()、update() 等继承方法在调用时会触发 NotImplementedError。触发条件：调用 container.values() 或 container.items()。
+  - 争议对手：0c91b18e9b02, 64154f0570da, 6c5f1eeab353
+- **[api_misuse/medium]** [api_misuse] _collections.py:452-458 HTTPHeaderDict.__ior__ 返回 NotImplemented 导致 |= 表达式结果为 NotImplemented（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-1｜置信度 0.5
+  - 源：`_collections.py:452-458`
+  - 依据：原地运算符 __ior__ 返回 NotImplemented 时，Python 不会回退到 __or__，而是将 NotImplemented 作为表达式结果赋给左操作数。触发条件：`d |= 123` 后 d 变为 NotImplemented，后续对 d 的操作会失败。
+  - 争议对手：4570442d0d40, 80698b91dbf0
+- **[api_misuse/medium]** [api_misuse] _collections.py:470-476 HTTPHeaderDict.__ior__ 返回 NotImplemented 违反 __ior__ 应返回 self 的约定（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-3｜置信度 0.5
+  - 源：`_collections.py:470-476`
+  - 依据：__ior__ 在 maybe_constructable 为 None 时返回 NotImplemented。对于原地运算符 __ior__，Python 数据模型要求返回 self（或引发异常），返回 NotImplemented 会导致 a |= b 的结果变成 NotImplemented 对象而非抛出 TypeError，从而静默产生错误结果。触发条件：d |= 不可构造对象（如整数 42），d 会被赋值为 NotImplemented。
+  - 争议对手：095e84743907, 095e84743907, 095e84743907, 6a1eab6f896d, c10ca0ee0bf3
+- **[error_handling/medium]** [error_handling] _collections.py:288-296 HTTPHeaderDict.__eq__ 对非 Mapping 的 Iterable 构造时可能抛异常而非返回 False（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-1｜置信度 0.5
+  - 源：`_collections.py:288-296`
+  - 依据：__eq__ 调用 ensure_can_construct_http_header_dict(other)，该函数对任何 Iterable 都返回 cast 后的对象（不验证元素形状）。随后 type(self)(maybe_constructable) 会调用 extend，若 other 是元素长度非 2 的 Iterable（如字符串、整数列表），extend 中 `for key, value in other` 会抛 ValueError/TypeError，导致 __eq__ 抛出异常而非返回 False。触发条件：`HTTPHeaderDict() == "abc"` 或 `HTTPHeaderDict() == [1, 2, 3]`。
+  - 争议对手：081846597970, 3f77de5b2cd5, 60de3d2cb29b, 6e70ebcea6b3, 90a4aef160a2
+- **[logic/medium]** [logic] _collections.py:100-120 RecentlyUsedContainer.__setitem__ 中 evicted_item 在覆盖已有 key 时也会触发 dispose_func（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-1｜置信度 0.5
+  - 源：`_collections.py:100-120`
+  - 依据：当 key 已存在时，evicted_item = key, self._container.pop(key) 会取出旧值，随后在锁外调用 dispose_func(evicted_value)。这意味着用 __setitem__ 覆盖已有 key 时，旧值会被 dispose_func 处理。对于连接池等场景，覆盖操作可能意外关闭仍被引用的旧资源。触发条件：对已存在的 key 调用 container[key] = new_value。
+  - 争议对手：5237c6a6a70a, db973f27c15b
+- **[logic/medium]** [logic] _collections.py:165-169 HTTPHeaderDictItemView 继承 set 但未调用 super().__init__ 导致 set 方法不可用（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-3, reader-r1-1, reader-r2-2｜置信度 0.5
+  - 源：`_collections.py:165-169`
+  - 依据：与第一条 finding 同源，但此处强调继承 set 却未初始化内部集合，导致 set 的 __eq__、__le__、__and__、__or__、__sub__、add、discard、pop、clear 等方法在访问未初始化的内部哈希表时可能抛 SystemError 或返回错误结果。触发条件：对 items() 视图调用任何未重写的 set 方法。
+  - 争议对手：0e5f06ce93b2, 0e5f06ce93b2, 5cb2d3134cc3, 937b5dc79caa
+- **[logic/medium]** [logic] _collections.py:246-253 HTTPHeaderDict.__init__ 对 HTTPHeaderDict 参数走 _copy_from，同样丢失首值（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-2｜置信度 0.5
+  - 源：`_collections.py:246-253`
+  - 依据：构造函数在 headers 为 HTTPHeaderDict 时调用 _copy_from，而 _copy_from 使用 getlist（返回 vals[1:]）导致首值丢失（见上一条）。因此 HTTPHeaderDict(HTTPHeaderDict({'A':'1'})) 会得到空值。触发条件：用另一个 HTTPHeaderDict 构造新实例。
+  - 争议对手：2a2ddcac28de, 4b6d02760f29, 4b6d02760f29, 5df7e3a9952a, 69f13e2df61d, 69f13e2df61d, 91fede97db1a, c7be60af68a6, e45c9baa0b7e
+- **[logic/medium]** [logic] _collections.py:296-306 HTTPHeaderDict.__eq__ 对 HTTPHeaderDict 参数走 ensure_can_construct 返回自身，再构造时经 _copy_from 丢值（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-2, reader-r1-3｜置信度 0.5
+  - 源：`_collections.py:296-306`
+  - 依据：ensure_can_construct_http_header_dict 对 HTTPHeaderDict 返回原对象，随后 type(self)(maybe_constructable) 会走 _copy_from 分支，因 getlist 返回 vals[1:] 而丢失每个 header 的首值。结果 other_as_http_header_dict.itermerged() 产出空字符串值，导致两个内容相同的 HTTPHeaderDict 比较可能不相等或与预期不符。触发条件：HTTPHeaderDict == HTTPHeaderDict。
+  - 争议对手：5c0a4c243e89, 5c0a4c243e89, 999ece9e2e75, 999ece9e2e75, 999ece9e2e75, e0b738239c93, e0b738239c93
+- **[logic/medium]** [logic] _collections.py:322-330 HTTPHeaderDict.add 中 combine 分支使用 vals[-1] 而非 vals[1:] 的合并语义（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-2｜置信度 0.5
+  - 源：`_collections.py:322-330`
+  - 依据：add(combine=True) 时执行 vals[-1] = vals[-1] + ", " + val，只把新值追加到最后一个已有值上，而不是合并到整个值列表。当同一键已有多个独立值（例如先 add('A','1') 再 add('A','2')，vals 为 ['A','1','2']）后调用 add('A','3', combine=True)，结果变为 ['A','1','2, 3']，iteritems 产出 ('A','1') 和 ('A','2, 3')，而文档示例期望合并为单个 '1, 2, 3'。触发条件：对已有多个重复值的键使用 combine=True。
+  - 争议对手：7b6811a25262, c271e73b0eb6, c271e73b0eb6, c271e73b0eb6, d050a68c98ae
+- **[logic/medium]** [logic] _collections.py:350-365 HTTPHeaderDict.extend 对 Iterable 分支未区分 str，可能把字符串按字符解包（确认存在缺陷）
+  - 独立来源 3 个：reader-r1-2, reader-r2-1, reader-r2-3｜置信度 0.5
+  - 源：`_collections.py:350-365`
+  - 依据：extend 的 Iterable 分支执行 `for key, value in other`。如果调用方传入一个字符串（str 本身是 Iterable），会尝试把每个字符解包为 (key, value)，对长度不为 2 的字符抛 ValueError，对长度为 2 的字符则静默插入错误 header。虽然类型签名声明为 Iterable[tuple[str,str]]，但运行时无校验，且 ensure_can_construct_http_header_dict 也会把 str 当作合法 Iterable 返回，导致 HTTPHeaderDict('ab') 或 d |= 'ab' 产生意外行为而非清晰错误。
+  - 争议对手：1ce57ac6d50f, 1ce57ac6d50f, 7bbb806b87b7, 7bbb806b87b7, aab8347938d6, d9750f2c9b6a
+- **[logic/medium]** [logic] _collections.py:466-469 HTTPHeaderDict._copy_from 使用 other.getlist(key) 复制，但 getlist 返回 vals[1:]，会丢失原始大小写键名之外的首值（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-2｜置信度 0.5
+  - 源：`_collections.py:466-469`
+  - 依据：_copy_from 遍历 other 的键（__iter__ 只产出原始大小写的首键名），然后调用 other.getlist(key)。getlist 返回 vals[1:]，即不包含首值。随后 self._container[key.lower()] = [key, *val] 把首值设为 key 本身而非原始值。例如 other = HTTPHeaderDict({'A': '1'})，getlist('A') 返回 []，复制后 self._container['a'] = ['A']，self['A'] 返回 ', '.join([]) == ''，值 '1' 丢失。触发条件：对任何 HTTPHeaderDict 调用 copy() 或构造 HTTPHeaderDict(other_http_header_dict)。
+  - 争议对手：5f0741c1ae15, 5f0741c1ae15, 5f0741c1ae15, 82e4702b4b05, b3493c593f27
+- **[performance/low]** [performance] _collections.py:171-172 HTTPHeaderDictItemView.__len__ 每次调用都构建完整列表，性能低下（确认存在缺陷）
+  - 独立来源 3 个：reader-r1-1, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`_collections.py:171-172`
+  - 依据：__len__ 通过 len(list(self._headers.iteritems())) 实现，每次调用都会遍历并物化所有 header 项。对于包含大量重复头的字典，反复调用 len() 会产生 O(n) 开销。触发条件：在循环中调用 len(d.items()) 或对 items() 视图做成员检查（set 的某些操作会调用 __len__）。
+  - 争议对手：15a1660e93c6
+- **[logic/medium]** [logic] _request_methods.py:116-122 request 中 json 分支修改 headers 时可能修改调用方传入的 self.headers（确认存在缺陷）
+  - 独立来源 6 个：reader-r0-2, reader-r0-3, reader-r1-2, reader-r2-1, reader-r2-2, reader-r2-3｜置信度 0.5
+  - 源：`_request_methods.py:116-122`
+  - 依据：当 headers 为 None 时，headers = self.headers（即实例共享的 dict）。随后若缺少 content-type，代码执行 headers = HTTPHeaderDict(headers) 创建副本再设置 Content-Type，因此不会污染 self.headers。但若 headers 非 None 且是普通 dict 且已含 content-type，则直接使用原对象，不会修改。整体看未发生对 self.headers 的原地修改，不构成缺陷。
+  - 争议对手：45ed0328ff72, 700a891be3bd, 870f710d3433, 8c7bf9ee62b1, 985b18ad8a01, beec95233112
+- **[logic/medium]** [logic] _request_methods.py:168-169 request_encode_url 使用 urlencode 编码 fields 时未处理 bytes 值导致 TypeError（确认存在缺陷）
+  - 独立来源 1 个：reader-r1-3｜置信度 0.5
+  - 源：`_request_methods.py:168-169`
+  - 依据：request_encode_url 的 fields 类型标注为 _TYPE_ENCODE_URL_FIELDS，允许值为 str 或 bytes。但 urlencode(fields) 在 Python 3 中遇到 bytes 值时会抛出 TypeError（'bytes' object is not str），因为 urlencode 默认 quote_via=quote_plus 只接受 str。触发条件：调用 request_encode_url 或 request(method='GET', fields={'k': b'v'}) 传入 bytes 值。
+  - 争议对手：28d0e3d93c07, 669f113a1afb, 669f113a1afb, c5eb20a3b040
+- **[logic/medium]** [logic] _request_methods.py:250-252 request_encode_body 中 extra_kw.update(urlopen_kw) 会覆盖已设置的 body 和 headers（确认存在缺陷）
+  - 独立来源 5 个：reader-r0-2, reader-r0-3, reader-r1-2, reader-r1-3, reader-r2-3｜置信度 0.5
+  - 源：`_request_methods.py:250-252`
+  - 依据：当 fields 为空时，extra_kw 只包含 headers，随后 extra_kw.update(urlopen_kw) 会把 urlopen_kw 中的 body 等键合并进来，这是预期行为。但当 fields 非空时，extra_kw 已包含 body 和 headers，若 urlopen_kw 中意外包含 'body'（例如通过 request() 的 body 参数传入且 fields 也为空的情况不会走到这里），update 会覆盖。实际触发路径：request() 中 body 非 None 时 urlopen_kw['body']=body，然后调用 request_encode_body(fields=fields)。若 fields 为 None，则跳过检查，extra_kw.update(urlopen_kw) 将 body 合并，正常。若 fields 非空，则检查抛错。因此该 update 本身在 fields 非空时不会覆盖 body（因为已抛错），但会覆盖 headers：urlopen_kw 中若含 headers 键（request() 不会传入，因为 headers 是显式参数），则可能覆盖。实际风险较低，但 update 顺序使 extra_kw['headers'] 可能被 urlopen_kw 中的同名键覆盖，导致 Content-Type 丢失。
+  - 争议对手：00007d69b407, 176625e5dbaa, 3691515f28f0, 43c16b0d058a
+- **[error_handling/medium]** [error_handling] connection.py:700-706 getresponse 中 self.sock 可能为 None 导致 AttributeError（确认存在缺陷）
+  - 独立来源 5 个：reader-r0-2, reader-r1-1, reader-r1-2, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`connection.py:700-706`
+  - 依据：getresponse 在检查 _response_options 后直接调用 self.sock.settimeout(self.timeout)。若连接已被 close()（close 会将 self.sock 置为 None），而 _response_options 仍非 None（例如 request 后连接被外部关闭），则 self.sock 为 None，调用 settimeout 抛出 AttributeError 而非预期的 ResponseNotReady 或清晰错误。触发条件：调用 request() 后、getresponse() 前连接被关闭。
+  - 争议对手：199f85d4ae64, 1b990c008d42, 73ad3d622936, 75d01d1989af
+- **[logic/medium]** [logic] connection.py:1010-1020 HTTPSConnection.connect 中 wrapped_socket 在异常路径下可能未定义（确认存在缺陷）
+  - 独立来源 2 个：reader-r1-2, reader-r2-2｜置信度 0.5
+  - 源：`connection.py:1010-1020`
+  - 依据：在 try 块中，wrapped_socket 仅在 if/else 分支之一被赋值。若 _ssl_wrap_socket_and_match_hostname 或 _connect_tls_proxy 抛出异常，except BaseException 块会重新 raise，因此 wrapped_socket 未定义不会在此路径被使用。但若 try 块正常完成，wrapped_socket 必然已赋值。然而，若 self.proxy_is_forwarding 为 True 且 self.proxy_config 为 None，则进入 else 分支，wrapped_socket 被赋值，逻辑正确。真正的问题在于：当 target_supports_http2 is None 时，代码在 try 块外使用 wrapped_socket.selected_alpn_protocol()，若 try 块因异常提前退出则不会到达此处。因此该处实际安全。
+  - 争议对手：1b186161e450, 6b67c4b20034
+- **[logic/medium]** [logic] connection.py:1085-1095 _ssl_wrap_socket_and_match_hostname 中 context.verify_mode 被无条件覆盖，可能破坏用户提供的 SSLContext 配置（确认存在缺陷）
+  - 独立来源 1 个：reader-r1-1｜置信度 0.5
+  - 源：`connection.py:1085-1095`
+  - 依据：当用户传入自定义 ssl_context 时，代码执行 `context.verify_mode = resolve_cert_reqs(cert_reqs)`。如果 cert_reqs 为 None，resolve_cert_reqs(None) 返回 CERT_REQUIRED（默认），这会覆盖用户在其 SSLContext 中设置的 verify_mode（例如 CERT_NONE）。虽然 HTTPSConnection.__init__ 在 cert_reqs 为 None 时会从 ssl_context.verify_mode 推导 cert_reqs，但 _ssl_wrap_socket_and_match_hostname 也被 _connect_tls_proxy 调用，且 proxy_config.ssl_context 路径下 cert_reqs 来自 proxy_ssl_context.verify_mode，看似一致。然而当调用方直接传入 ssl_context 且 cert_reqs 显式为 None 时（例如通过 _connect_tls_proxy 的 else 分支，ssl_context = self.ssl_context if self.proxy_is_forwarding else None，此时 cert_reqs = self.cert_reqs，而 self.cert_reqs 在 __init__ 中已从 ssl_context 推导，所以一致）。真正的问题在于：即使 ssl_context 已配置好 verify_mode，这里仍会重新赋值，若 resolve_cert_reqs 的默认值与 context 原值不同就会覆盖。触发条件：用户传入 ssl_context 且 cert_reqs 参数为 None 但 ssl_context.verify_mode 非默认值——不过 __init__ 已处理。因此实际风险较低，但代码逻辑上仍是无条件覆盖，属于脆弱设计。
+  - 争议对手：38bd8c478ab0
+- **[logic/medium]** [logic] connection.py:620-650 request 中 chunked 与 content-length 同时存在时未校验冲突（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-2, reader-r1-2｜置信度 0.5
+  - 源：`connection.py:620-650`
+  - 依据：当调用方传入 headers 同时包含 content-length 和 transfer-encoding，且 chunked=True 时，代码在 chunked 分支中检查 'transfer-encoding' not in header_keys 才添加 Transfer-Encoding，但不会移除或校验已有的 content-length。随后发送 chunked 编码体，同时请求头中带有 content-length，导致服务器可能按 content-length 解析而截断或拒绝请求。触发条件：headers 含 content-length 且 chunked=True。
+  - 争议对手：2ac15669cd2f, 49000d64d796, 4d2ffd4986c8, 9bc8d4b94416, edac9bf19f3c
+- **[logic/medium]** [logic] connection.py:660-680 request() 中 chunked 显式 True 时未检查 content-length 冲突（确认存在缺陷）
+  - 独立来源 1 个：reader-r1-1｜置信度 0.5
+  - 源：`connection.py:660-680`
+  - 依据：当调用方传入 chunked=True 且 headers 中已包含 Content-Length 时，代码只检查 transfer-encoding 是否在 header_keys 中，若不在则添加 Transfer-Encoding: chunked。但不会移除或警告已有的 Content-Length。结果请求同时带有 Content-Length 和 Transfer-Encoding: chunked，这违反 HTTP 规范（RFC 7230 3.3.3），可能导致服务器拒绝请求或产生请求走私风险。触发条件：request(..., chunked=True, headers={'Content-Length': '10'})。
+  - 争议对手：401ef6a7f9d6
+- **[logic/medium]** [logic] connection.py:88-100 _normalize_header_values 在删除/重建头部时可能丢失重复头部或改变顺序（确认存在缺陷）
+  - 独立来源 8 个：reader-r0-2, reader-r0-4, reader-r1-1, reader-r1-2, reader-r1-3, reader-r2-1, reader-r2-2, reader-r2-3｜置信度 0.5
+  - 源：`connection.py:88-100`
+  - 依据：当 headers_changed 为 True 时，代码先遍历 header_items 对每个 name 调用 del message[name]，再重新插入。http.client.HTTPMessage 继承自 email.message.Message，del message[name] 会删除该 name 的所有出现（包括重复头部如多个 Set-Cookie），而随后的插入循环会按 header_items 顺序逐个插入。对于重复头部，del 一次即可删除全部，但插入循环会重新插入所有条目，这本身可能可行；然而 message.items() 返回的 header_items 是列表，enumerate 修改其元素是有效的。真正的问题在于：del message[name] 对每个 name 都执行一次，若同一 name 出现多次，第一次 del 已删除全部，后续 del 为 no-op，但插入时按顺序插入所有重复项，顺序可能被打乱（email.message 的 __setitem__ 会追加到末尾）。这会导致下游 cookie jar 等消费者看到的头部顺序与原始不同，且对于需要保持顺序的重复头部（如 Set-Cookie）可能产生语义变化。触发条件：响应中存在需要折叠的 obsolete line folding 且同时存在重复头部。
+  - 争议对手：f20e82d9fa97
+- **[logic/medium]** [logic] connection.py:800-812 _ssl_wrap_socket_and_match_hostname 中 context.verify_mode 被无条件覆盖，可能覆盖用户 SSLContext 的 verify_mode（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-3｜置信度 0.5
+  - 源：`connection.py:800-812`
+  - 依据：当调用者传入自定义 ssl_context 时，代码执行 `context = ssl_context`，随后无条件执行 `context.verify_mode = resolve_cert_reqs(cert_reqs)`。若 cert_reqs 为 None，resolve_cert_reqs(None) 返回 CERT_REQUIRED（默认），这会覆盖用户在其 SSLContext 中设置的 verify_mode（例如 CERT_NONE 或 CERT_OPTIONAL）。虽然 HTTPSConnection.__init__ 在 cert_reqs 为 None 时会从 ssl_context.verify_mode 推导 cert_reqs，但 _connect_tls_proxy 路径中若 proxy_ssl_context 为 None 且 self.cert_reqs 为 None，或直接调用该函数时 cert_reqs 为 None，就会发生覆盖。触发条件：传入自定义 ssl_context 且 cert_reqs 为 None。
+  - 争议对手：88815c6e32d6
+- **[logic/medium]** [logic] connection.py:895-905 HTTPSConnection.connect 中 is_verified 在 forwarding proxy 分支未定义（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-2｜置信度 0.5
+  - 源：`connection.py:895-905`
+  - 依据：在 forwarding proxy 分支中，代码设置 is_verified = self.proxy_is_verified is True，但 self.proxy_is_verified 在 _connect_tls_proxy 中被设置为 sock_and_verified.is_verified。若 _connect_tls_proxy 未设置（例如 proxy_config 为 None 导致异常），is_verified 可能未定义。但更关键的是：在 else 分支中 is_verified 由 _ssl_wrap_socket_and_match_hostname 返回。两个分支都定义了 is_verified，因此后续使用是安全的。
+  - 争议对手：121ab208ef6b
+- **[logic/medium]** [logic] connection.py:900-920 HTTPSConnection.connect() 中 proxy_is_forwarding 且 proxy_config 为 None 时回退到连接 SSL 上下文，但 is_verified 计算可能错误（确认存在缺陷）
+  - 独立来源 1 个：reader-r1-1｜置信度 0.5
+  - 源：`connection.py:900-920`
+  - 依据：当 self.proxy_is_forwarding 为 True 但 self.proxy_config 为 None 时（向后兼容路径），代码走 else 分支调用 _ssl_wrap_socket_and_match_hostname，使用连接自身的 SSL 上下文包装到代理的连接。此时 is_verified 反映的是代理连接的验证结果。随后代码执行 `if self.proxy_is_forwarding: self.is_verified = False`，正确地将目标验证标记为 False。但 `if self._has_connected_to_proxy and self.proxy_is_verified is None: self.proxy_is_verified = is_verified` 会将 proxy_is_verified 设为代理连接的验证结果，这是正确的。然而在 _connect_tls_proxy 路径（proxy_config 不为 None）中，_connect_tls_proxy 内部已设置 self.proxy_is_verified，然后 connect() 中 `is_verified = self.proxy_is_verified is True`，最后 `if self._has_connected_to_proxy and self.proxy_is_verified is None` 不会覆盖。逻辑看似一致。但存在一个边界：当 proxy_is_forwarding 且 proxy_config 不为 None 时，_connect_tls_proxy 返回的 socket 被赋给 wrapped_socket，但 self.sock 在 else 分支外被设为 wrapped_socket——正确。综合判断，此处逻辑复杂但未发现明确缺陷。
+  - 争议对手：0502e33225b7, 10f68e8387b9, 4180f16c16eb, e5a9989b2393
+- **[api_misuse/low]** [api_misuse] connectionpool.py:100-105 _new_pool_queue 中 QueueCls 为自定义类时可能不接受 maxsize 参数（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-2｜置信度 0.5
+  - 源：`connectionpool.py:100-105`
+  - 依据：当 QueueCls 不是默认的 LifoQueue 时，调用 self.QueueCls(maxsize)。如果自定义 QueueCls 的构造函数不接受 maxsize 参数，会抛出 TypeError。触发条件：用户设置 QueueCls 为不接受 maxsize 的自定义队列类。
+  - 争议对手：78ee8e9f5121
+- **[boundary/medium]** [boundary] connectionpool.py:1040-1060 HTTPSConnectionPool._new_conn 中 actual_port 可能为 None 导致连接失败（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-3｜置信度 0.5
+  - 源：`connectionpool.py:1040-1060`
+  - 依据：当 self.proxy 非 None 且 self.proxy.host 非 None 时，actual_host = self.proxy.host，actual_port = self.proxy.port。如果代理 URL 未指定端口（如 'http://proxy.example.com'），self.proxy.port 可能为 None。随后 ConnectionCls(port=None) 会使用默认端口，对于 HTTP 代理是 80，对于 HTTPS 代理是 443。但代理的 scheme 可能是 http 而目标连接是 HTTPS，此时 port=None 会导致连接使用 HTTPS 默认端口 443 而非代理的 80。触发条件：使用未指定端口的 HTTP 代理连接 HTTPS 目标。
+  - 争议对手：3ea9eafdaef8
+- **[error_handling/medium]** [error_handling] connectionpool.py:1010-1025 HTTPSConnectionPool._prepare_proxy 中 self.proxy 为 None 时访问 self.proxy.scheme 抛 AttributeError（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-3｜置信度 0.5
+  - 源：`connectionpool.py:1010-1025`
+  - 依据：_prepare_proxy 中 if self.proxy and self.proxy.scheme == "https" 检查了 self.proxy 非 None，因此不会抛 AttributeError。但 conn.set_tunnel 使用 self._tunnel_host 和 self.port，当 self.proxy 为 None 时 _prepare_proxy 不应被调用。urlopen 中调用 _prepare_proxy 的条件是 self.proxy is not None and http_tunnel_required and conn.is_closed，因此 self.proxy 非 None。这不是缺陷。
+  - 争议对手：aca240d09e5f
+- **[error_handling/high]** [error_handling] connectionpool.py:790-800 urlopen 中 headers 为 None 时 self.headers 为 None 导致 headers.copy() 失败（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-2｜置信度 0.5
+  - 源：`connectionpool.py:790-800`
+  - 依据：这是最明确的缺陷。RequestMethods.__init__ 中 headers 默认为 None，如果用户创建 HTTPConnectionPool 时不传 headers，self.headers 为 None。调用 urlopen 时 headers 为 None，headers = self.headers 仍为 None。在非 HTTP 隧道场景（http_tunnel_required 为 False），执行 headers = headers.copy() 抛出 AttributeError。触发条件：HTTPConnectionPool(host) 不传 headers，调用 pool.urlopen('GET', '/')。
+  - 争议对手：edf9d422d94e
+- **[error_handling/medium]** [error_handling] connectionpool.py:820-830 urlopen 中 _prepare_proxy 异常处理只捕获部分异常类型（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-2｜置信度 0.5
+  - 源：`connectionpool.py:820-830`
+  - 依据：_prepare_proxy 调用中只捕获 (BaseSSLError, OSError, SocketTimeout)，但 _prepare_proxy 可能抛出其他异常如 ProxyError、CertificateError 等。触发条件：代理连接时证书验证失败抛出 CertificateError，不会被捕获并转换为超时错误，而是直接传播。这可能导致错误信息不准确。
+  - 争议对手：3bf4d7e2532d, 3bf4d7e2532d, 46959f73bf34, 46959f73bf34
+- **[error_handling/medium]** [error_handling] connectionpool.py:915-920 urlopen 中 headers 为 None 时 303 重定向分支 HTTPHeaderDict(None) 可能失败（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-2｜置信度 0.5
+  - 源：`connectionpool.py:915-920`
+  - 依据：如果 headers 为 None（self.headers 为 None 且调用者未传），在 303 重定向分支中 HTTPHeaderDict(None) 会创建空字典，不会失败。但如果 headers 是 None 且 http_tunnel_required 为 True，headers 保持 None，303 分支中 HTTPHeaderDict(None) 正常工作。这里不是缺陷。
+  - 争议对手：947dcce6f085
+- **[logic/medium]** [logic] connectionpool.py:1090-1100 HTTPSConnectionPool._validate_conn 中 conn.is_verified 可能未定义（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-2｜置信度 0.5
+  - 源：`connectionpool.py:1090-1100`
+  - 依据：_validate_conn 中检查 `if not conn.is_verified and not conn.proxy_is_verified`。如果 conn 是 HTTPConnection（非 HTTPS），可能没有 is_verified 属性。但 HTTPSConnectionPool 的 ConnectionCls 是 HTTPSConnection，有该属性。触发条件：自定义 ConnectionCls 不提供 is_verified 属性。
+  - 争议对手：9fc056ccc63b, b84f1bae612b
+- **[logic/medium]** [logic] connectionpool.py:315-330 _get_conn 中 is_connection_dropped 检查后 conn.close() 但未将连接置 None 导致返回已关闭连接（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-3｜置信度 0.5
+  - 源：`connectionpool.py:315-330`
+  - 依据：当 conn 非 None 且 is_connection_dropped(conn) 为 True 时，调用 conn.close() 但未将 conn 置为 None。随后 return conn or self._new_conn() 中 conn 仍为已关闭的连接对象（非 None），因此返回已关闭的连接而非创建新连接。触发条件：池中缓存的连接已被服务器关闭。
+  - 争议对手：106558b482dc, 106558b482dc, 4007808287e5, cf768869bfdc, d937c0041994
+- **[logic/medium]** [logic] connectionpool.py:470-480 _make_request 中 conn.timeout 被设置为 connect_timeout 而非 read_timeout（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-2｜置信度 0.5
+  - 源：`connectionpool.py:470-480`
+  - 依据：在 _make_request 中，conn.timeout = Timeout.resolve_default_timeout(timeout_obj.connect_timeout) 设置连接超时。随后在读取响应前，如果 conn 未关闭，conn.timeout = read_timeout 被设置。但如果 conn.is_closed 为 True（例如 BrokenPipeError 后连接关闭），则不会设置 read_timeout，conn.timeout 保持为 connect_timeout。触发条件：conn.request 抛出 BrokenPipeError 被吞掉后连接关闭，此时 getresponse 使用 connect_timeout 而非 read_timeout。
+  - 争议对手：14adbbaab61b, d57761c76dd3, e767c60f29b0
+- **[logic/medium]** [logic] connectionpool.py:500-510 _make_request 中 BrokenPipeError 被吞掉后未标记连接为不可用（确认存在缺陷）
+  - 独立来源 1 个：reader-r2-2｜置信度 0.5
+  - 源：`connectionpool.py:500-510`
+  - 依据：BrokenPipeError 被 pass 吞掉后，代码继续执行到 getresponse()。如果连接已断开，getresponse 可能抛出异常或返回无效响应。注释说服务器可以在发送有效响应后合法关闭连接，但此时连接状态未标记为关闭，后续 getresponse 可能失败。触发条件：服务器在请求后关闭连接导致 BrokenPipeError。
+  - 争议对手：b616ff7ccc53, b616ff7ccc53, b616ff7ccc53
+- **[logic/medium]** [logic] connectionpool.py:700-706 urlopen 中 headers 为 None 时使用 self.headers 后可能被原地修改（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-3, reader-r0-4, reader-r2-2, reader-r2-3｜置信度 0.5
+  - 源：`connectionpool.py:700-706`
+  - 依据：当 headers 参数为 None 时，headers 被赋值为 self.headers（即池的共享 headers 对象）。随后在非隧道场景下执行 headers = headers.copy() 是安全的，但在 http_tunnel_required 为 True 时不会 copy，后续 303 重定向分支中 headers = HTTPHeaderDict(headers)._prepare_for_method_change() 会创建新对象，看似安全。然而在重定向的 remove_headers_on_redirect 分支中 new_headers = headers.copy() 也是复制。真正的问题在于：当 headers 为 None 且 http_tunnel_required 为 False 时，headers.copy() 返回的是普通 dict 的浅拷贝，但 self.headers 本身未被修改，因此此处实际安全。经核实，该路径不会修改 self.headers，故不构成缺陷。
+  - 争议对手：a4f8579e0ff6, bb6a67d0c889, dd2c8f9e7af2, dd2c8f9e7af2, dd2c8f9e7af2, e428fd41b5e1, e428fd41b5e1, e428fd41b5e1, e428fd41b5e1, e428fd41b5e1, e428fd41b5e1
+- **[logic/medium]** [logic] connectionpool.py:780-800 urlopen 中 release_this_conn 在 EmptyPoolError 分支被设为 False 但 finally 仍可能 put None（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-3｜置信度 0.5
+  - 源：`connectionpool.py:780-800`
+  - 依据：EmptyPoolError 分支设置 clean_exit = True 和 release_this_conn = False，然后 raise。finally 块中 clean_exit 为 True，跳过 conn.close()；release_this_conn 为 False，跳过 _put_conn。这看起来正确。但注意：EmptyPoolError 是在 _get_conn 中抛出的，此时 conn 仍为 None。finally 中 if not clean_exit 为 False，release_this_conn 为 False，所以不会 put None。逻辑正确。然而，如果 _get_conn 抛出 EmptyPoolError 之前已经部分获取了连接（例如 pool.get 成功但后续 is_connection_dropped 抛异常），则 conn 非 None 但异常类型不是 EmptyPoolError，会走通用 except 分支。因此此处不是缺陷。
+  - 争议对手：1d44bc767ee1, 32610d67f40a, 5330c22d5d38, 5330c22d5d38, 5330c22d5d38, 5330c22d5d38, 5330c22d5d38, 5330c22d5d38, 5330c22d5d38, 5330c22d5d38, 7626482122e1
+- **[logic/high]** [logic] connectionpool.py:825-850 urlopen 中 conn 为 None 时递归重试未检查 retries 是否耗尽导致无限递归（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r2-2｜置信度 0.5
+  - 源：`connectionpool.py:825-850`
+  - 依据：当 conn 为 None 时（例如 _get_conn 返回 None 或异常分支将 conn 置 None），代码记录 warning 后递归调用 self.urlopen。递归调用中 retries 已经过 increment 处理，如果 retries 耗尽，retries.increment 会抛出 MaxRetryError。但在 conn 为 None 的分支中，retries 可能未耗尽（例如 _get_conn 返回 None 但未发生异常）。实际上 _get_conn 不会返回 None，它要么返回连接要么抛出异常。异常分支中 retries.increment 已调用，如果耗尽会抛出 MaxRetryError 而非到达此处。因此 conn 为 None 只会在异常被处理且 retries 未耗尽时发生，递归会继续直到 retries 耗尽。这不是无限递归。
+  - 争议对手：03c17d9f8ae5, 03c17d9f8ae5, 14ab754d590e, 14ab754d590e, 4c46921f8062, 4c46921f8062, bb8235a1a659, bb8235a1a659, beab71e19794
+- …另有 175 条未列出
+
+## 覆盖率矩阵
+
+| 维度 \ 类型 | logic | concurrency | boundary | error_handling | resource_leak | security | performance | api_misuse |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `contrib` | 9 | 0 | 9 | 9 | 8 | 7 | 1 | 9 |
+| `contrib/emscripten` | 9 | 2 | 9 | 9 | 8 | 0 | 0 | 8 |
+| `http2` | 9 | 8 | 9 | 9 | 3 | 2 | 0 | 1 |
+| `root` | 12 | 9 | 12 | 12 | 11 | 9 | 10 | 12 |
+| `util` | 15 | 0 | 13 | 15 | 7 | 3 | 9 | 12 |
+
+矩阵填充率 88%（单元格值 = 独立 Agent 数）
