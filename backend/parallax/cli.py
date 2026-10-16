@@ -126,6 +126,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="从已有运行的 metrics.json 重建 summary.md（不重跑实验、不调模型）",
     )
     rerender.add_argument("run_dir", help="包含 metrics.json 的结果目录")
+
+    spotcheck = sub.add_parser(
+        "spotcheck",
+        help="从完整 claim 集分层抽样，产出结论质量抽查工作表（不调模型）",
+    )
+    spotcheck.add_argument(
+        "claims",
+        nargs="+",
+        help="一个或多个 *.claims.json（由 save_results 落盘，含未截断的全部 claim）",
+    )
+    spotcheck.add_argument("--out", required=True, help="工作表输出目录")
+    spotcheck.add_argument("--seed", type=int, default=20261016, help="随机种子（保证可复核）")
+    spotcheck.add_argument(
+        "--quota",
+        default=None,
+        help="各档抽样条数，形如 high_confidence=15,pending=15,disputed=10",
+    )
     return parser
 
 
@@ -390,6 +407,29 @@ def _run_rerender_cli(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_spotcheck_cli(args: argparse.Namespace) -> int:
+    """产出抽查工作表。刻意不调模型——这一步是给人看的清单。"""
+    from parallax.eval.spotcheck import write_outputs
+
+    quota = None
+    if args.quota:
+        quota = {}
+        for part in args.quota.split(","):
+            key, _, value = part.partition("=")
+            if not key.strip() or not value.strip().isdigit():
+                raise SystemExit(f"--quota 格式应为 key=N，收到：{part}")
+            quota[key.strip()] = int(value)
+
+    out_dir = Path(args.out)
+    for raw in args.claims:
+        claims_path = Path(raw)
+        if not claims_path.exists():
+            raise SystemExit(f"找不到 claim 文件：{claims_path}")
+        worksheet, _ = write_outputs(claims_path, out_dir, per_bucket=quota, seed=args.seed)
+        print(f"已生成：{worksheet}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -413,6 +453,8 @@ def main(argv: list[str] | None = None) -> int:
             return 130
     if args.command == "rerender":
         return _run_rerender_cli(args)
+    if args.command == "spotcheck":
+        return _run_spotcheck_cli(args)
     parser.error(f"未知命令 {args.command}")
     return 2
 
