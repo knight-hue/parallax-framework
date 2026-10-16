@@ -6,7 +6,7 @@ import pytest
 
 from parallax.eval.experiment import ArmResult
 from parallax.eval.metrics import ArmMetrics
-from parallax.eval.variance import Stat, collect, pairwise_verdict, render_variance
+from parallax.eval.variance import Stat, collect, config_drift, pairwise_verdict, render_variance
 
 
 def arm_result(
@@ -154,3 +154,73 @@ def test_render_lists_every_repetition_value():
     text = render_variance(repetitions([1.0, 1.1, 0.9], [3.0, 3.2, 2.8]))
     for value in ("1.00", "1.10", "0.90", "3.00", "3.20", "2.80"):
         assert value in text
+
+
+# ---- 配置漂移 ----
+
+
+def _with_config(value: float, config: dict, arm: str = "baseline_shared") -> ArmResult:
+    result = arm_result(arm, channels=value)
+    result.config = config
+    return result
+
+
+def test_no_drift_when_configs_are_identical():
+    reps = [
+        [_with_config(1.0, {"readers": 6}), _with_config(3.0, {"readers": 6}, arm="blind_full")],
+        [_with_config(1.1, {"readers": 6}), _with_config(3.1, {"readers": 6}, arm="blind_full")],
+    ]
+    assert config_drift(reps) == []
+
+
+def test_drift_is_reported_loudly():
+    """真实事故：某次重复漏传 `--readers`，用了 3 而其余用 6。
+
+    两者 K* 的上限不同（3 vs 6），方差里混进了系统差，但统计表看上去完全正常。
+    """
+    reps = [
+        [_with_config(1.0, {"readers": 6, "model": "m"})],
+        [_with_config(1.2, {"readers": 3, "model": "m"})],
+    ]
+    drift = config_drift(reps)
+    assert drift, "配置不一致必须被报出来"
+    assert "不能当作方差解读" in drift[0]
+    assert any("readers=6" in line for line in drift)
+    assert any("readers=3" in line for line in drift)
+
+    text = render_variance(reps)
+    assert "生效配置不一致" in text, "告警必须出现在产物里，而不是只在内存里"
+
+
+def test_arms_differing_within_a_round_are_not_drift():
+    """同一轮里两个臂配置不同（可见性、冗余系数）是实验设计，不是漂移。
+
+    把整轮配置一起比对会把**每一次正常运行**都误报成漂移，
+    那样的告警很快就会被无视——比没有告警更糟。所以按臂分别比较。
+    """
+    reps = [
+        [
+            _with_config(1.0, {"visibility": "shared"}),
+            _with_config(3.0, {"visibility": "blind"}, "blind_full"),
+        ],
+        [
+            _with_config(1.1, {"visibility": "shared"}),
+            _with_config(3.1, {"visibility": "blind"}, "blind_full"),
+        ],
+    ]
+    assert config_drift(reps) == []
+
+
+def test_drift_names_the_offending_arm():
+    reps = [
+        [arm_result("baseline_shared", channels=1.0), arm_result("blind_full", channels=3.0)],
+        [arm_result("baseline_shared", channels=1.1), arm_result("blind_full", channels=3.1)],
+    ]
+    reps[0][0].config = {"readers": 6}
+    reps[1][0].config = {"readers": 3}
+    reps[0][1].config = {"readers": 6}
+    reps[1][1].config = {"readers": 6}
+
+    drift = config_drift(reps)
+    assert any("`baseline_shared`" in line for line in drift)
+    assert not any("`blind_full`" in line for line in drift), "没漂移的臂不该被点名"

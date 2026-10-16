@@ -40,27 +40,78 @@
   `GET /api/v1/usage`（ADMIN，含零用量的凭据）
 - 完成回调 `POST /api/v1/internal/runs/{runId}/complete`，用 `X-Internal-Token` 校验
 
-**Java 网关 · 运行记录（C2 的存储部分）**
+**Java 网关 · 运行记录（C2）**
 
 - `audit_run` 表：提交时落 `queued`，完成回调补 token / 统计 / 停止原因
+- `audit_event` 表：只记网关自己观察到的 `submitted` / `completed` / `failed`。
+  编排内部的事件**刻意不复制一份**——上游已有可重放的事件总线，
+  两份事实来源迟早不一致；运行详情里直接给出上游的事件流地址
+- `GET /api/v1/runs`：按 status / credentialId / since / until 过滤 + 分页，
+  单页上限 200（没有上限的话一次 `size=100000` 就能把网关内存打满）
+- `GET /api/v1/runs/{runId}`：运行详情 + 生命周期事件 + 上游端点地址
+- 可见性在服务端强制：非 ADMIN 即使显式传了别人的 `credentialId`
+  也只能看到自己的；越权查询返回 404 而不是 403，不给"这个 run 存在"的旁证
 - `POST /api/v1/audits` 会从上游 202 响应里取出 `run_id` 回填，
   使"网关的提交记录"与"上游的运行"对得上
-- 网关把凭据 id 通过 `X-Parallax-Credential-Id` 传给上游，供其回调时回报归属
+
+**Java 网关 · Redis 分布式限流（C3）**
+
+- 抽出 `RateLimiter` 接口：内存桶与 Redis 桶并存，选择逻辑收在
+  `ResilientRateLimiter` 里，过滤器不需要知道用的是哪个
+- Redis 桶（bucket4j-redis + Lettuce）：多实例**共享同一份配额**
+- **Redis 不可用时自动降级回内存桶**并打 WARN，服务继续提供
+- **冷却期**：首次失败后 30 秒内不再逐请求试 Redis。没有冷却的话，
+  Redis 挂掉时每个请求都要先等一次命令超时，降级就从"服务仍可用"
+  变成"每个请求多花 250ms"
+- Redis 连接**惰性建立**：在构造函数里连会让 Redis 没就绪时整个网关启动失败——
+  服务因为一个可选组件而起不来，比限流精度下降严重得多
+- 不做跨进程队列（见下文"明确不做"）
+
+**Java 网关 · 可观测性（C4）**
+
+- Micrometer：`parallax_runs_total{status}`、`parallax_tokens_total{credential}`、
+  `parallax_quota_rejections_total{metric}`、`parallax_ratelimit_degraded_total`；
+  零值预先注册，否则"没有曲线"与"还没有事件"看起来一样
+- 日志格式加入 `%X{traceId}`：没有它，"两端日志能对上同一次请求"只能靠时间戳猜
+- 网关通过 `X-Parallax-Credential-Id` 把身份带给上游，供其回调时回报归属
+
+**Python 侧配合**
+
+- 接收 `X-Trace-Id` 与 `X-Parallax-Credential-Id`，写进日志与 `meta.json`
+- 用 `ContextVar` 而不是线程局部变量：asyncio 下并发运行会互相覆盖 traceId
+- 完成回调 `PARALLAX_CALLBACK_URL`，**默认关闭**；失败只记 WARN，
+  绝不让一次成功的审查因此变成失败
+- **失败运行也回报**：网关已为这次提交扣了额度，不回传的话它会永远停在 `queued`
+- 只发 prompt / completion 两个分量，**不发 total**——合计由服务端算，
+  不给第二个事实来源
 
 **数据库与部署**
 
-- PostgreSQL + Flyway 迁移（`V1__identity_and_quota.sql`、`V2__audit_run.sql`）；
-  SQL 刻意写成 PostgreSQL 与 H2 都能执行的子集，使迁移脚本在**每次测试**中都被执行
-- `docker-compose.yml` 新增 `postgres` 服务（与 `gateway` 同 profile）与健康检查
-- Redis 同时挂在 `gateway` profile 下——"多实例共享同一配额"正是它在这里的职责
+- PostgreSQL + Flyway 迁移（`V1__identity_and_quota.sql`、`V2__audit_run.sql`、
+  `V3__audit_event.sql`）；SQL 刻意写成 PostgreSQL 与 H2 都能执行的子集，
+  使迁移脚本在**每次测试**中都被执行
+- `docker-compose.yml` 新增 `postgres` 服务（与 `gateway` 同 profile）与健康检查；
+  Redis 同时挂在 `gateway` profile 下——"多实例共享同一配额"正是它在这里的职责
 
 **测试**
 
 - 默认测试档用 **H2（PostgreSQL 兼容模式）**：让没有 Docker 的机器也能跑完整套测试
-- 明确记录代价：**H2 不能替代真实 PostgreSQL 做验证**，
-  真实 PG + Redis 由 `gateway-it`（Testcontainers）负责，CI 上必跑
-- 新增 13 项身份与配额端到端测试，其中一条**逐列全表扫描**断言
-  `api_credential` 里查不到任何明文 key（只查一列会漏掉将来新增的字段）
+- 明确记录代价：**H2 不能替代真实 PostgreSQL 做验证**，因此另有
+  `PostgresPersistenceIT`（真实 PG，用**独立 JDBC 连接**读库以证明
+  "数据在库里而不是在 Hibernate 缓存里"）与 `RedisRateLimitIT`（真实 Redis，
+  验证两实例配额合并计算、Redis 不可用降级、冷却后重试）
+- 两者用 `disabledWithoutDocker` 自动跳过，本地无 Docker 不受阻塞；
+  CI 新增独立的 `gateway-it` 任务（`mvn -Pit verify`），
+  让"逻辑测试失败"和"真实基础设施上失败"能一眼区分
+
+### 明确不做（记录理由，避免反复讨论）
+
+- **跨进程任务队列**：单实例够用；引入它会把"崩溃恢复"的复杂度提前引爆，
+  且不影响任何已有结论。留在路线图里。
+- **用户注册 / 密码体系**：单租户平台，API Key 足够；
+  引入用户库会让网关变成第二个业务后端。
+- **把编排事件再存一份到网关**：上游已有可重放的事件总线，
+  复制一份只会造出两个可能不一致的事实来源。
 
 ### 计划中
 - 跨文件组合型缺陷的评测语料（检验聚合层的证据装配能力）

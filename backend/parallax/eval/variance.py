@@ -17,6 +17,7 @@ p 值会给人"严谨"的错觉而实际毫无效力。这里改为直接呈现�
 
 from __future__ import annotations
 
+import json
 import statistics
 from dataclasses import dataclass
 
@@ -158,6 +159,40 @@ def pairwise_verdict(
     return lines
 
 
+def config_drift(repetitions: list[list[ArmResult]]) -> list[str]:
+    """检查**同一个臂**在不同重复之间的生效配置是否一致。
+
+    这不是锦上添花的校验：一次真实事故就是漏传 `--readers` 导致某次重复用了默认值，
+    而重复实验的全部意义在于"除随机性以外一切相同"。配置漂移会让方差里混进一个
+    系统差，却仍然产出一张看上去正常的统计表。
+
+    **按臂分别比较**，而不是把整轮的配置集合一起比：同一轮里两个臂的可见性、
+    冗余系数本来就不同（那是实验设计），把整轮配置拿去比对会把每次正常运行都误报成漂移。
+    """
+    per_arm: dict[str, dict[str, int]] = {}
+    for index, rep in enumerate(repetitions, start=1):
+        for result in rep:
+            if not result.config:
+                continue
+            key = json.dumps(result.config, ensure_ascii=False, sort_keys=True)
+            per_arm.setdefault(result.metrics.arm, {}).setdefault(key, index)
+
+    lines: list[str] = []
+    for arm in sorted(per_arm):
+        seen = per_arm[arm]
+        if len(seen) <= 1:
+            continue
+        if not lines:
+            lines.append("⚠️ **各次重复的生效配置不一致，本统计表不能当作方差解读。**")
+        lines.append(f"  - `{arm}`：")
+        for key, first_seen in seen.items():
+            label = "；".join(f"{k}={v}" for k, v in sorted(json.loads(key).items()))
+            lines.append(f"    - 第 {first_seen} 次重复起：{label}")
+    if lines:
+        lines.append("  - 修正方式：删除本目录，用同一套参数重跑全部重复。")
+    return lines
+
+
 def render_variance(
     repetitions: list[list[ArmResult]],
     *,
@@ -169,6 +204,11 @@ def render_variance(
     lines = ["# 重复实验的稳定性", ""]
     if repo:
         lines.append(f"仓库：`{repo}`｜重复次数：{len(repetitions)}")
+        lines.append("")
+
+    drift = config_drift(repetitions)
+    if drift:
+        lines.extend(drift)
         lines.append("")
 
     n_ok = sum(1 for rep in repetitions if rep)
