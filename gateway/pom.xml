@@ -23,13 +23,20 @@
     <jjwt.version>0.12.6</jjwt.version>
     <bucket4j.version>8.10.1</bucket4j.version>
     <resilience4j.version>2.2.0</resilience4j.version>
+    <springdoc.version>2.8.9</springdoc.version>
   </properties>
 
   <dependencies>
     <!--
-      刻意不引入 JPA / Redis / Flyway / Mail：
-      网关是无状态的转发层，一旦依赖数据库就会有人把业务逻辑写进来，
-      "薄"这个约束靠依赖列表来守住比靠自觉可靠。
+      【约定修订 · C1】原本这里写的是"刻意不引入 JPA / Redis / Flyway"，
+      理由是"网关一旦依赖数据库就会有人把业务逻辑写进来"。
+      该理由仍然成立，但把**平台能力**一起挡在了门外：
+      身份、配额、用量记账、运行记录都属于网关的本职，不是业务逻辑。
+      业务逻辑（证据怎么装配）始终只由 Python 编排服务负责。
+
+      因此约定修订为：**无编排逻辑，可有平台能力**。
+      新增的每个依赖都必须能回答"它服务于身份/配额/持久化/可观测性中的哪一项"，
+      答不上来就不该加。修订记录见 CHANGELOG。
     -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -42,6 +49,25 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+
+    <!-- 平台能力：身份 / 配额 / 用量账本 / 运行记录 -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-database-postgresql</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>runtime</scope>
     </dependency>
 
     <dependency>
@@ -83,6 +109,13 @@
       <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
 
+    <!-- API 文档。演示与评审需要在浏览器里直接看到端点契约，而不是读源码。 -->
+    <dependency>
+      <groupId>org.springdoc</groupId>
+      <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+      <version>${springdoc.version}</version>
+    </dependency>
+
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
@@ -91,6 +124,29 @@
     <dependency>
       <groupId>org.springframework.security</groupId>
       <artifactId>spring-security-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!--
+      H2 只用于**默认测试档**，让整套测试在没有 Docker 的机器上也能跑：
+      同一份 Flyway 迁移脚本在 H2 的 PostgreSQL 兼容模式下执行，
+      迁移语法错误因此每次测试都会被暴露。
+      真实 PostgreSQL 由 gateway-it（Testcontainers）单独跑一遍——
+      H2 无法替代真实 PG 做验证，两者是互补而不是二选一。
+    -->
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>postgresql</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

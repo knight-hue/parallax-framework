@@ -5,10 +5,68 @@
 
 ## [Unreleased]
 
+### 约定修订 · Java 网关从「薄网关」改为「无编排逻辑，可有平台能力」
+
+原约定是**网关不依赖数据库，以免有人把业务逻辑写进来**。这条理由依然成立，
+但它把**平台能力**一起挡在了门外：身份、配额、用量账本、运行记录本来就是网关的本职。
+
+修订后的约定：
+
+> **无编排逻辑，可有平台能力。**
+> 新增的每个依赖都必须能回答"它服务于身份 / 配额 / 持久化 / 可观测性中的哪一项"，
+> 答不上来就不该加。
+
+分工边界因此更清楚：
+
+| | 负责 |
+|---|---|
+| **Python 编排服务** | 证据怎么装配（框架核心） |
+| **Java 网关** | 谁在用、用了多少、跑过什么（平台层） |
+
+### 新增
+
+**Java 网关 · 身份与配额（C1）**
+
+- API Key 签发 / 查看 / 吊销：`POST|GET /api/v1/credentials`、`DELETE /api/v1/credentials/{id}`
+- **明文 key 只在创建响应里出现一次**，服务端只存 SHA-256 摘要；
+  没有任何"再查一次 key"的端点，需要再取一次就吊销旧的、签发新的
+- 配额策略表 + 每日运行次数 / 每日 token / 每月 token 三重额度；
+  提交审查（`POST /api/v1/audits`）**转发之前**校验，超限返回 429，
+  响应体带 `used` / `limit` / `resetsAt` 与 `Retry-After`
+- 运行次数按**提交**计数而不是按完成计数——只统计完成的话，
+  用户能在第一次完成之前并发提交上千次，每次都真实烧掉模型费用
+- 用量账本 `usage_ledger`：完成回调写入，**按 run_id 幂等**（回调可被重投）
+- 用量查询：`GET /api/v1/usage/me`（凭据从认证主体推导，不接受 id 参数）、
+  `GET /api/v1/usage`（ADMIN，含零用量的凭据）
+- 完成回调 `POST /api/v1/internal/runs/{runId}/complete`，用 `X-Internal-Token` 校验
+
+**Java 网关 · 运行记录（C2 的存储部分）**
+
+- `audit_run` 表：提交时落 `queued`，完成回调补 token / 统计 / 停止原因
+- `POST /api/v1/audits` 会从上游 202 响应里取出 `run_id` 回填，
+  使"网关的提交记录"与"上游的运行"对得上
+- 网关把凭据 id 通过 `X-Parallax-Credential-Id` 传给上游，供其回调时回报归属
+
+**数据库与部署**
+
+- PostgreSQL + Flyway 迁移（`V1__identity_and_quota.sql`、`V2__audit_run.sql`）；
+  SQL 刻意写成 PostgreSQL 与 H2 都能执行的子集，使迁移脚本在**每次测试**中都被执行
+- `docker-compose.yml` 新增 `postgres` 服务（与 `gateway` 同 profile）与健康检查
+- Redis 同时挂在 `gateway` profile 下——"多实例共享同一配额"正是它在这里的职责
+
+**测试**
+
+- 默认测试档用 **H2（PostgreSQL 兼容模式）**：让没有 Docker 的机器也能跑完整套测试
+- 明确记录代价：**H2 不能替代真实 PostgreSQL 做验证**，
+  真实 PG + Redis 由 `gateway-it`（Testcontainers）负责，CI 上必跑
+- 新增 13 项身份与配额端到端测试，其中一条**逐列全表扫描**断言
+  `api_credential` 里查不到任何明文 key（只查一列会漏掉将来新增的字段）
+
 ### 计划中
 - 跨文件组合型缺陷的评测语料（检验聚合层的证据装配能力）
 - Redis / Qdrant 适配器（当前为内存实现）
 - 把有效独立通道数 K\\* 作为运行时指标对外暴露
+- 跨进程任务队列与崩溃恢复（见 `说明材料/任务总表.md` 第 7 节的取舍理由）
 
 ## [0.1.0] - 2026-10-15
 

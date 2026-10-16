@@ -1,6 +1,11 @@
 package dev.parallax.gateway.common;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Map;
 import java.util.stream.Collectors;
+
+import dev.parallax.gateway.identity.QuotaService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +30,22 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<Result<Void>> handleApi(ApiException ex) {
         return ResponseEntity.status(ex.getStatus()).body(Result.fail(ex.getMessage()));
+    }
+
+    /**
+     * 额度用尽要带结构化字段，调用方才知道"用完了多少、上限多少、什么时候恢复"。
+     * 只回一句"额度已用尽"会让人无从判断该等 1 分钟还是 1 个月。
+     */
+    @ExceptionHandler(QuotaService.QuotaApiException.class)
+    public ResponseEntity<Map<String, Object>> handleQuota(QuotaService.QuotaApiException ex) {
+        QuotaService.Decision decision = ex.getDecision();
+        Map<String, Object> body = decision.asBody();
+        ResponseEntity.BodyBuilder builder = ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS);
+        if (decision.resetsAt() != null) {
+            long seconds = Math.max(1, Duration.between(Instant.now(), decision.resetsAt()).toSeconds());
+            builder = builder.header("Retry-After", Long.toString(seconds));
+        }
+        return builder.body(body);
     }
 
     /** 方法级鉴权失败必须映射为 403，否则会被兜底处理器吞成 500。 */
