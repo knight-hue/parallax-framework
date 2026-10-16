@@ -1,0 +1,67 @@
+@import 'tailwindcss';
+
+/* 深色为主的控制台配色。
+   视觉取向上刻意偏"工程仪表盘"而不是营销页：这个界面是用来盯着一轮盲读
+   几分钟内发生的几十个事件的，对比度和信息密度比好看更重要。 */
+@theme {
+  --color-canvas: #0b0f14;
+  --color-surface: #121821;
+  --color-surface-2: #18202b;
+  --color-border: #24303f;
+  --color-muted: #8296ad;
+  --color-fg: #e6edf5;
+
+  --color-accent: #4c9aff;
+  --color-ok: #3fb950;
+  --color-warn: #d29922;
+  --color-danger: #f85149;
+  --color-purple: #a371f7;
+}
+
+html,
+body {
+  background: var(--color-canvas);
+  color: var(--color-fg);
+}
+
+body {
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+code,
+pre,
+.mono {
+  font-family: ui-monospace, 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+}
+
+/* 事件流是滚动容器，滚动条也做成暗色，避免一条亮线破坏整体观感 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #33445a;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.live-dot {
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}

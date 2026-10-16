@@ -1,0 +1,116 @@
+## Parallax · 一键部署
+##
+## 用法：
+##   docker compose --env-file backend/.env up -d          # 只起核心服务
+##   docker compose --env-file backend/.env --profile infra up -d   # 连带 Redis / Qdrant
+##   docker compose down -v
+##
+## 为什么用 --env-file 显式指定：模型的 API key 只放在 backend/.env（已被 .gitignore 排除），
+## 不在仓库里重复存一份，避免同一个密钥出现在两处、轮换时漏改一个。
+## 所有变量都带默认值，因此即使没有 .env 也能起容器（只是无法真正调用模型）。
+
+name: parallax
+
+services:
+  api:
+    build:
+      context: ./backend
+    image: parallax-api:0.1.0
+    container_name: parallax-api
+    environment:
+      PARALLAX_LLM_API_KEY: ${PARALLAX_LLM_API_KEY:-}
+      PARALLAX_LLM_BASE_URL: ${PARALLAX_LLM_BASE_URL:-https://api.deepseek.com/v1}
+      PARALLAX_LLM_MODEL: ${PARALLAX_LLM_MODEL:-deepseek-chat}
+      PARALLAX_N_READERS: ${PARALLAX_N_READERS:-3}
+      PARALLAX_REDUNDANCY: ${PARALLAX_REDUNDANCY:-2}
+      PARALLAX_SUPPORT_THRESHOLD: ${PARALLAX_SUPPORT_THRESHOLD:-2}
+      PARALLAX_MAX_ROUNDS: ${PARALLAX_MAX_ROUNDS:-3}
+      PARALLAX_READER_VISIBILITY: ${PARALLAX_READER_VISIBILITY:-blind}
+      PARALLAX_MAX_EVIDENCE_PER_CALL: ${PARALLAX_MAX_EVIDENCE_PER_CALL:-6}
+      PARALLAX_RUNS_DIR: /data/runs
+    ports:
+      - "${PARALLAX_API_PORT:-8000}:8000"
+    volumes:
+      - runs:/data/runs
+      # 待审查的代码以**只读**方式挂进来。容器只需要读代码，
+      # 给写权限没有任何必要，反而扩大了被审查代码的影响面。
+      # 提交任务时 repo_path 必须是**容器内可见**的路径，即 /workspace 之下，
+      # 例如 /workspace/myrepo（对应宿主机上的 ${PARALLAX_AUDIT_HOST_PATH}/myrepo）。
+      - ${PARALLAX_AUDIT_HOST_PATH:-./}:/workspace:ro
+    restart: unless-stopped
+    init: true
+
+  # 控制台。默认用宿主机的 8000 端口直连 api——浏览器的 localhost 就是宿主机，
+  # 所以不需要额外的反向代理。若改成经 Java 网关暴露，用 build arg 指定网关地址即可。
+  web:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_PARALLAX_API: ${PARALLAX_PUBLIC_API:-http://localhost:8000}
+    image: parallax-web:0.1.0
+    container_name: parallax-web
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "${PARALLAX_WEB_PORT:-3000}:3000"
+    restart: unless-stopped
+    init: true
+
+  # Java 薄网关：鉴权 / 限流 / 熔断 / 白名单转发。
+  # 放在 profile 后面——默认 `docker compose up` 只起 api + web，不必等 Java 构建。
+  # 需要统一入口时：docker compose --profile gateway up -d
+  gateway:
+    build:
+      context: ./gateway
+    image: parallax-gateway:0.1.0
+    container_name: parallax-gateway
+    profiles: ["gateway"]
+    environment:
+      PARALLAX_UPSTREAM_URL: http://api:8000
+      PARALLAX_GATEWAY_REQUIRE_AUTH: ${PARALLAX_GATEWAY_REQUIRE_AUTH:-false}
+      PARALLAX_JWT_SECRET: ${PARALLAX_JWT_SECRET:-}
+      PARALLAX_GATEWAY_ADMIN_SECRET: ${PARALLAX_GATEWAY_ADMIN_SECRET:-}
+      PARALLAX_GATEWAY_INTERNAL_TOKEN: ${PARALLAX_GATEWAY_INTERNAL_TOKEN:-}
+    ports:
+      - "${PARALLAX_GATEWAY_PORT:-8080}:8080"
+    depends_on:
+      - api
+    restart: unless-stopped
+    init: true
+
+  # Redis / Qdrant 目前是**可选**的：核心机制用内存实现即可完整运行。  # 放在 profile 后面，保证 `docker compose up` 开箱即用、不强迫使用者先懂基础设施。
+  # 接入向量检索与跨进程队列时再打开。
+  redis:
+    image: redis:7-alpine
+    container_name: parallax-redis
+    profiles: ["infra"]
+    command: ["redis-server", "--appendonly", "yes", "--save", ""]
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: parallax-qdrant
+    profiles: ["infra"]
+    ports:
+      - "${PARALLAX_QDRANT_PORT:-6333}:6333"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  runs:
+  redis-data:
+  qdrant-data:

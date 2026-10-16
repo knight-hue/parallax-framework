@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 环境变量（含密钥，永不入库）
+.env
+.env.local
+*.env.local
+
+# 运行产物
+runs/
+*.log
+
+# Node / 前端
+node_modules/
+.next/
+out/
+dist/
+
+# 本地构建工具链（便携 node / jdk / maven，约 450 MB）
+# ⚠️ 绝不能入库：它只是为了让本机在没装全局工具时也能构建，
+# 不是项目产物。CI 里由 setup-python / setup-java / setup-node 自行提供。
+.toolchain/
+
+# Java
+target/
+*.class
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,14 @@
+# 构建上下文排除项：这些一旦进了镜像就只是负担。
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+runs/
+.env
+.env.*
+!.env.example
+tests/
