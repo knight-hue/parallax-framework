@@ -169,15 +169,37 @@ class PostgresPersistenceIT {
         assertThat(response.getStatusCode()).as("%s", response.getBody()).isEqualTo(HttpStatus.OK);
     }
 
-    /** 绕开应用连接池与 Hibernate 的直接读：证明数据在库里。 */
-    private <T> T readDirectly(String sql, Class<T> type) throws Exception {
-        try (Connection connection = DriverManager.getConnection(
-                        POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+    /**
+     * 绕开应用连接池与 Hibernate 的直接读：证明数据在库里。
+     *
+     * ⚠️ 只提供 `long` 与 `String` 两个变体，不写通用的 `<T> read(Class<T>)`。
+     * 起因是一个真实报错：PostgreSQL 的 `count(*)` 返回 **int8**，而
+     * `ResultSet.getObject(1, Integer.class)` 在 PG 驱动上直接抛
+     * "conversion to class java.lang.Integer from int8 not supported"。
+     * 泛型化的辅助方法会诱导调用方随手写 `Integer.class`，而这个错误
+     * 只有真库才会暴露——H2 与"想当然"都不会。
+     */
+    private long readLongDirectly(String sql) throws Exception {
+        try (Connection connection = openDirectConnection();
                 Statement statement = connection.createStatement();
                 ResultSet resultSet = statement.executeQuery(sql)) {
             assertThat(resultSet.next()).as("查询无结果：%s", sql).isTrue();
-            return resultSet.getObject(1, type);
+            return resultSet.getLong(1);
         }
+    }
+
+    private String readStringDirectly(String sql) throws Exception {
+        try (Connection connection = openDirectConnection();
+                Statement statement = connection.createStatement();
+                ResultSet resultSet = statement.executeQuery(sql)) {
+            assertThat(resultSet.next()).as("查询无结果：%s", sql).isTrue();
+            return resultSet.getString(1);
+        }
+    }
+
+    private Connection openDirectConnection() throws Exception {
+        return DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
     }
 
     // ---- 迁移与表结构 ----
@@ -186,13 +208,13 @@ class PostgresPersistenceIT {
     void flywayMigrationsApplyCleanlyOnRealPostgres() throws Exception {
         for (String table : List.of(
                 "quota_policy", "api_credential", "usage_ledger", "audit_run", "audit_event")) {
-            Integer count = readDirectly(
-                    "SELECT count(*) FROM information_schema.tables WHERE table_name = '" + table + "'",
-                    Integer.class);
-            assertThat(count).as("真实 PostgreSQL 上缺少表 %s", table).isEqualTo(1);
+            long count = readLongDirectly(
+                    "SELECT count(*) FROM information_schema.tables WHERE table_name = '" + table + "'");
+            assertThat(count).as("真实 PostgreSQL 上缺少表 %s", table).isEqualTo(1L);
         }
-        Integer applied = readDirectly("SELECT count(*) FROM flyway_schema_history", Integer.class);
-        assertThat(applied).as("三个迁移都应当已应用").isGreaterThanOrEqualTo(3);
+        assertThat(readLongDirectly("SELECT count(*) FROM flyway_schema_history"))
+                .as("三个迁移都应当已应用")
+                .isGreaterThanOrEqualTo(3L);
     }
 
     // ---- 持久化 ----
@@ -206,16 +228,16 @@ class PostgresPersistenceIT {
         complete(runId, credentialId, 900, 100);
 
         // 独立连接读到 => 数据确实在数据库里，不是 Hibernate 一级缓存
-        assertThat(readDirectly(
-                        "SELECT count(*) FROM api_credential WHERE name = 'it-persistence'", Integer.class))
-                .isEqualTo(1);
-        assertThat(readDirectly(
-                        "SELECT total_tokens FROM audit_run WHERE run_id = '" + runId + "'", Long.class))
-                .as("真实 PG 上 total_tokens 必须是 long 而不是字符串/数值对象")
+        assertThat(readLongDirectly(
+                        "SELECT count(*) FROM api_credential WHERE name = 'it-persistence'"))
+                .isEqualTo(1L);
+        assertThat(readLongDirectly(
+                        "SELECT total_tokens FROM audit_run WHERE run_id = '" + runId + "'"))
+                .as("真实 PG 上 total_tokens 必须是整数而不是字符串或数值对象")
                 .isEqualTo(1_000L);
-        assertThat(readDirectly(
-                        "SELECT sum(total_tokens) FROM usage_ledger WHERE credential_id = '" + credentialId + "'",
-                        Long.class))
+        assertThat(readLongDirectly(
+                        "SELECT sum(total_tokens) FROM usage_ledger WHERE credential_id = '"
+                                + credentialId + "'"))
                 .isEqualTo(1_000L);
     }
 
@@ -265,8 +287,7 @@ class PostgresPersistenceIT {
     void plaintextKeyIsAbsentFromTheRealDatabase() throws Exception {
         String plaintext = createKey("it-forensics");
 
-        try (Connection connection = DriverManager.getConnection(
-                        POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        try (Connection connection = openDirectConnection();
                 Statement statement = connection.createStatement();
                 ResultSet resultSet = statement.executeQuery("SELECT * FROM api_credential")) {
             while (resultSet.next()) {
@@ -278,8 +299,8 @@ class PostgresPersistenceIT {
                 }
             }
         }
-        assertThat(readDirectly(
-                        "SELECT key_hash FROM api_credential WHERE name = 'it-forensics'", String.class))
+        assertThat(readStringDirectly(
+                        "SELECT key_hash FROM api_credential WHERE name = 'it-forensics'"))
                 .isEqualTo(ApiKeyService.hash(plaintext));
     }
 
