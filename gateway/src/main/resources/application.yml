@@ -4,6 +4,25 @@ server:
 spring:
   application:
     name: parallax-gateway
+  datasource:
+    # 平台能力（身份/配额/账本/运行记录）的存储。
+    # 默认指向本机 PostgreSQL，compose 档会把它指向 postgres 服务。
+    url: ${PARALLAX_DB_URL:jdbc:postgresql://127.0.0.1:5432/parallax}
+    username: ${PARALLAX_DB_USER:parallax}
+    password: ${PARALLAX_DB_PASSWORD:parallax}
+  jpa:
+    # 表结构由 Flyway 拥有。设为 validate 而不是 update：
+    # update 会让"迁移没跑"这件事在开发机上永远发现不了，直到上生产。
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
   mvc:
     # ⚠️ 关键配置：一次审查任务的 SSE 流会持续几分钟，
     # 而 Tomcat 的异步请求默认超时是 30 秒——不显式放宽的话，
@@ -19,6 +38,13 @@ parallax:
     require-auth: ${PARALLAX_GATEWAY_REQUIRE_AUTH:false}
     admin-secret: ${PARALLAX_GATEWAY_ADMIN_SECRET:}
     internal-token: ${PARALLAX_GATEWAY_INTERNAL_TOKEN:}
+  identity:
+    # 默认关闭：开启后提交审查需要 API Key 并计入额度。
+    # 演示用 compose 档显式打开；生产部署必须打开。
+    enabled: ${PARALLAX_IDENTITY_ENABLED:false}
+    header-name: ${PARALLAX_IDENTITY_HEADER:X-API-Key}
+    key-prefix: ${PARALLAX_IDENTITY_KEY_PREFIX:plx_}
+    touch-interval-seconds: ${PARALLAX_IDENTITY_TOUCH_INTERVAL_SECONDS:60}
   jwt:
     secret: ${PARALLAX_JWT_SECRET:}
     access-ttl-minutes: ${PARALLAX_JWT_ACCESS_TTL_MINUTES:720}

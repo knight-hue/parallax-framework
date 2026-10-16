@@ -11,6 +11,7 @@ public class ParallaxProperties {
     private final Gateway gateway = new Gateway();
     private final Jwt jwt = new Jwt();
     private final Ratelimit ratelimit = new Ratelimit();
+    private final Identity identity = new Identity();
 
     public Gateway getGateway() {
         return gateway;
@@ -22,6 +23,57 @@ public class ParallaxProperties {
 
     public Ratelimit getRatelimit() {
         return ratelimit;
+    }
+
+    public Identity getIdentity() {
+        return identity;
+    }
+
+    /**
+     * 身份与配额。
+     *
+     * 默认**关闭**：开启后 `POST /api/v1/audits` 需要 API Key 并计入额度，
+     * 会让"本机开箱跑一遍"多出建凭据这一步。演示用 compose 档会显式打开它。
+     */
+    public static class Identity {
+        private boolean enabled;
+        private String headerName = "X-API-Key";
+        /** API Key 前缀。留可见前缀是为了让泄漏能被内容扫描发现。 */
+        private String keyPrefix = "plx_";
+        /** 凭据 `last_used_at` 的刷新间隔下限，避免每次校验都写库。 */
+        private int touchIntervalSeconds = 60;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getHeaderName() {
+            return headerName;
+        }
+
+        public void setHeaderName(String headerName) {
+            this.headerName = headerName;
+        }
+
+        public String getKeyPrefix() {
+            return keyPrefix;
+        }
+
+        public void setKeyPrefix(String keyPrefix) {
+            this.keyPrefix = keyPrefix;
+        }
+
+        public int getTouchIntervalSeconds() {
+            return touchIntervalSeconds;
+        }
+
+        public void setTouchIntervalSeconds(int touchIntervalSeconds) {
+            this.touchIntervalSeconds = touchIntervalSeconds;
+        }
     }
 
     public static class Gateway {

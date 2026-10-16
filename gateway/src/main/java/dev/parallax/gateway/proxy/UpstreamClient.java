@@ -12,6 +12,7 @@ import java.util.Map;
 import dev.parallax.gateway.common.ApiException;
 import dev.parallax.gateway.common.TraceFilter;
 import dev.parallax.gateway.config.ParallaxProperties;
+import dev.parallax.gateway.proxy.CredentialHeaders;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,6 +87,12 @@ public class UpstreamClient {
         String internalToken = props.getGateway().getInternalToken();
         if (internalToken != null && !internalToken.isBlank()) {
             builder.header("X-Internal-Token", internalToken);
+        }
+        // 把调用方身份带给上游，这样上游的完成回调能说明"这次运行属于谁"。
+        // 用请求头而不是环境变量：归属是**每次请求**的属性，不是部署的属性。
+        String credentialId = headers.get(CredentialHeaders.CREDENTIAL_ID);
+        if (credentialId != null && !credentialId.isBlank()) {
+            builder.header(CredentialHeaders.CREDENTIAL_ID, credentialId);
         }
         // SSE 断线重连要靠这个头补发缺口事件，丢了它前端就会静默漏事件
         String lastEventId = headers.get("Last-Event-ID");

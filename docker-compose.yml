@@ -28,6 +28,12 @@ services:
       PARALLAX_READER_VISIBILITY: ${PARALLAX_READER_VISIBILITY:-blind}
       PARALLAX_MAX_EVIDENCE_PER_CALL: ${PARALLAX_MAX_EVIDENCE_PER_CALL:-6}
       PARALLAX_RUNS_DIR: /data/runs
+      # 完成回调：一次审查结束后把 token 用量回报给网关。
+      # **默认留空 = 不回调**——脱离网关单独跑 api 时那个地址根本不存在。
+      # 走 compose 的 gateway profile 时由 .env 显式打开。
+      # 回调失败只记 WARN，绝不让一次成功的审查因此变成失败。
+      PARALLAX_CALLBACK_URL: ${PARALLAX_CALLBACK_URL:-}
+      PARALLAX_CALLBACK_TOKEN: ${PARALLAX_GATEWAY_INTERNAL_TOKEN:-}
     ports:
       - "${PARALLAX_API_PORT:-8000}:8000"
     volumes:
@@ -57,7 +63,7 @@ services:
     restart: unless-stopped
     init: true
 
-  # Java 薄网关：鉴权 / 限流 / 熔断 / 白名单转发。
+  # Java 网关：鉴权 / 身份配额 / 运行记录 / 限流 / 熔断 / 白名单转发。
   # 放在 profile 后面——默认 `docker compose up` 只起 api + web，不必等 Java 构建。
   # 需要统一入口时：docker compose --profile gateway up -d
   gateway:
@@ -72,19 +78,54 @@ services:
       PARALLAX_JWT_SECRET: ${PARALLAX_JWT_SECRET:-}
       PARALLAX_GATEWAY_ADMIN_SECRET: ${PARALLAX_GATEWAY_ADMIN_SECRET:-}
       PARALLAX_GATEWAY_INTERNAL_TOKEN: ${PARALLAX_GATEWAY_INTERNAL_TOKEN:-}
+      # 身份与配额：演示档默认**打开**，因为它是网关这一层存在的理由。
+      # 打开后提交审查需要 API Key（先调 POST /api/v1/auth/token 拿 JWT 再建 key）。
+      PARALLAX_IDENTITY_ENABLED: ${PARALLAX_IDENTITY_ENABLED:-true}
+      PARALLAX_DB_URL: jdbc:postgresql://postgres:5432/${PARALLAX_DB_NAME:-parallax}
+      PARALLAX_DB_USER: ${PARALLAX_DB_USER:-parallax}
+      PARALLAX_DB_PASSWORD: ${PARALLAX_DB_PASSWORD:-parallax}
+      # 限流后端。Redis 不可用时网关会自动降级回内存桶，服务不受影响。
+      PARALLAX_RATELIMIT_REDIS_URL: redis://redis:6379
     ports:
       - "${PARALLAX_GATEWAY_PORT:-8080}:8080"
     depends_on:
-      - api
+      api:
+        condition: service_started
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     init: true
 
-  # Redis / Qdrant 目前是**可选**的：核心机制用内存实现即可完整运行。  # 放在 profile 后面，保证 `docker compose up` 开箱即用、不强迫使用者先懂基础设施。
-  # 接入向量检索与跨进程队列时再打开。
+  # 平台能力的存储：身份、配额、用量账本、运行记录。
+  # 与网关同属 gateway profile——网关没有它就起不来，把两者拆到不同 profile
+  # 只会制造"起了网关但没有库"这种必然报错的组合。
+  postgres:
+    image: postgres:17-alpine
+    container_name: parallax-postgres
+    profiles: ["gateway"]
+    environment:
+      POSTGRES_DB: ${PARALLAX_DB_NAME:-parallax}
+      POSTGRES_USER: ${PARALLAX_DB_USER:-parallax}
+      POSTGRES_PASSWORD: ${PARALLAX_DB_PASSWORD:-parallax}
+    ports:
+      - "${PARALLAX_DB_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      # 网关启动就跑 Flyway 迁移；库还没就绪就开跑会直接启动失败。
+      test: ["CMD-SHELL", "pg_isready -U ${PARALLAX_DB_USER:-parallax} -d ${PARALLAX_DB_NAME:-parallax}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # Redis：网关的分布式限流后端。同时列在 gateway profile 下，
+  # 因为"网关多实例共享同一配额"正是 Redis 在这里的唯一职责。
+  # Redis 挂掉时网关会自动降级回内存桶，服务不受影响。
   redis:
     image: redis:7-alpine
     container_name: parallax-redis
-    profiles: ["infra"]
+    profiles: ["infra", "gateway"]
     command: ["redis-server", "--appendonly", "yes", "--save", ""]
     volumes:
       - redis-data:/data
@@ -114,3 +155,4 @@ volumes:
   runs:
   redis-data:
   qdrant-data:
+  postgres-data:

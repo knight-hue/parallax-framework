@@ -1,0 +1,33 @@
+# 默认测试档的数据源。
+#
+# 为什么用 H2 而不是 Testcontainers PostgreSQL：
+# 贡献者机器上不一定有 Docker（本项目的开发机就没有），
+# 如果整套测试都要求真实 PG，本地就只能跑单元测试，集成测试会长期处于"CI 才知道"的状态。
+#
+# 代价必须说清楚：**H2 不能替代真实 PostgreSQL 做验证**。
+# 它验证的是"迁移脚本能被解析、JPA 映射与表结构一致、业务逻辑正确"，
+# 而 PG 特有的行为（并发、隔离级别、类型边界）一概没测到。
+# 真实 PG 由 gateway-it 档（Testcontainers，见 *PostgresIT）负责，CI 上必跑。
+spring:
+  datasource:
+    # MODE=PostgreSQL 让 H2 接受同一套迁移 SQL，而不是维护两份 DDL。
+    # 库名带 random.uuid：不同测试类会用不同的 Spring 上下文，
+    # 若共用同一个内存库名，第二个上下文的 Flyway 会因"表已存在"而启动失败。
+    url: jdbc:h2:mem:parallax-${random.uuid};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      # H2 与 PG 对某些类型名的大小写处理不同，validate 在 H2 上会误报；
+      # 表结构的权威定义是 Flyway 迁移，这里不重复校验。
+      ddl-auto: none
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+parallax:
+  identity:
+    enabled: true
+  gateway:
+    internal-token: test-internal-token
