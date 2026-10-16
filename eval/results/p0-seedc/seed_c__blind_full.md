@@ -1,0 +1,437 @@
+# Parallax 运行报告 `612b9e9e9d75`
+
+**审查目标**：审查这个代码仓库，找出其中真实存在的缺陷。只报告你能引用具体代码作为依据的问题。
+
+## 结论概览
+
+| 结论 | 条数 | 含义 |
+| --- | ---: | --- |
+| 高置信 | 107 | >= 2 个独立 Agent 交叉验证 |
+| 待验证 | 55 | 单一来源孤证 |
+| 争议 | 14 | 存在极性相反的主张，需外部裁决 |
+
+## 运行审计
+
+- 插件：`code_audit`｜轮次：3｜停止原因：`max_rounds_reached`
+- 参与 Reader：18 个（每轮全新身份）
+- 账本条目：658
+
+| 轮次 | Reader 数 | 本轮新主体 | 证据覆盖 | 矩阵填充 |
+| ---: | ---: | ---: | ---: | ---: |
+| 0 | 6 | 133 | 100% | 27% |
+| 1 | 6 | 24 | 100% | 29% |
+| 2 | 6 | 19 | 100% | 35% |
+
+## 高置信结论
+
+- **[boundary/medium]** [boundary] analytics/window_alpha.py:47-51 WindowAlpha.percentile() 未校验 ratio 范围，越界索引会抛 IndexError（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r0-4｜置信度 0.5
+  - 源：`analytics/window_alpha.py:47-51`
+  - 依据：index = int(round(ratio * (len(ordered) - 1))) 直接用作列表下标。当 ratio > 1（如 1.5）或 ratio < 0（如 -0.1）时，index 会超出 [0, len-1] 范围，ordered[index] 抛出 IndexError。ratio 是外部传入参数，未做任何范围校验。
+- **[logic/high]** [logic] analytics/window_alpha.py:24-27 WindowAlpha 淘汰样本时未同步 _total，导致均值错误（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-3, reader-r0-4, reader-r0-5｜置信度 0.5
+  - 源：`analytics/window_alpha.py:24-27`
+  - 依据：deque 设置了 maxlen=size，append 超出容量时会自动淘汰最旧样本，但 _total 只做累加、从不减去被淘汰的值。因此一旦窗口写满并继续 add，mean() 返回的 _total / len(_values) 会包含已被淘汰样本的贡献，均值随写入次数单调偏大，且与窗口内实际样本不符。触发条件：add 次数超过 size。
+- **[boundary/medium]** [boundary] analytics/window_beta.py:47-51 WindowBeta.percentile() 未校验 ratio 范围，越界索引会抛 IndexError（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r0-4｜置信度 0.5
+  - 源：`analytics/window_beta.py:47-51`
+  - 依据：ratio 超出 [0,1] 时 index 越界，ordered[index] 抛 IndexError，未做参数校验。
+- **[logic/high]** [logic] analytics/window_beta.py:24-27 WindowBeta 淘汰样本时未同步 _total，导致均值错误（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-3, reader-r0-4, reader-r0-5｜置信度 0.5
+  - 源：`analytics/window_beta.py:24-27`
+  - 依据：与 WindowAlpha 相同：deque(maxlen=size) 自动淘汰最旧样本，但 _total 只累加不扣减，窗口写满后 mean() 会因残留的已淘汰样本而偏大。触发条件：add 次数超过 size。
+- **[boundary/medium]** [boundary] analytics/window_delta.py:47-51 WindowDelta.percentile() 未校验 ratio 范围，越界索引会抛 IndexError（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r0-4｜置信度 0.5
+  - 源：`analytics/window_delta.py:47-51`
+  - 依据：percentile() 直接用 int(round(ratio * (len(ordered) - 1))) 作为索引，未对 ratio 做 [0,1] 范围校验。当 ratio > 1 或 ratio < 0 时索引会超出 ordered 的有效范围，抛出 IndexError 而非返回合理值或明确报错。触发条件：传入 ratio=1.5 或 ratio=-0.1 等越界值。
+- **[logic/high]** [logic] analytics/window_delta.py:24-27 WindowDelta 淘汰样本时未同步 _total，导致均值错误（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-3, reader-r0-4, reader-r0-5｜置信度 0.5
+  - 源：`analytics/window_delta.py:24-27`
+  - 依据：deque 设置了 maxlen=size，append 超出容量时会自动淘汰最旧样本，但 _total 只做累加、从不减去被淘汰的值。因此一旦窗口写满并继续 add，mean() 返回的 _total / len(_values) 会持续偏大，窗口越滚越离谱。触发条件：add 次数超过 size。
+- **[boundary/medium]** [boundary] analytics/window_epsilon.py:47-51 WindowEpsilon.percentile 未对 ratio 做边界约束，越界索引会抛 IndexError（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r0-4｜置信度 0.5
+  - 源：`analytics/window_epsilon.py:47-51`
+  - 依据：index 由 ratio 直接计算，未做 clamp 或校验；ratio 越界时 ordered[index] 抛 IndexError。触发条件：传入 ratio<0 或 ratio>1 且窗口非空。
+- **[logic/high]** [logic] analytics/window_epsilon.py:24-27 WindowEpsilon 淘汰样本时未同步 _total，导致均值错误（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-3, reader-r0-4, reader-r0-5｜置信度 0.5
+  - 源：`analytics/window_epsilon.py:24-27`
+  - 依据：与 WindowDelta 相同：deque(maxlen=size) 自动淘汰旧样本，但 _total 只累加不扣减，mean() 会随写入次数增长而失真。触发条件：add 次数超过 size。
+- **[boundary/low]** [boundary] analytics/window_eta.py:47-51 WindowEta.percentile() 未校验 ratio 范围，越界索引会抛 IndexError（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r0-4｜置信度 0.5
+  - 源：`analytics/window_eta.py:47-51`
+  - 依据：ratio 未做 [0,1] 校验。当 ratio > 1 时 index = round(ratio*(n-1)) 可能 >= n，ordered[index] 抛 IndexError；ratio 为负时 Python 负索引会静默返回错误元素而非报错。触发条件：调用方传入越界 ratio。
+- **[logic/high]** [logic] analytics/window_eta.py:24-27 WindowEta 淘汰样本时未同步 _total，导致均值错误（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-3, reader-r0-4, reader-r0-5｜置信度 0.5
+  - 源：`analytics/window_eta.py:24-27`
+  - 依据：deque 设置了 maxlen=size，append 超出容量时会自动丢弃最旧样本，但 _total 只增不减。因此当样本数超过 size 后，mean() 用累计总和除以当前窗口长度，结果被已淘汰样本污染，均值偏大。触发条件：add() 调用次数超过 size。
+- **[boundary/medium]** [boundary] analytics/window_gamma.py:47-51 WindowGamma.percentile 未对 ratio 做边界约束，越界索引会抛 IndexError（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r0-4｜置信度 0.5
+  - 源：`analytics/window_gamma.py:47-51`
+  - 依据：index 由 ratio 直接计算，未做 clamp 或校验；ratio 越界时 ordered[index] 抛 IndexError。触发条件：传入 ratio<0 或 ratio>1 且窗口非空。
+- **[logic/high]** [logic] analytics/window_gamma.py:24-27 WindowGamma 淘汰样本时未同步 _total，导致均值错误（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-3, reader-r0-4, reader-r0-5｜置信度 0.5
+  - 源：`analytics/window_gamma.py:24-27`
+  - 依据：deque 设置了 maxlen=size，append 超出容量时会自动淘汰最旧样本，但 _total 只增不减。因此当样本数超过 size 后，mean() 用 _total / len(self._values) 计算，分子包含了已被淘汰样本的累加值，分母只是当前窗口长度，均值会随写入量持续偏大。触发条件：add() 调用次数超过 size。
+- **[boundary/medium]** [boundary] analytics/window_theta.py:47-51 WindowTheta.percentile() 未校验 ratio 范围，越界索引会抛 IndexError（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r0-4｜置信度 0.5
+  - 源：`analytics/window_theta.py:47-51`
+  - 依据：ratio 越界时 index 超出列表范围，ordered[index] 抛 IndexError。
+- **[logic/high]** [logic] analytics/window_theta.py:24-27 WindowTheta._total 在 deque 淘汰旧样本时未同步扣减，导致 mean() 计算错误（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-3, reader-r0-4, reader-r0-5｜置信度 0.5
+  - 源：`analytics/window_theta.py:24-27`
+  - 依据：deque(maxlen=size) 淘汰旧样本时 _total 未扣减，窗口满后 mean() 持续偏大。
+- **[boundary/medium]** [boundary] analytics/window_zeta.py:47-51 WindowZeta.percentile() 未校验 ratio 范围，越界索引会抛 IndexError（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-3, reader-r0-4｜置信度 0.5
+  - 源：`analytics/window_zeta.py:47-51`
+  - 依据：percentile() 未校验 ratio 范围，越界值导致索引越界并抛 IndexError。触发条件：传入 ratio 超出 [0,1]。
+- **[logic/high]** [logic] analytics/window_zeta.py:24-27 WindowZeta._total 在 deque 淘汰旧样本时未同步扣减，导致 mean() 计算错误（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-3, reader-r0-4, reader-r0-5｜置信度 0.5
+  - 源：`analytics/window_zeta.py:24-27`
+  - 依据：deque(maxlen=size) 淘汰旧样本时 _total 未扣减，mean() 用 _total / len(self._values) 计算，窗口满后均值持续偏大。触发条件：样本数超过 size 后调用 mean()。
+- **[logic/high]** [logic] persistence/journal_alpha.py:51-58 compact() 只重写磁盘文件，未同步内存中的 _records（确认存在缺陷）
+  - 独立来源 9 个：reader-r0-0, reader-r0-4, reader-r0-5, reader-r1-1, reader-r1-2, reader-r1-3, reader-r2-0, reader-r2-4, reader-r2-5｜置信度 0.5
+  - 源：`persistence/journal_alpha.py:51-58`
+  - 依据：compact() 计算 surplus 后只把 kept 写回磁盘，但没有更新 self._records。调用 compact() 之后，内存中的 _records 仍保留全部旧记录，导致 replay()/count() 返回被压缩掉的数据，与磁盘内容不一致；后续 append() 会基于未压缩的 _records 重写文件，把已丢弃的记录重新写回磁盘，压缩失效。
+- **[logic/high]** [logic] persistence/journal_beta.py:51-58 JournalBeta.compact() 未同步内存 _records，重放与磁盘不一致（确认存在缺陷）
+  - 独立来源 9 个：reader-r0-0, reader-r0-4, reader-r0-5, reader-r1-1, reader-r1-2, reader-r1-3, reader-r2-0, reader-r2-4, reader-r2-5｜置信度 0.5
+  - 源：`persistence/journal_beta.py:51-58`
+  - 依据：compact() 只把裁剪后的 kept 写入磁盘，却没有更新 self._records。触发条件：记录数超过 keep 后调用 compact()，磁盘上只剩 keep 条，但内存 _records 仍保留全部记录。此后 replay()/count() 返回被丢弃的记录，append() 又会用未裁剪的 _records 重写文件，把已丢弃的记录重新写回磁盘，导致内存与磁盘长期不一致。
+- **[logic/high]** [logic] persistence/journal_delta.py:47-53 JournalDelta.compact() 只重写磁盘，未同步内存 _records，导致内存与磁盘不一致（确认存在缺陷）
+  - 独立来源 9 个：reader-r0-0, reader-r0-4, reader-r0-5, reader-r1-1, reader-r1-2, reader-r1-3, reader-r2-0, reader-r2-4, reader-r2-5｜置信度 0.5
+  - 源：`persistence/journal_delta.py:47-53`
+  - 依据：compact() 计算 kept 后只调用 self.path.write_text(...)，没有把 self._records 更新为 kept。之后 replay()/count() 仍返回被压缩掉的旧记录，而 disk_count() 返回磁盘上的新数量，两者不一致；再次 append 时 _flush() 会把内存中的全部旧记录重新写回磁盘，使压缩失效。触发条件：len(_records) > keep 时调用 compact()。
+- **[logic/high]** [logic] persistence/journal_eta.py:51-58 compact() 只重写磁盘文件，未同步内存中的 _records（确认存在缺陷）
+  - 独立来源 9 个：reader-r0-0, reader-r0-4, reader-r0-5, reader-r1-1, reader-r1-2, reader-r1-3, reader-r2-0, reader-r2-4, reader-r2-5｜置信度 0.5
+  - 源：`persistence/journal_eta.py:51-58`
+  - 依据：与 journal_epsilon.py 相同：compact() 只写磁盘，不更新 self._records。压缩后 replay()/count() 仍返回被丢弃的记录，且后续 append() 触发的 _flush() 会把旧记录重新写回文件，导致压缩失效。
+- **[logic/high]** [logic] persistence/journal_gamma.py:51-58 JournalGamma.compact() 未同步内存 _records，重放与磁盘不一致（确认存在缺陷）
+  - 独立来源 9 个：reader-r0-0, reader-r0-4, reader-r0-5, reader-r1-1, reader-r1-2, reader-r1-3, reader-r2-0, reader-r2-4, reader-r2-5｜置信度 0.5
+  - 源：`persistence/journal_gamma.py:51-58`
+  - 依据：与 JournalAlpha 相同：compact() 只写磁盘不更新 self._records，导致 replay()/count() 与磁盘内容不一致，且后续 append() 的 _flush() 会把未裁剪的完整列表写回，撤销压缩效果。触发条件：记录数超过 keep 后调用 compact()。
+- **[logic/high]** [logic] persistence/journal_theta.py:47-53 JournalTheta.compact() 只重写磁盘文件，未同步内存 _records，导致内存与磁盘不一致（确认存在缺陷）
+  - 独立来源 9 个：reader-r0-0, reader-r0-4, reader-r0-5, reader-r1-1, reader-r1-2, reader-r1-3, reader-r2-0, reader-r2-4, reader-r2-5｜置信度 0.5
+  - 源：`persistence/journal_theta.py:47-53`
+  - 依据：compact() 计算 surplus 后把 kept 写入磁盘，但没有更新 self._records。之后 replay()/count() 仍返回压缩前的全部记录，而 disk_count() 返回压缩后的条数，二者不一致；再次 append() 时 _flush() 会把未压缩的完整 _records 写回磁盘，使压缩结果被撤销。触发条件：调用 compact() 后再调用 replay()/count()/append()。
+- **[logic/high]** [logic] persistence/journal_zeta.py:47-53 compact() 未同步内存中的 _records，导致内存与磁盘不一致（确认存在缺陷）
+  - 独立来源 9 个：reader-r0-0, reader-r0-4, reader-r0-5, reader-r1-1, reader-r1-2, reader-r1-3, reader-r2-0, reader-r2-4, reader-r2-5｜置信度 0.5
+  - 源：`persistence/journal_zeta.py:47-53`
+  - 依据：compact() 只把裁剪后的 kept 写回磁盘，却没有更新 self._records。触发条件：先 append 超过 keep 条记录，再调用 compact()。此时磁盘上只剩 keep 条，但 self._records 仍保留全部记录，replay()/count() 返回的数量与 disk_count() 不一致；后续 append() 会调用 _flush() 把内存中未裁剪的全部记录重新写回磁盘，使 compact() 的效果被完全撤销。
+- **[api_misuse/medium]** [api_misuse] resources/pool_alpha.py:61-67 close() 通过 factory 的 close 属性关闭资源，语义错误（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-5, reader-r1-1, reader-r1-5, reader-r2-0｜置信度 0.5
+  - 源：`resources/pool_alpha.py:61-67`
+  - 依据：close() 取 getattr(self._factory, 'close', None) 作为 closer，然后对每个空闲资源调用 closer(resource)。这里把工厂对象自身的 close 方法当作资源的关闭函数，语义完全错误：工厂的 close 通常用于关闭工厂本身，而非关闭某个资源实例；若工厂没有 close 属性则所有资源都不会被关闭，造成资源泄漏。正确做法是调用 resource.close() 或使用资源自身的关闭接口。触发条件：调用 close()。
+- **[concurrency/high]** [concurrency] resources/pool_alpha.py:47-50 PoolAlpha.release() 未校验资源归属，重复归还导致同一资源被多次借出（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-0, reader-r0-5, reader-r2-0｜置信度 0.5
+  - 源：`resources/pool_alpha.py:47-50`
+  - 依据：release() 无条件把资源追加到 _free 并 notify，既不检查该资源是否在 _in_use 中，也不从 _in_use 移除。重复调用 release() 会把同一对象多次放入 _free，后续 acquire() 可把同一资源同时借给多个调用者，破坏池的互斥语义。
+- **[resource_leak/medium]** [resource_leak] resources/pool_alpha.py:60-66 close() 只关闭空闲资源，已借出资源被泄漏且池仍可继续借出（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-4, reader-r2-1, reader-r2-5｜置信度 0.5
+  - 源：`resources/pool_alpha.py:60-66`
+  - 依据：close() 仅遍历 _free 调用 closer 并清空 _free，不处理 _in_use 中的资源，也不设置关闭标志。触发条件：在仍有资源被借出时调用 close()，这些资源永远不会被关闭（泄漏）；且 close() 之后 acquire() 仍会从 _free 新建或返回资源，池并未真正关闭。
+- **[api_misuse/medium]** [api_misuse] resources/pool_beta.py:61-67 close() 通过 factory 的 close 属性关闭资源，而非资源自身的 close（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-5, reader-r1-1, reader-r1-5, reader-r2-0｜置信度 0.5
+  - 源：`resources/pool_beta.py:61-67`
+  - 依据：与 pool_alpha.py 相同：close() 从工厂而非资源上取 close，导致资源无法被正确关闭。
+- **[concurrency/medium]** [concurrency] resources/pool_beta.py:33-36 acquire() 在持锁状态下调用用户工厂，可能死锁或长时间阻塞（确认存在缺陷）
+  - 独立来源 3 个：reader-r1-0, reader-r1-1, reader-r2-0｜置信度 0.5
+  - 源：`resources/pool_beta.py:33-36`
+  - 依据：与 pool_alpha.py 相同：工厂在持锁状态下被调用，存在死锁与阻塞风险。
+- **[concurrency/high]** [concurrency] resources/pool_beta.py:47-50 PoolBeta.release() 未校验资源归属，重复归还导致同一资源被多次借出（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-0, reader-r0-5, reader-r2-0｜置信度 0.5
+  - 源：`resources/pool_beta.py:47-50`
+  - 依据：release() 无条件把资源追加到 _free 并 notify，既不检查该资源是否在 _in_use 中，也不从 _in_use 移除。重复调用 release() 会把同一对象多次放入 _free，后续 acquire() 可把同一资源同时借给多个调用者，破坏池的互斥语义。
+- **[logic/low]** [logic] resources/pool_beta.py:31-36 使用 id(resource) 跟踪在用资源，id 复用会导致计数错误（确认存在缺陷）
+  - 独立来源 3 个：reader-r1-1, reader-r2-1, reader-r2-5｜置信度 0.5
+  - 源：`resources/pool_beta.py:31-36`
+  - 依据：_in_use 保存 id(resource)。当资源被释放并回收后，新创建的对象可能复用同一内存地址，使 id 相同；此时 _in_use.add(id(resource)) 无法区分不同资源，stats() 的 in_use 计数会偏小，且 release() 也不移除 id（本实现 release 根本不操作 _in_use），计数长期失真。触发条件：资源对象被回收后新建对象复用地址。
+- **[logic/high]** [logic] resources/pool_beta.py:47-50 release() 不校验资源归属，重复归还会使同一资源被多次借出（确认存在缺陷）
+  - 独立来源 5 个：reader-r0-4, reader-r1-1, reader-r1-5, reader-r2-1, reader-r2-5｜置信度 0.5
+  - 源：`resources/pool_beta.py:47-50`
+  - 依据：与 pool_alpha.py 相同：release() 不校验资源是否在用、不从 _in_use 移除，重复归还会让同一资源被多个调用方同时持有。
+- **[performance/medium]** [performance] resources/pool_beta.py:33-37 acquire() 在持锁状态下调用 factory()，可能阻塞整个池（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-0, reader-r0-4, reader-r0-5, reader-r2-5｜置信度 0.5
+  - 源：`resources/pool_beta.py:33-37`
+  - 依据：acquire() 在 with self._available 临界区内直接调用 self._factory()。触发条件：factory 创建资源耗时较长（如建立网络连接、打开文件）。此时锁被长时间持有，其他线程既无法 acquire 也无法 release，整个池被阻塞，超时等待的线程会误报 TimeoutError。
+- **[resource_leak/medium]** [resource_leak] resources/pool_beta.py:62-68 PoolBeta.close() 只关闭空闲资源，已借出资源归还后不会被关闭（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-4, reader-r2-1, reader-r2-5｜置信度 0.5
+  - 源：`resources/pool_beta.py:62-68`
+  - 依据：close() 仅遍历 self._free 调用 closer，对仍在 _in_use 中的资源不做任何标记。这些资源在 close() 之后被 release() 归还时，会重新进入 _free 且不会被关闭，造成底层资源泄漏；close() 也没有设置关闭标志来阻止后续 acquire()。
+- **[api_misuse/medium]** [api_misuse] resources/pool_delta.py:60-66 close() 调用 closer(resource) 的方式与 getattr(self._factory, 'close') 语义不符（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-5, reader-r1-1, reader-r1-5, reader-r2-0｜置信度 0.5
+  - 源：`resources/pool_delta.py:60-66`
+  - 依据：同 pool_alpha：closer 取自工厂对象的 close，却以资源为参数调用，绑定错误。
+- **[concurrency/medium]** [concurrency] resources/pool_delta.py:33-36 acquire() 在持锁状态下调用用户工厂，可能死锁或长时间阻塞（确认存在缺陷）
+  - 独立来源 2 个：reader-r1-1, reader-r2-0｜置信度 0.5
+  - 源：`resources/pool_delta.py:33-36`
+  - 依据：acquire() 在 with self._available 临界区内直接调用 self._factory()。工厂可能耗时较长或内部再次访问该池（例如工厂里调用 pool.acquire()/release()），由于 threading.Lock 不可重入，会自死锁；同时持锁构造会阻塞其他线程的 release()/acquire()。触发条件：工厂函数耗时或重入池。
+- **[concurrency/high]** [concurrency] resources/pool_delta.py:47-50 release() 未校验资源归属，重复归还会导致同一资源被多次借出（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-0, reader-r0-5, reader-r2-0｜置信度 0.5
+  - 源：`resources/pool_delta.py:47-50`
+  - 依据：release() 无条件把 resource 追加到 _free 并 notify，既不检查该资源是否在 _in_use 中，也不从 _in_use 移除。触发条件：调用方对同一资源调用两次 release()（或归还从未借出的资源），_free 中会出现重复条目，后续两次 acquire() 会返回同一个对象，破坏“借出资源互斥”的池语义；同时 _in_use 集合因未移除而永久膨胀，stats() 的 in_use 计数错误。
+- **[logic/high]** [logic] resources/pool_delta.py:47-50 release() 未从 _in_use 中移除资源，导致 in_use 计数永久泄漏（确认存在缺陷）
+  - 独立来源 5 个：reader-r0-4, reader-r1-1, reader-r1-5, reader-r2-1, reader-r2-5｜置信度 0.5
+  - 源：`resources/pool_delta.py:47-50`
+  - 依据：与 pool_alpha 相同：acquire() 将 id(resource) 加入 _in_use，release() 只归还到 _free，从不从 _in_use 移除，导致 in_use 统计永久累积。
+- **[performance/low]** [performance] resources/pool_delta.py:33-37 acquire() 在持锁状态下调用 factory()，可能阻塞整个池（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-0, reader-r0-4, reader-r0-5, reader-r2-5｜置信度 0.5
+  - 源：`resources/pool_delta.py:33-37`
+  - 依据：acquire() 在 with self._available 临界区内直接调用 self._factory()。触发条件：factory 创建资源耗时较长（如建立连接）时，锁被长时间持有，其他线程的 acquire()/release() 全部阻塞，即使池中已有空闲资源也无法归还或借出，放大等待时间。
+- **[resource_leak/medium]** [resource_leak] resources/pool_delta.py:60-66 close() 只关闭空闲资源，已借出资源被泄漏且池仍可继续借出（确认存在缺陷）
+  - 独立来源 3 个：reader-r0-4, reader-r2-1, reader-r2-5｜置信度 0.5
+  - 源：`resources/pool_delta.py:60-66`
+  - 依据：同 pool_alpha.py：close() 只关闭 _free 中的资源，_in_use 中的资源不会被关闭，且没有关闭标志，close() 后仍可 acquire()，池未真正关闭。
+- **[api_misuse/medium]** [api_misuse] resources/pool_epsilon.py:58-63 close() 通过 factory 的 close 属性关闭资源，而非资源自身的 close（确认存在缺陷）
+  - 独立来源 2 个：reader-r0-0, reader-r1-0｜置信度 0.5
+  - 源：`resources/pool_epsilon.py:58-63`
+  - 依据：与 pool_alpha.py 相同：close() 取的是工厂上的 close 属性并对资源调用，而非 resource.close()，资源不会被正确关闭，且可能因签名不匹配抛 TypeError。触发条件：调用 close() 且池中有空闲资源。
+- …另有 67 条未列出
+
+## 待验证（孤证）
+
+- **[boundary/low]** [boundary] analytics/window_delta.py:37-41 WindowDelta 的 maximum/minimum 对空窗口返回 0.0 而非抛错或 None（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`analytics/window_delta.py:37-41`
+  - 依据：空窗口返回 0.0 是显式设计（与 mean() 的空值返回 0.0 一致），不会抛异常也不会产生错误索引，属于有意的哨兵值约定。虽然 0.0 可能与真实数据混淆，但这是 API 设计选择而非实现缺陷，故不认定为缺陷。
+- **[api_misuse/low]** [api_misuse] persistence/journal_alpha.py:55-56 replay() 返回内部列表的浅拷贝，元素仍可被外部修改（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`persistence/journal_alpha.py:55-56`
+  - 依据：replay() 返回 list(self._records)，是浅拷贝。调用方修改返回列表本身不会影响内部状态，但修改其中的 dict 元素会影响内部记录。考虑到记录是普通 dict 且类未承诺不可变性，这属于设计取舍而非明确缺陷，故不判定为缺陷。
+- **[error_handling/medium]** [error_handling] persistence/journal_alpha.py:24-28 JournalAlpha._load() 对损坏行直接抛异常，无容错（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-4｜置信度 0.5
+  - 源：`persistence/journal_alpha.py:24-28`
+  - 依据：json.loads(line) 未包裹 try/except。若日志文件存在半行写入、截断或非 JSON 内容，构造函数会直接抛出 JSONDecodeError，导致整个 JournalAlpha 无法初始化，已写入的其余有效记录也无法读取。
+- **[error_handling/low]** [error_handling] persistence/journal_alpha.py:61-65 disk_count() 在文件不存在时抛异常（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`persistence/journal_alpha.py:61-65`
+  - 依据：disk_count() 直接 read_text，若文件从未写入（例如空实例未 append 过）会抛 FileNotFoundError。但 __init__ 仅在文件存在时加载，且 append/compact 都会创建文件；调用方在文件不存在时调用 disk_count 属于误用。这是边界行为，未构成明确缺陷。
+- **[performance/medium]** [performance] persistence/journal_alpha.py:43-45 JournalAlpha.append() 每次追加都全量重写文件，O(n) 写放大（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-4｜置信度 0.5
+  - 源：`persistence/journal_alpha.py:43-45`
+  - 依据：append() 调用 _flush()，而 _flush() 用 write_text 把整个 _records 序列化后重写文件。每次追加都是 O(n) 全量写，n 条记录时总写入量为 O(n^2)，且非原子写存在中途崩溃导致文件损坏的风险。
+- **[error_handling/medium]** [error_handling] persistence/journal_beta.py:24-28 JournalBeta._load() 对损坏行直接抛异常，无容错（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-4｜置信度 0.5
+  - 源：`persistence/journal_beta.py:24-28`
+  - 依据：json.loads 未做异常处理，损坏行会导致构造失败，无法读取其余有效记录。
+- **[performance/medium]** [performance] persistence/journal_beta.py:43-45 JournalBeta.append() 每次追加都全量重写文件，O(n) 写放大（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-4｜置信度 0.5
+  - 源：`persistence/journal_beta.py:43-45`
+  - 依据：append() 触发 _flush() 全量重写文件，n 次追加总写入 O(n^2)。
+- **[error_handling/low]** [error_handling] persistence/journal_delta.py:24-28 JournalDelta._load() 对损坏行直接抛异常，无容错（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-4｜置信度 0.5
+  - 源：`persistence/journal_delta.py:24-28`
+  - 依据：_load() 对每一非空行调用 json.loads，若文件末尾存在半写入的截断行（append 重写过程中崩溃）或非法 JSON，构造函数会直接抛 JSONDecodeError，整个日志无法打开，已写入的有效记录也无法读取。触发条件：日志文件存在损坏行。
+- **[error_handling/low]** [error_handling] persistence/journal_epsilon.py:26-30 JournalEpsilon._load 对损坏行直接抛异常，无容错（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`persistence/journal_epsilon.py:26-30`
+  - 依据：json.loads 对非 JSON 行会抛 JSONDecodeError，但这是构造时对损坏文件的显式失败，属于可接受的设计选择，且没有证据表明调用方期望静默跳过；不构成明确缺陷。
+- **[performance/low]** [performance] persistence/journal_epsilon.py:43-45 append() 每次全量重写文件，性能随记录数线性增长（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`persistence/journal_epsilon.py:43-45`
+  - 依据：append() 调用 _flush() 全量重写整个文件，对“追加式日志”而言是 O(n) 而非 O(1)，但这是该类明确声明的设计（docstring 写明 append() 追加一条并重写文件），且 keep 默认 200 限制了规模，不构成功能性缺陷，故不报告为缺陷。
+- **[error_handling/low]** [error_handling] persistence/journal_eta.py:26-30 JournalEta._load 对损坏行直接抛异常，无容错（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`persistence/journal_eta.py:26-30`
+  - 依据：同 journal_epsilon.py：损坏行导致构造失败是显式行为，未发现调用方要求容错，不构成明确缺陷。
+- **[performance/low]** [performance] persistence/journal_eta.py:43-45 append() 每次全量重写文件，性能随记录数线性增长（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`persistence/journal_eta.py:43-45`
+  - 依据：同 journal_epsilon.py：全量重写是文档声明的设计，keep 限制规模，不构成缺陷。
+- **[error_handling/medium]** [error_handling] persistence/journal_gamma.py:24-28 JournalGamma._load() 对损坏行直接抛异常，无容错（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-4｜置信度 0.5
+  - 源：`persistence/journal_gamma.py:24-28`
+  - 依据：json.loads 未做异常处理，损坏行会导致构造失败。
+- **[performance/medium]** [performance] persistence/journal_gamma.py:43-45 JournalGamma.append() 每次追加都全量重写文件，O(n) 写放大（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-4｜置信度 0.5
+  - 源：`persistence/journal_gamma.py:43-45`
+  - 依据：append() 触发 _flush() 全量重写文件，n 次追加总写入 O(n^2)。
+- **[error_handling/medium]** [error_handling] persistence/journal_theta.py:24-28 JournalTheta._load() 对损坏行直接抛异常，无容错（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-4｜置信度 0.5
+  - 源：`persistence/journal_theta.py:24-28`
+  - 依据：_load() 对每一非空行直接调用 json.loads，未捕获 JSONDecodeError。日志文件若因写入中断、磁盘损坏或外部编辑出现半行/非法 JSON，构造函数会直接抛异常，导致整个日志无法加载、对象无法创建。触发条件：文件中存在非合法 JSON 的行。
+- **[performance/low]** [performance] persistence/journal_theta.py:43-45 JournalTheta.append() 每次追加都全量重写文件，O(n) 写放大（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-4｜置信度 0.5
+  - 源：`persistence/journal_theta.py:43-45`
+  - 依据：append() 调用 _flush()，而 _flush() 用 write_text 把整个 _records 序列化后覆盖写入。文档声称是“追加式记录日志”，但实际每次 append 都是 O(n) 的全量重写，记录数增长后写入成本线性上升，且非原子写入在崩溃时可能截断文件。触发条件：频繁 append 且记录数较大。
+- **[error_handling/low]** [error_handling] persistence/journal_zeta.py:24-28 JournalZeta._load() 对损坏行直接抛异常，无容错（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-4｜置信度 0.5
+  - 源：`persistence/journal_zeta.py:24-28`
+  - 依据：同 JournalDelta：_load() 对损坏行直接抛 JSONDecodeError，导致整个日志无法加载。
+- **[api_misuse/medium]** [api_misuse] resources/pool_alpha.py:58-63 close() 通过 factory 的 close 属性关闭资源，而非资源自身的 close（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 源：`resources/pool_alpha.py:58-63`
+  - 依据：close() 取的是 getattr(self._factory, "close", None)，即工厂函数/工厂对象上的 close 方法，然后对每个空闲资源调用 closer(resource)。但需要关闭的是资源本身（resource.close()），工厂通常没有 close 属性，导致资源永远不会被真正关闭；若工厂恰好有 close，其签名也未必接受资源参数，会抛 TypeError。触发条件：调用 close() 且池中有空闲资源。
+- **[boundary/low]** [boundary] resources/pool_alpha.py:38-41 acquire() 超时等待使用 wait(remaining) 但未处理虚假唤醒后的剩余时间（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`resources/pool_alpha.py:38-41`
+  - 依据：wait(remaining) 返回后 while 循环会重新计算 deadline - time.monotonic()，因此虚假唤醒或 notify 后仍能正确判断剩余时间并最终抛出 TimeoutError，逻辑是安全的。
+- **[api_misuse/medium]** [api_misuse] resources/pool_beta.py:58-63 close() 通过 factory 的 close 属性关闭资源，而非资源自身的 close（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 源：`resources/pool_beta.py:58-63`
+  - 依据：close() 取的是 self._factory 上的 close 属性（closer = getattr(self._factory, "close", None)），然后以 closer(resource) 调用。触发条件：factory 是普通函数（无 close 属性）时，资源永远不会被关闭，造成资源泄漏；若 factory 恰好有 close 属性，则语义错误——调用的是工厂的 close 而非资源自身的 close。正确做法应是 getattr(resource, "close", None)。
+- **[boundary/low]** [boundary] resources/pool_beta.py:38-41 acquire() 超时等待使用 wait(remaining) 但未处理虚假唤醒后的剩余时间（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`resources/pool_beta.py:38-41`
+  - 依据：wait(remaining) 返回后循环重新计算 deadline - time.monotonic()，因此虚假唤醒或提前唤醒都会重新评估剩余时间，不会无限等待也不会提前超时。该实现是正确的，不构成缺陷。
+- **[api_misuse/medium]** [api_misuse] resources/pool_delta.py:58-63 close() 通过 factory 的 close 属性关闭资源，而非资源自身的 close（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 源：`resources/pool_delta.py:58-63`
+  - 依据：closer = getattr(self._factory, "close", None) 取的是工厂函数对象的 close 属性，而需要关闭的是池中每个 resource。触发条件：factory 是普通函数（无 close 属性）时，closer 为 None，所有空闲资源都不会被关闭，造成资源泄漏；即使 factory 恰好有 close，closer(resource) 也是把资源传给工厂的 close，语义错误。
+- **[boundary/low]** [boundary] resources/pool_delta.py:38-41 acquire() 超时等待使用 wait(remaining) 但未处理虚假唤醒后的剩余时间（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`resources/pool_delta.py:38-41`
+  - 依据：同 pool_alpha.py：循环内重新计算剩余时间，虚假唤醒不会导致提前超时或无限等待，逻辑安全。
+- **[resource_leak/medium]** [resource_leak] resources/pool_delta.py:57-63 close() 只关闭空闲资源，已借出资源被泄漏且池无关闭状态（确认存在缺陷）
+  - 独立来源 1 个：reader-r1-0｜置信度 0.5
+  - 源：`resources/pool_delta.py:57-63`
+  - 依据：close() 仅遍历 _free 调用 closer 并清空 _free，对 _in_use 中的资源不做任何处理，也不设置 closed 标志。触发条件：在仍有资源被借出时调用 close()，这些资源永远不会被关闭（泄漏）；并且 close() 之后 acquire() 仍可继续新建资源，池并未真正关闭。
+- **[boundary/low]** [boundary] resources/pool_epsilon.py:38-41 acquire() 超时等待使用 wait(remaining) 但未处理虚假唤醒后的剩余时间（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`resources/pool_epsilon.py:38-41`
+  - 依据：同 pool_alpha.py：循环内重新计算剩余时间，虚假唤醒不会导致提前超时或无限等待，逻辑安全。
+- **[api_misuse/medium]** [api_misuse] resources/pool_eta.py:58-63 close() 通过 factory 的 close 属性关闭资源，而非资源自身的 close（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 源：`resources/pool_eta.py:58-63`
+  - 依据：与 pool_delta.py 相同：closer 取自 self._factory 而非每个 resource。触发条件：factory 为普通函数时 closer 为 None，空闲资源不会被关闭而泄漏；若 factory 有 close，则调用语义错误。
+- **[boundary/low]** [boundary] resources/pool_eta.py:38-41 acquire() 超时等待使用 wait(remaining) 但未处理虚假唤醒后的剩余时间（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`resources/pool_eta.py:38-41`
+  - 依据：同 pool_alpha.py：循环内重新计算剩余时间，虚假唤醒不会导致提前超时或无限等待，逻辑安全。
+- **[boundary/low]** [boundary] resources/pool_gamma.py:38-41 acquire() 超时等待使用 wait(remaining) 但未处理虚假唤醒后的剩余时间（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`resources/pool_gamma.py:38-41`
+  - 依据：wait(remaining) 返回后循环重新计算 deadline - time.monotonic()，因此虚假唤醒或提前唤醒都会重新评估剩余时间，不会无限等待也不会提前超时。该实现是正确的，不构成缺陷。
+- **[resource_leak/medium]** [resource_leak] resources/pool_gamma.py:57-63 close() 只关闭空闲资源，已借出资源泄漏且池无关闭状态（确认存在缺陷）
+  - 独立来源 1 个：reader-r1-0｜置信度 0.5
+  - 源：`resources/pool_gamma.py:57-63`
+  - 依据：close() 只遍历 _free 调用 closer 并清空 _free，_in_use 中的资源不会被关闭，之后调用方归还这些资源时 release() 仍会把它们放回 _free，池也没有 closed 标志来拒绝后续 acquire/release，导致资源既未被释放又可能被再次借出。
+- **[error_handling/low]** [error_handling] resources/pool_theta.py:38-41 PoolTheta.acquire() 超时后抛 TimeoutError 而非返回 None（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`resources/pool_theta.py:38-41`
+  - 依据：超时抛出 TimeoutError 是明确的失败信号，调用方可通过异常处理感知资源耗尽，不会静默返回错误值。这是合理的错误处理方式，不构成缺陷。
+- **[resource_leak/medium]** [resource_leak] resources/pool_theta.py:57-63 close() 只关闭空闲资源，已借出资源泄漏且池无关闭状态（确认存在缺陷）
+  - 独立来源 1 个：reader-r1-0｜置信度 0.5
+  - 源：`resources/pool_theta.py:57-63`
+  - 依据：close() 只遍历 _free 调用 closer 并清空 _free，_in_use 中的资源不会被关闭；之后调用方归还这些资源时 release() 仍会把它们放回 _free，池也没有 closed 标志拒绝后续 acquire/release，导致资源既未释放又可能被再次借出。
+- **[api_misuse/medium]** [api_misuse] resources/pool_zeta.py:58-63 close() 通过 factory 的 close 属性关闭资源，而非资源自身的 close（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 源：`resources/pool_zeta.py:58-63`
+  - 依据：closer = getattr(self._factory, "close", None) 取的是工厂函数/对象的 close 属性，而不是池中资源实例的 close。通常工厂本身没有 close，导致资源永远不会被真正关闭（资源泄漏）；即便工厂恰好有 close，语义也错误。正确做法是对每个 resource 调用 getattr(resource, "close", None)。
+- **[boundary/low]** [boundary] resources/pool_zeta.py:38-41 acquire() 超时等待使用 wait(remaining) 但未处理虚假唤醒后的剩余时间重算（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`resources/pool_zeta.py:38-41`
+  - 依据：虽然 Condition.wait 可能被虚假唤醒，但代码位于 while True 循环内，每次唤醒后都会重新检查 _free/_created，并用 deadline - time.monotonic() 重新计算 remaining，remaining <= 0 时抛 TimeoutError。因此虚假唤醒不会导致提前超时或无限等待，逻辑是正确的。
+- **[resource_leak/low]** [resource_leak] scheduling/scheduler_alpha.py:62-65 cancel 后堆中残留条目导致内存增长（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`scheduling/scheduler_alpha.py:62-65`
+  - 依据：cancel 只从 _items 删除，堆中条目由 take 的惰性清理逻辑跳过，不会返回已取消作业，语义正确。堆中残留条目会在后续 take 时被弹出，属于常见的惰性删除设计，不构成真实缺陷。
+- **[logic/low]** [logic] scheduling/scheduler_delta.py:60-63 cancel 后堆中残留失效项，take 依赖 _items 过滤但 peek_priority 等仍可访问（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`scheduling/scheduler_delta.py:60-63`
+  - 依据：cancel 只从 _items 删除条目，堆中仍保留该 _Item。take() 通过 `if item.name in self._items` 过滤掉已取消项，因此不会返回已取消作业，逻辑上是安全的（惰性删除）。pending() 用 len(self._items) 也正确。唯一副作用是堆可能积累失效项造成内存增长，但不构成功能缺陷。
+- **[logic/medium]** [logic] wire/codec_beta.py:43-44 total_size 依赖 decode 的 size 字段，v2 记录会全部计为 0（确认存在缺陷）
+  - 独立来源 1 个：reader-r1-4｜置信度 0.5
+  - 源：`wire/codec_beta.py:43-44`
+  - 依据：total_size 调用 decode 后取 ["size"]，而 decode 对 v2 记录返回的 size 恒为 0（见上一条），因此对 v2 payload 求和结果始终为 0，统计功能失效。
+- **[logic/medium]** [logic] wire/codec_theta.py:43-44 total_size 依赖 decode 的 size 字段，v2 记录会全部计为 0（确认存在缺陷）
+  - 独立来源 1 个：reader-r1-4｜置信度 0.5
+  - 源：`wire/codec_theta.py:43-44`
+  - 依据：同 codec_beta.py：total_size 依赖 decode 返回的 size，而 v2 解码 size 恒为 0，求和结果错误。
+- **[error_handling/low]** [error_handling] wiring/registry_alpha.py:27-29 get 未校验名字是否已注册，未注册时抛 KeyError 而非明确错误（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`wiring/registry_alpha.py:27-29`
+  - 依据：get 对未注册名字会经 _build 访问 self._factories[name] 抛出 KeyError。这是可接受的失败方式，且 has() 提供了显式检查手段，不构成真实缺陷。
+- **[logic/low]** [logic] wiring/registry_alpha.py:45-46 clear() 只清实例缓存，build_count 不重置（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`wiring/registry_alpha.py:45-46`
+  - 依据：clear() 仅清空 _instances，_build_count 保留累计值。build_count() 语义为累计构造次数，clear 后再次 get 会重新构造并递增计数，符合“累计”语义，不构成缺陷。
+- **[api_misuse/low]** [api_misuse] wiring/registry_beta.py:28-35 Registry 的 get 未校验 name 是否已注册，未注册名会抛 KeyError 而非明确错误（确认并非缺陷）
+  - 独立来源 0 个：—｜置信度 0.5
+  - 源：`wiring/registry_beta.py:28-35`
+  - 依据：get 对未注册的 name 会经 _build 访问 self._factories[name] 抛出 KeyError，行为上仍是明确失败，且 has() 提供了预检查手段。虽然错误信息不如显式校验友好，但不属于错误行为，仅是 API 设计取舍。
+- …另有 15 条未列出
+
+## 争议（需裁决）
+
+- **[logic/high]** [logic] persistence/journal_epsilon.py:55-61 compact() 未更新内存中的 _records，导致内存与磁盘不一致（确认存在缺陷）
+  - 独立来源 9 个：reader-r0-0, reader-r0-4, reader-r0-5, reader-r1-1, reader-r1-2, reader-r1-3, reader-r2-0, reader-r2-4, reader-r2-5｜置信度 0.5
+  - 源：`persistence/journal_epsilon.py:55-61`
+  - 依据：compact() 只把裁剪后的 kept 写入磁盘，却没有把 self._records 更新为 kept。触发条件：append 若干条使 len(_records) > keep，调用 compact()。此后 replay()/count() 仍返回全部旧记录（含已被丢弃的），而 disk_count() 返回裁剪后的数量，两者不一致；再次 append 时 _flush() 会把内存中的全部旧记录重新写回磁盘，使 compact 的裁剪被撤销。
+  - 争议对手：453953d0c05a
+- **[concurrency/medium]** [concurrency] resources/pool_alpha.py:33-36 acquire() 在持锁状态下调用用户工厂，可能死锁或长时间阻塞（确认存在缺陷）
+  - 独立来源 2 个：reader-r1-1, reader-r2-0｜置信度 0.5
+  - 源：`resources/pool_alpha.py:33-36`
+  - 依据：acquire() 在 with self._available 持锁期间调用 self._factory()。若工厂内部需要获取同一把锁（例如工厂回调池的 stats/release），会死锁；若工厂耗时较长，会阻塞所有其他 acquire/release。触发条件：工厂实现涉及池操作或耗时。
+  - 争议对手：010f3f43051d
+- **[logic/medium]** [logic] resources/pool_alpha.py:33-36 PoolAlpha 用 id(resource) 作为在借标识，对象被回收后 id 可复用（确认存在缺陷）
+  - 独立来源 3 个：reader-r1-1, reader-r2-1, reader-r2-5｜置信度 0.5
+  - 源：`resources/pool_alpha.py:33-36`
+  - 依据：acquire() 用 id(resource) 记录在借资源。id 只在对象存活期间唯一，若借出的资源被调用方丢弃并回收，之后新建的对象可能复用同一 id，导致 _in_use 集合把两个不同资源视为同一个，stats() 计数错误，且无法可靠地判断资源是否在借。
+  - 争议对手：c2302cca06b6
+- **[logic/high]** [logic] resources/pool_alpha.py:47-50 release() 不校验资源归属，重复归还会使同一资源被多次借出（确认存在缺陷）
+  - 独立来源 6 个：reader-r0-4, reader-r1-0, reader-r1-1, reader-r1-5, reader-r2-1, reader-r2-5｜置信度 0.5
+  - 源：`resources/pool_alpha.py:47-50`
+  - 依据：release() 无条件把资源追加到 _free 并 notify，不检查该资源是否在 _in_use 中，也不从 _in_use 移除。同一资源被归还两次后，_free 中出现两个引用，两个线程可同时 acquire 到同一个对象，破坏池的互斥语义。触发条件：调用方重复 release 同一资源。
+  - 争议对手：56f0566a1fed
+- **[performance/medium]** [performance] resources/pool_alpha.py:33-37 PoolAlpha.acquire() 在持锁状态下调用 factory()，可能阻塞整个池（确认存在缺陷）
+  - 独立来源 4 个：reader-r0-0, reader-r0-4, reader-r0-5, reader-r2-5｜置信度 0.5
+  - 源：`resources/pool_alpha.py:33-37`
+  - 依据：acquire() 在 with self._available 持锁期间调用 self._factory()。若工厂创建资源耗时（如建立连接），所有其他 acquire/release 调用都会被阻塞，池吞吐严重下降，甚至造成超时。
+  - 争议对手：46b0eb09085f
+- **[logic/low]** [logic] resources/pool_delta.py:31-36 acquire() 使用 id(resource) 跟踪在用资源，id 复用会导致计数错误（确认存在缺陷）
+  - 独立来源 3 个：reader-r1-1, reader-r2-1, reader-r2-5｜置信度 0.5
+  - 源：`resources/pool_delta.py:31-36`
+  - 依据：同 pool_alpha.py：_in_use 以 id(resource) 为键，对象地址复用会导致 in_use 计数错误。
+  - 争议对手：3b3171396156, cec1341c57a8
+- **[logic/medium]** [logic] resources/pool_eta.py:31-37 acquire() 使用 id(resource) 跟踪在用资源，对象被回收后 id 可复用导致计数错误（确认存在缺陷）
+  - 独立来源 4 个：reader-r1-0, reader-r1-1, reader-r2-1, reader-r2-5｜置信度 0.5
+  - 源：`resources/pool_eta.py:31-37`
+  - 依据：_in_use 保存的是 id(resource) 而非资源本身，且 release() 从不从 _in_use 中删除。触发条件：借出的资源在归还前被外部释放（引用计数归零），其 id 被后续新建对象复用；此时新对象加入 _in_use 会与残留的旧 id 冲突，stats() 的 in_use 计数偏小，且无法区分不同资源。根本问题是 _in_use 只增不减，与 _free 的增删不对称。
+  - 争议对手：a0c018c84e11, ab58239ffc1c
+- **[logic/high]** [logic] scheduling/scheduler_beta.py:47-52 reprioritize 直接修改堆内元素优先级导致堆序失效（确认存在缺陷）
+  - 独立来源 9 个：reader-r0-0, reader-r0-1, reader-r0-2, reader-r1-2, reader-r1-3, reader-r1-4, reader-r2-0, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`scheduling/scheduler_beta.py:47-52`
+  - 依据：reprioritize 直接对已入堆的 _Item 对象赋值 item.priority，但没有调用 heapq.heapify 或重新 push。堆的内部顺序依赖元素比较值，原地修改会破坏堆不变量，导致 take() 返回的并非当前最高优先级作业。触发条件：add 多个作业后对其中一个 reprioritize，再 take。
+  - 争议对手：214d353c3e93, 5190eb4b678f, 9890d7727476
+- **[logic/high]** [logic] scheduling/scheduler_delta.py:47-52 reprioritize() 直接修改堆内元素优先级，破坏堆不变量（确认存在缺陷）
+  - 独立来源 9 个：reader-r0-0, reader-r0-1, reader-r0-2, reader-r1-2, reader-r1-3, reader-r1-4, reader-r2-0, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`scheduling/scheduler_delta.py:47-52`
+  - 依据：reprioritize() 直接对堆中已存在的 _Item 对象赋值 item.priority，没有做 heapify 或 push/pop 修复。触发条件：对堆中非根元素提权后，堆序被破坏，take() 仍按旧的堆结构弹出，可能返回优先级并非最高的作业，饥饿缓解逻辑失效。
+  - 争议对手：c842d543010c
+- **[logic/high]** [logic] scheduling/scheduler_eta.py:41-45 reprioritize 直接修改堆内元素优先级，破坏堆不变量（确认存在缺陷）
+  - 独立来源 9 个：reader-r0-0, reader-r0-1, reader-r0-2, reader-r1-2, reader-r1-3, reader-r1-4, reader-r2-0, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`scheduling/scheduler_eta.py:41-45`
+  - 依据：item 是堆内已有元素，直接赋值 item.priority 不会重新调整堆结构，堆不变量被破坏。触发条件：对队列中非堆顶作业提权（如饥饿缓解场景）后调用 take()，heapq.heappop 依据的是旧的堆序，可能返回优先级并非最高的作业，调度顺序错误。正确做法是标记失效后重新 heappush，或使用 heapq.heapify 重建。
+  - 争议对手：3d63475776d9
+- **[logic/high]** [logic] wire/codec_beta.py:33-40 decode 对 v2 载荷读取 size 而非 size_bytes，丢失大小信息（确认存在缺陷）
+  - 独立来源 9 个：reader-r0-0, reader-r0-1, reader-r0-5, reader-r1-2, reader-r1-3, reader-r1-4, reader-r2-0, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`wire/codec_beta.py:33-40`
+  - 依据：encode 在 v2 下写入的字段是 size_bytes，而 decode 在 version>=2 分支读取的是 payload.get("size", 0)，字段名不匹配，因此对自身 encode 产生的 v2 载荷解码后 size 恒为 0。触发条件：encode 后 decode（或 total_size 处理 v2 载荷），size 信息丢失。
+  - 争议对手：6bb757d338b7, 84109578022a, c2b484f6ea1f
+- **[logic/high]** [logic] wire/codec_eta.py:33-40 decode() 对 v2 载荷读取 size 而非 size_bytes，丢失实际大小（确认存在缺陷）
+  - 独立来源 9 个：reader-r0-0, reader-r0-1, reader-r0-5, reader-r1-2, reader-r1-3, reader-r1-4, reader-r2-0, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`wire/codec_eta.py:33-40`
+  - 依据：encode() 把大小写入 size_bytes 字段，但 decode() 在 version >= 2 分支读取的是 payload.get("size", 0)。触发条件：对 encode() 产生的 v2 载荷调用 decode()，由于载荷中没有 size 键，out["size"] 恒为 0，实际大小丢失；total_size() 也因此恒返回 0。
+  - 争议对手：f5d306bf0ccd
+- **[logic/high]** [logic] wire/codec_theta.py:33-37 decode 对 v2 记录读取 size 而非 size_bytes，导致 size 恒为 0（确认存在缺陷）
+  - 独立来源 9 个：reader-r0-0, reader-r0-1, reader-r0-5, reader-r1-2, reader-r1-3, reader-r1-4, reader-r2-0, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`wire/codec_theta.py:33-37`
+  - 依据：同 codec_beta.py：v2 分支读取 payload.get("size", 0)，而 v2 线格式使用 size_bytes，导致解码后 size 恒为 0。
+  - 争议对手：3655451e93de, 5322d08495c6
+- **[logic/medium]** [logic] wire/codec_zeta.py:29-31 CodecZeta.decode() 对 v1 载荷读取 size 而非 size_bytes，丢失编码值（确认存在缺陷）
+  - 独立来源 9 个：reader-r0-0, reader-r0-1, reader-r0-5, reader-r1-2, reader-r1-3, reader-r1-4, reader-r2-0, reader-r2-1, reader-r2-2｜置信度 0.5
+  - 源：`wire/codec_zeta.py:29-31`
+  - 依据：v1 分支同样读取 payload.get("size", 0)，但线格式中大小字段名为 size_bytes（encode 输出即如此）。因此 v1 载荷解码后 size 恒为 0，无法还原原始大小。
+  - 争议对手：4996580206a7, 85566595cc11
+
+## 覆盖率矩阵
+
+| 维度 \ 类型 | logic | concurrency | boundary | error_handling | resource_leak | security | performance | api_misuse |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `analytics` | 3 | 0 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `persistence` | 9 | 0 | 0 | 3 | 0 | 0 | 2 | 1 |
+| `resources` | 8 | 6 | 2 | 1 | 4 | 0 | 5 | 6 |
+| `scheduling` | 9 | 0 | 0 | 0 | 1 | 0 | 0 | 0 |
+| `wire` | 9 | 0 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `wiring` | 7 | 8 | 0 | 6 | 0 | 0 | 0 | 1 |
+
+矩阵填充率 44%（单元格值 = 独立 Agent 数）

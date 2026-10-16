@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞
+    url: https://github.com/OWNER/parallax/security/advisories/new
+    about: 请勿用公开 issue 报告安全漏洞，见 SECURITY.md
+  - name: 使用与机制说明
+    url: https://github.com/OWNER/parallax/blob/main/README.md
+    about: 先看 README 与 ../说明材料/，多数"怎么用"的问题在那里有答案

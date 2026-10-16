@@ -1,0 +1,189 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+# 同一分支的新推送取消上一次未完成的运行，省额度也更快看到结果
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python 测试（${{ matrix.python-version }}）
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: 安装依赖
+        working-directory: backend
+        run: pip install -e ".[dev]"
+
+      # 测试不需要网络、不需要 API key、也不会调用真实模型：
+      # tests/conftest.py 有 autouse 夹具强制清空凭据，从结构上杜绝意外计费。
+      - name: 运行测试
+        working-directory: backend
+        run: pytest
+
+  lint:
+    name: Python 静态检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: 安装依赖
+        working-directory: backend
+        run: pip install -e ".[dev]"
+
+      - name: ruff check
+        working-directory: backend
+        run: ruff check .
+
+      - name: ruff format 检查
+        working-directory: backend
+        run: ruff format --check .
+
+  corpus:
+    name: 语料完整性
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: 安装依赖
+        working-directory: backend
+        run: pip install -e ".[dev]"
+
+      # 语料被改动后行号会漂移，而漂移会让召回率**静默**变成 0。
+      # 因此把「行号仍精确指向缺陷」做成独立的 CI 门禁，而不是等实验跑完才发现。
+      - name: 语料自检
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from parallax.eval.corpus import load_corpus, verify_task
+
+          tasks = load_corpus(Path("..") / "eval" / "corpus")
+          failures = {t.task_id: verify_task(t) for t in tasks}
+          bad = {k: v for k, v in failures.items() if v}
+          for task in tasks:
+              print(f"{task.task_id}: {len(task.ground_truth.defects)} 个缺陷 "
+                    f"{'自检通过' if not failures[task.task_id] else '自检失败'}")
+          if bad:
+              for task_id, problems in bad.items():
+                  for problem in problems:
+                      print(f"::error::{task_id}: {problem}")
+              raise SystemExit(1)
+          PY
+
+  gateway:
+    name: Java 网关测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # ProxyIntegrationTest 会起一个真实的 HTTP 服务桩当上游，
+      # 所以这一步同时验证了协议协商、分块透传、请求头透传与路径白名单。
+      - name: 运行测试
+        working-directory: gateway
+        run: mvn -B test
+
+  frontend:
+    name: 前端检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 安装依赖
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: ESLint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: 类型检查
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: 构建
+        working-directory: frontend
+        run: npm run build
+
+  docker:
+    name: 镜像构建（${{ matrix.service }}）
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [backend, frontend, gateway]
+    steps:
+      - uses: actions/checkout@v4
+
+      # compose 配置解析不需要守护进程，能在几秒内抓出 YAML 与变量替换的问题
+      - name: 校验 compose 配置
+        if: matrix.service == 'backend'
+        run: docker compose --profile infra --profile gateway config --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: 构建 ${{ matrix.service }} 镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.service }}
+          push: false
+          load: ${{ matrix.service == 'backend' }}
+          tags: parallax-${{ matrix.service }}:ci
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      - name: 冒烟测试（容器能起来且 /health 可达）
+        if: matrix.service == 'backend'
+        run: |
+          docker run -d --name parallax-ci -p 8000:8000 parallax-backend:ci
+          trap 'docker logs parallax-ci; docker rm -f parallax-ci' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/health > /dev/null; then
+              echo "健康检查通过"; curl -s http://127.0.0.1:8000/health; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::容器启动后 60 秒内 /health 仍不可达"; exit 1

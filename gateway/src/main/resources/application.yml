@@ -1,0 +1,64 @@
+server:
+  port: ${PARALLAX_GATEWAY_PORT:8080}
+
+spring:
+  application:
+    name: parallax-gateway
+  mvc:
+    # ⚠️ 关键配置：一次审查任务的 SSE 流会持续几分钟，
+    # 而 Tomcat 的异步请求默认超时是 30 秒——不显式放宽的话，
+    # 前端会在第 30 秒莫名其妙地断流，且看不到任何错误。
+    async:
+      request-timeout: 1800000
+
+parallax:
+  gateway:
+    upstream-base-url: ${PARALLAX_UPSTREAM_URL:http://127.0.0.1:8000}
+    connect-timeout-ms: ${PARALLAX_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${PARALLAX_READ_TIMEOUT_MS:30000}
+    require-auth: ${PARALLAX_GATEWAY_REQUIRE_AUTH:false}
+    admin-secret: ${PARALLAX_GATEWAY_ADMIN_SECRET:}
+    internal-token: ${PARALLAX_GATEWAY_INTERNAL_TOKEN:}
+  jwt:
+    secret: ${PARALLAX_JWT_SECRET:}
+    access-ttl-minutes: ${PARALLAX_JWT_ACCESS_TTL_MINUTES:720}
+  ratelimit:
+    enabled: ${PARALLAX_RATELIMIT_ENABLED:true}
+    default-capacity: ${PARALLAX_RATELIMIT_DEFAULT_CAPACITY:120}
+    default-window-seconds: ${PARALLAX_RATELIMIT_DEFAULT_WINDOW_SECONDS:60}
+    # 提交审查会真实消耗模型额度，单独给一个更小的桶
+    expensive-capacity: ${PARALLAX_RATELIMIT_EXPENSIVE_CAPACITY:10}
+    expensive-window-seconds: ${PARALLAX_RATELIMIT_EXPENSIVE_WINDOW_SECONDS:60}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      upstream:
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 20s
+        permitted-number-of-calls-in-half-open-state: 3
+  retry:
+    instances:
+      upstreamRead:
+        max-attempts: 2
+        wait-duration: 200ms
+        # 只重试连接阶段的异常：读超时说明上游已经在干活了，重试会白烧一次模型调用
+        retry-exceptions:
+          - java.net.ConnectException
+          - java.net.http.HttpConnectTimeoutException
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    dev.parallax.gateway: ${PARALLAX_GATEWAY_LOG_LEVEL:INFO}

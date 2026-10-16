@@ -1,0 +1,70 @@
+name: Bug 报告
+description: 报告一个可复现的问题
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请尽量把「怎么复现」写清楚——本项目承诺可复现，
+        而没有原始数据的报告很难定位问题。
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 现象
+      description: 发生了什么？你期望发生什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      description: 最好能给出可直接运行的命令或最小代码片段
+      placeholder: |
+        1. cd backend
+        2. .venv\Scripts\python.exe -m parallax.cli audit .\parallax
+        3. 观察到 ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 影响范围
+      options:
+        - 核心机制（分区 / 账本 / 聚合 / 覆盖率 / 声誉）
+        - 编排（LangGraph 状态图）
+        - 插件（code_audit 等）
+        - 服务层（HTTP / SSE）
+        - 评测与实验台
+        - 命令行 / 文档 / 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 原始数据
+      description: |
+        如果问题出在一次运行上，请附上 `runs/<run_id>/meta.json`
+        或 `eval/results/<run_id>/summary.md`。
+        如果与模型输出有关，请附上原始返回片段（注意先脱敏）。
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: 版本 / 提交
+      placeholder: v0.1.0 或 git commit
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: 运行环境
+      placeholder: Windows 11 / Python 3.12.4 / deepseek-chat
+    validations:
+      required: true

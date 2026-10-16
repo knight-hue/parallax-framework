@@ -1,0 +1,49 @@
+name: 功能建议 / 新插件
+description: 提议新功能，或为框架贡献一个新场景插件
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        框架本身不含任何场景知识，所有场景相关的东西都在插件里。
+        新场景提案尤其欢迎——它同时验证框架的**可插拔性**。
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 提案类型
+      options:
+        - 新场景插件（接入新的证据来源）
+        - 核心机制改进
+        - 服务层 / 工具链
+        - 文档
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 要解决的问题
+      description: 谁在什么场景下遇到了什么困难？最好有具体例子。
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你的方案
+      description: |
+        如果是新插件，请说明三件事：
+        1. 证据从哪来、怎么切成标准单元、按什么维度分区（对应 EvidenceAdapter）
+        2. 盲读怎么提问、怎么给 claim 打指纹（对应 ReaderPlugin）
+        3. **从众在这个场景里为什么真实存在**——这是最关键的，请具体说明
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 备选方案
+      description: 你考虑过哪些其他做法？为什么不选它们？
+    validations:
+      required: false

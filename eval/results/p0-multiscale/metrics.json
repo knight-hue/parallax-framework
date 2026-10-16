@@ -1,0 +1,1596 @@
+{
+  "generated_at": "2026-10-15T15:29:31+00:00",
+  "arms": [
+    {
+      "arm": "baseline_shared",
+      "task_id": "seed_a",
+      "reader_count": 3,
+      "recall": 0.8571,
+      "precision": 1.0,
+      "redundancy": 0.6452,
+      "effective_channels": 1.0434,
+      "coverage_fill_rate": 0.4167,
+      "rounds": 1,
+      "total_claims": 31,
+      "hits": 6,
+      "planted": 7,
+      "duplicates": 25,
+      "unmatched": 0,
+      "llm_calls": 3,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "readers_failed": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "A1",
+          "title": "task_id 自增计数器无锁保护，并发下产生重复 id",
+          "defect_class": "concurrency",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "A2",
+          "title": "export() 未使用上下文管理器，json.dump 抛异常时文件句柄泄漏",
+          "defect_class": "resource_leak",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "A3",
+          "title": "把 ValueError 当成成功返回，调用方无法区分「成功拿到 None」与「解析失败」",
+          "defect_class": "error_handling",
+          "file": "runner/retry.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "B1",
+          "title": "TTL 判定方向写反：未过期条目被删除并返回 None，过期条目反而被返回",
+          "defect_class": "logic",
+          "file": "cache/ttl.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "B2",
+          "title": "容量检查发生在写入之前且用错比较符，缓存可超出 capacity 一条",
+          "defect_class": "boundary",
+          "file": "cache/ttl.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "C1",
+          "title": "load() 使用可变默认参数 dict，多次调用间共享同一对象",
+          "defect_class": "api_misuse",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "C2",
+          "title": "with_endpoint() 用浅拷贝，嵌套 endpoints 被原配置与副本共享",
+          "defect_class": "logic",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        }
+      ]
+    },
+    {
+      "arm": "sharded_shared",
+      "task_id": "seed_a",
+      "reader_count": 3,
+      "recall": 0.8571,
+      "precision": 1.0,
+      "redundancy": 0.5263,
+      "effective_channels": 1.467,
+      "coverage_fill_rate": 0.3333,
+      "rounds": 1,
+      "total_claims": 19,
+      "hits": 6,
+      "planted": 7,
+      "duplicates": 13,
+      "unmatched": 0,
+      "llm_calls": 3,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "readers_failed": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "A1",
+          "title": "task_id 自增计数器无锁保护，并发下产生重复 id",
+          "defect_class": "concurrency",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "A2",
+          "title": "export() 未使用上下文管理器，json.dump 抛异常时文件句柄泄漏",
+          "defect_class": "resource_leak",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "A3",
+          "title": "把 ValueError 当成成功返回，调用方无法区分「成功拿到 None」与「解析失败」",
+          "defect_class": "error_handling",
+          "file": "runner/retry.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "B1",
+          "title": "TTL 判定方向写反：未过期条目被删除并返回 None，过期条目反而被返回",
+          "defect_class": "logic",
+          "file": "cache/ttl.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "B2",
+          "title": "容量检查发生在写入之前且用错比较符，缓存可超出 capacity 一条",
+          "defect_class": "boundary",
+          "file": "cache/ttl.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "C1",
+          "title": "load() 使用可变默认参数 dict，多次调用间共享同一对象",
+          "defect_class": "api_misuse",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "C2",
+          "title": "with_endpoint() 用浅拷贝，嵌套 endpoints 被原配置与副本共享",
+          "defect_class": "logic",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        }
+      ]
+    },
+    {
+      "arm": "no_peers_all_evidence",
+      "task_id": "seed_a",
+      "reader_count": 3,
+      "recall": 1.0,
+      "precision": 1.0,
+      "redundancy": 0.5667,
+      "effective_channels": 1.3244,
+      "coverage_fill_rate": 0.375,
+      "rounds": 1,
+      "total_claims": 30,
+      "hits": 7,
+      "planted": 7,
+      "duplicates": 23,
+      "unmatched": 0,
+      "llm_calls": 3,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "readers_failed": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "A1",
+          "title": "task_id 自增计数器无锁保护，并发下产生重复 id",
+          "defect_class": "concurrency",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "A2",
+          "title": "export() 未使用上下文管理器，json.dump 抛异常时文件句柄泄漏",
+          "defect_class": "resource_leak",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "A3",
+          "title": "把 ValueError 当成成功返回，调用方无法区分「成功拿到 None」与「解析失败」",
+          "defect_class": "error_handling",
+          "file": "runner/retry.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "B1",
+          "title": "TTL 判定方向写反：未过期条目被删除并返回 None，过期条目反而被返回",
+          "defect_class": "logic",
+          "file": "cache/ttl.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "B2",
+          "title": "容量检查发生在写入之前且用错比较符，缓存可超出 capacity 一条",
+          "defect_class": "boundary",
+          "file": "cache/ttl.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "C1",
+          "title": "load() 使用可变默认参数 dict，多次调用间共享同一对象",
+          "defect_class": "api_misuse",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "C2",
+          "title": "with_endpoint() 用浅拷贝，嵌套 endpoints 被原配置与副本共享",
+          "defect_class": "logic",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        }
+      ]
+    },
+    {
+      "arm": "blind_no_coverage",
+      "task_id": "seed_a",
+      "reader_count": 3,
+      "recall": 1.0,
+      "precision": 1.0,
+      "redundancy": 0.0909,
+      "effective_channels": 1.7241,
+      "coverage_fill_rate": 0.3333,
+      "rounds": 1,
+      "total_claims": 11,
+      "hits": 7,
+      "planted": 7,
+      "duplicates": 4,
+      "unmatched": 0,
+      "llm_calls": 2,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "readers_failed": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "A1",
+          "title": "task_id 自增计数器无锁保护，并发下产生重复 id",
+          "defect_class": "concurrency",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "A2",
+          "title": "export() 未使用上下文管理器，json.dump 抛异常时文件句柄泄漏",
+          "defect_class": "resource_leak",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "A3",
+          "title": "把 ValueError 当成成功返回，调用方无法区分「成功拿到 None」与「解析失败」",
+          "defect_class": "error_handling",
+          "file": "runner/retry.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "B1",
+          "title": "TTL 判定方向写反：未过期条目被删除并返回 None，过期条目反而被返回",
+          "defect_class": "logic",
+          "file": "cache/ttl.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "B2",
+          "title": "容量检查发生在写入之前且用错比较符，缓存可超出 capacity 一条",
+          "defect_class": "boundary",
+          "file": "cache/ttl.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "C1",
+          "title": "load() 使用可变默认参数 dict，多次调用间共享同一对象",
+          "defect_class": "api_misuse",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "C2",
+          "title": "with_endpoint() 用浅拷贝，嵌套 endpoints 被原配置与副本共享",
+          "defect_class": "logic",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        }
+      ]
+    },
+    {
+      "arm": "blind_full",
+      "task_id": "seed_a",
+      "reader_count": 3,
+      "recall": 1.0,
+      "precision": 1.0,
+      "redundancy": 0.7385,
+      "effective_channels": 2.3406,
+      "coverage_fill_rate": 0.4583,
+      "rounds": 3,
+      "total_claims": 65,
+      "hits": 7,
+      "planted": 7,
+      "duplicates": 58,
+      "unmatched": 0,
+      "llm_calls": 9,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "readers_failed": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "A1",
+          "title": "task_id 自增计数器无锁保护，并发下产生重复 id",
+          "defect_class": "concurrency",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2",
+            "reader-r1-0",
+            "reader-r1-1",
+            "reader-r2-1",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "A2",
+          "title": "export() 未使用上下文管理器，json.dump 抛异常时文件句柄泄漏",
+          "defect_class": "resource_leak",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2",
+            "reader-r1-0",
+            "reader-r1-1",
+            "reader-r2-1",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "A3",
+          "title": "把 ValueError 当成成功返回，调用方无法区分「成功拿到 None」与「解析失败」",
+          "defect_class": "error_handling",
+          "file": "runner/retry.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2",
+            "reader-r1-0",
+            "reader-r1-1",
+            "reader-r2-1",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "B1",
+          "title": "TTL 判定方向写反：未过期条目被删除并返回 None，过期条目反而被返回",
+          "defect_class": "logic",
+          "file": "cache/ttl.py",
+          "found_by": [
+            "reader-r1-1",
+            "reader-r1-2"
+          ]
+        },
+        {
+          "defect_id": "B2",
+          "title": "容量检查发生在写入之前且用错比较符，缓存可超出 capacity 一条",
+          "defect_class": "boundary",
+          "file": "cache/ttl.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2",
+            "reader-r1-1",
+            "reader-r1-2",
+            "reader-r2-1",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "C1",
+          "title": "load() 使用可变默认参数 dict，多次调用间共享同一对象",
+          "defect_class": "api_misuse",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r1-0",
+            "reader-r1-2",
+            "reader-r2-0",
+            "reader-r2-1"
+          ]
+        },
+        {
+          "defect_id": "C2",
+          "title": "with_endpoint() 用浅拷贝，嵌套 endpoints 被原配置与副本共享",
+          "defect_class": "logic",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r1-2",
+            "reader-r2-0",
+            "reader-r2-1"
+          ]
+        }
+      ]
+    },
+    {
+      "arm": "baseline_shared",
+      "task_id": "seed_b",
+      "reader_count": 3,
+      "recall": 1.0,
+      "precision": 1.0,
+      "redundancy": 0.6364,
+      "effective_channels": 1.0712,
+      "coverage_fill_rate": 0.2292,
+      "rounds": 1,
+      "total_claims": 77,
+      "hits": 18,
+      "planted": 18,
+      "duplicates": 59,
+      "unmatched": 0,
+      "llm_calls": 9,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "readers_failed": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "SCHEDULER1-alpha",
+          "title": "就地修改堆元素优先级破坏堆不变量",
+          "defect_class": "logic",
+          "file": "scheduling/scheduler_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "SCHEDULER1-beta",
+          "title": "就地修改堆元素优先级破坏堆不变量",
+          "defect_class": "logic",
+          "file": "scheduling/scheduler_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "SCHEDULER1-gamma",
+          "title": "就地修改堆元素优先级破坏堆不变量",
+          "defect_class": "logic",
+          "file": "scheduling/scheduler_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "JOURNAL1-alpha",
+          "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+          "defect_class": "logic",
+          "file": "persistence/journal_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "JOURNAL1-beta",
+          "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+          "defect_class": "logic",
+          "file": "persistence/journal_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "JOURNAL1-gamma",
+          "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+          "defect_class": "logic",
+          "file": "persistence/journal_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "POOL1-alpha",
+          "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+          "defect_class": "resource_leak",
+          "file": "resources/pool_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "POOL1-beta",
+          "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+          "defect_class": "resource_leak",
+          "file": "resources/pool_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "POOL1-gamma",
+          "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+          "defect_class": "resource_leak",
+          "file": "resources/pool_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "CODEC1-alpha",
+          "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+          "defect_class": "logic",
+          "file": "wire/codec_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "CODEC1-beta",
+          "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+          "defect_class": "logic",
+          "file": "wire/codec_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "CODEC1-gamma",
+          "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+          "defect_class": "logic",
+          "file": "wire/codec_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "REGISTRY1-alpha",
+          "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+          "defect_class": "concurrency",
+          "file": "wiring/registry_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "REGISTRY1-beta",
+          "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+          "defect_class": "concurrency",
+          "file": "wiring/registry_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "REGISTRY1-gamma",
+          "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+          "defect_class": "concurrency",
+          "file": "wiring/registry_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "WINDOW1-alpha",
+          "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+          "defect_class": "logic",
+          "file": "analytics/window_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "WINDOW1-beta",
+          "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+          "defect_class": "logic",
+          "file": "analytics/window_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "WINDOW1-gamma",
+          "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+          "defect_class": "logic",
+          "file": "analytics/window_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        }
+      ]
+    },
+    {
+      "arm": "sharded_shared",
+      "task_id": "seed_b",
+      "reader_count": 3,
+      "recall": 1.0,
+      "precision": 1.0,
+      "redundancy": 0.4667,
+      "effective_channels": 2.0203,
+      "coverage_fill_rate": 0.2708,
+      "rounds": 1,
+      "total_claims": 60,
+      "hits": 18,
+      "planted": 18,
+      "duplicates": 42,
+      "unmatched": 0,
+      "llm_calls": 7,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "readers_failed": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "SCHEDULER1-alpha",
+          "title": "就地修改堆元素优先级破坏堆不变量",
+          "defect_class": "logic",
+          "file": "scheduling/scheduler_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "SCHEDULER1-beta",
+          "title": "就地修改堆元素优先级破坏堆不变量",
+          "defect_class": "logic",
+          "file": "scheduling/scheduler_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "SCHEDULER1-gamma",
+          "title": "就地修改堆元素优先级破坏堆不变量",
+          "defect_class": "logic",
+          "file": "scheduling/scheduler_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "JOURNAL1-alpha",
+          "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+          "defect_class": "logic",
+          "file": "persistence/journal_alpha.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "JOURNAL1-beta",
+          "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+          "defect_class": "logic",
+          "file": "persistence/journal_beta.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "JOURNAL1-gamma",
+          "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+          "defect_class": "logic",
+          "file": "persistence/journal_gamma.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "POOL1-alpha",
+          "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+          "defect_class": "resource_leak",
+          "file": "resources/pool_alpha.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "POOL1-beta",
+          "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+          "defect_class": "resource_leak",
+          "file": "resources/pool_beta.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "POOL1-gamma",
+          "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+          "defect_class": "resource_leak",
+          "file": "resources/pool_gamma.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "CODEC1-alpha",
+          "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+          "defect_class": "logic",
+          "file": "wire/codec_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "CODEC1-beta",
+          "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+          "defect_class": "logic",
+          "file": "wire/codec_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "CODEC1-gamma",
+          "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+          "defect_class": "logic",
+          "file": "wire/codec_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "REGISTRY1-alpha",
+          "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+          "defect_class": "concurrency",
+          "file": "wiring/registry_alpha.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "REGISTRY1-beta",
+          "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+          "defect_class": "concurrency",
+          "file": "wiring/registry_beta.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "REGISTRY1-gamma",
+          "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+          "defect_class": "concurrency",
+          "file": "wiring/registry_gamma.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "WINDOW1-alpha",
+          "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+          "defect_class": "logic",
+          "file": "analytics/window_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "WINDOW1-beta",
+          "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+          "defect_class": "logic",
+          "file": "analytics/window_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "WINDOW1-gamma",
+          "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+          "defect_class": "logic",
+          "file": "analytics/window_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        }
+      ]
+    },
+    {
+      "arm": "no_peers_all_evidence",
+      "task_id": "seed_b",
+      "reader_count": 3,
+      "recall": 1.0,
+      "precision": 1.0,
+      "redundancy": 0.5833,
+      "effective_channels": 1.261,
+      "coverage_fill_rate": 0.25,
+      "rounds": 1,
+      "total_claims": 96,
+      "hits": 18,
+      "planted": 18,
+      "duplicates": 78,
+      "unmatched": 0,
+      "llm_calls": 9,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "readers_failed": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "SCHEDULER1-alpha",
+          "title": "就地修改堆元素优先级破坏堆不变量",
+          "defect_class": "logic",
+          "file": "scheduling/scheduler_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "SCHEDULER1-beta",
+          "title": "就地修改堆元素优先级破坏堆不变量",
+          "defect_class": "logic",
+          "file": "scheduling/scheduler_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "SCHEDULER1-gamma",
+          "title": "就地修改堆元素优先级破坏堆不变量",
+          "defect_class": "logic",
+          "file": "scheduling/scheduler_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "JOURNAL1-alpha",
+          "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+          "defect_class": "logic",
+          "file": "persistence/journal_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "JOURNAL1-beta",
+          "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+          "defect_class": "logic",
+          "file": "persistence/journal_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "JOURNAL1-gamma",
+          "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+          "defect_class": "logic",
+          "file": "persistence/journal_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "POOL1-alpha",
+          "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+          "defect_class": "resource_leak",
+          "file": "resources/pool_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "POOL1-beta",
+          "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+          "defect_class": "resource_leak",
+          "file": "resources/pool_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "POOL1-gamma",
+          "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+          "defect_class": "resource_leak",
+          "file": "resources/pool_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "CODEC1-alpha",
+          "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+          "defect_class": "logic",
+          "file": "wire/codec_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "CODEC1-beta",
+          "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+          "defect_class": "logic",
+          "file": "wire/codec_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "CODEC1-gamma",
+          "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+          "defect_class": "logic",
+          "file": "wire/codec_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "REGISTRY1-alpha",
+          "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+          "defect_class": "concurrency",
+          "file": "wiring/registry_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "REGISTRY1-beta",
+          "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+          "defect_class": "concurrency",
+          "file": "wiring/registry_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "REGISTRY1-gamma",
+          "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+          "defect_class": "concurrency",
+          "file": "wiring/registry_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "WINDOW1-alpha",
+          "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+          "defect_class": "logic",
+          "file": "analytics/window_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "WINDOW1-beta",
+          "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+          "defect_class": "logic",
+          "file": "analytics/window_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "WINDOW1-gamma",
+          "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+          "defect_class": "logic",
+          "file": "analytics/window_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        }
+      ]
+    },
+    {
+      "arm": "blind_no_coverage",
+      "task_id": "seed_b",
+      "reader_count": 3,
+      "recall": 1.0,
+      "precision": 1.0,
+      "redundancy": 0.0968,
+      "effective_channels": 2.7413,
+      "coverage_fill_rate": 0.1667,
+      "rounds": 1,
+      "total_claims": 31,
+      "hits": 18,
+      "planted": 18,
+      "duplicates": 13,
+      "unmatched": 0,
+      "llm_calls": 4,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "readers_failed": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "SCHEDULER1-alpha",
+          "title": "就地修改堆元素优先级破坏堆不变量",
+          "defect_class": "logic",
+          "file": "scheduling/scheduler_alpha.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "SCHEDULER1-beta",
+          "title": "就地修改堆元素优先级破坏堆不变量",
+          "defect_class": "logic",
+          "file": "scheduling/scheduler_beta.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "SCHEDULER1-gamma",
+          "title": "就地修改堆元素优先级破坏堆不变量",
+          "defect_class": "logic",
+          "file": "scheduling/scheduler_gamma.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "JOURNAL1-alpha",
+          "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+          "defect_class": "logic",
+          "file": "persistence/journal_alpha.py",
+          "found_by": [
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "JOURNAL1-beta",
+          "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+          "defect_class": "logic",
+          "file": "persistence/journal_beta.py",
+          "found_by": [
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "JOURNAL1-gamma",
+          "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+          "defect_class": "logic",
+          "file": "persistence/journal_gamma.py",
+          "found_by": [
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "POOL1-alpha",
+          "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+          "defect_class": "resource_leak",
+          "file": "resources/pool_alpha.py",
+          "found_by": [
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "POOL1-beta",
+          "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+          "defect_class": "resource_leak",
+          "file": "resources/pool_beta.py",
+          "found_by": [
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "POOL1-gamma",
+          "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+          "defect_class": "resource_leak",
+          "file": "resources/pool_gamma.py",
+          "found_by": [
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "CODEC1-alpha",
+          "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+          "defect_class": "logic",
+          "file": "wire/codec_alpha.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "CODEC1-beta",
+          "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+          "defect_class": "logic",
+          "file": "wire/codec_beta.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "CODEC1-gamma",
+          "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+          "defect_class": "logic",
+          "file": "wire/codec_gamma.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "REGISTRY1-alpha",
+          "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+          "defect_class": "concurrency",
+          "file": "wiring/registry_alpha.py",
+          "found_by": [
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "REGISTRY1-beta",
+          "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+          "defect_class": "concurrency",
+          "file": "wiring/registry_beta.py",
+          "found_by": [
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "REGISTRY1-gamma",
+          "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+          "defect_class": "concurrency",
+          "file": "wiring/registry_gamma.py",
+          "found_by": [
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "WINDOW1-alpha",
+          "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+          "defect_class": "logic",
+          "file": "analytics/window_alpha.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "WINDOW1-beta",
+          "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+          "defect_class": "logic",
+          "file": "analytics/window_beta.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "WINDOW1-gamma",
+          "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+          "defect_class": "logic",
+          "file": "analytics/window_gamma.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        }
+      ]
+    },
+    {
+      "arm": "blind_full",
+      "task_id": "seed_b",
+      "reader_count": 3,
+      "recall": 1.0,
+      "precision": 1.0,
+      "redundancy": 0.6689,
+      "effective_channels": 3.3373,
+      "coverage_fill_rate": 0.3333,
+      "rounds": 3,
+      "total_claims": 151,
+      "hits": 18,
+      "planted": 18,
+      "duplicates": 133,
+      "unmatched": 0,
+      "llm_calls": 17,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "readers_failed": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "SCHEDULER1-alpha",
+          "title": "就地修改堆元素优先级破坏堆不变量",
+          "defect_class": "logic",
+          "file": "scheduling/scheduler_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r1-0",
+            "reader-r1-2",
+            "reader-r2-0",
+            "reader-r2-1"
+          ]
+        },
+        {
+          "defect_id": "SCHEDULER1-beta",
+          "title": "就地修改堆元素优先级破坏堆不变量",
+          "defect_class": "logic",
+          "file": "scheduling/scheduler_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r1-0",
+            "reader-r1-2",
+            "reader-r2-0",
+            "reader-r2-1"
+          ]
+        },
+        {
+          "defect_id": "SCHEDULER1-gamma",
+          "title": "就地修改堆元素优先级破坏堆不变量",
+          "defect_class": "logic",
+          "file": "scheduling/scheduler_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r1-0",
+            "reader-r1-2",
+            "reader-r2-0",
+            "reader-r2-1"
+          ]
+        },
+        {
+          "defect_id": "JOURNAL1-alpha",
+          "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+          "defect_class": "logic",
+          "file": "persistence/journal_alpha.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "JOURNAL1-beta",
+          "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+          "defect_class": "logic",
+          "file": "persistence/journal_beta.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "JOURNAL1-gamma",
+          "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+          "defect_class": "logic",
+          "file": "persistence/journal_gamma.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "POOL1-alpha",
+          "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+          "defect_class": "resource_leak",
+          "file": "resources/pool_alpha.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2",
+            "reader-r1-0",
+            "reader-r1-2",
+            "reader-r2-0",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "POOL1-beta",
+          "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+          "defect_class": "resource_leak",
+          "file": "resources/pool_beta.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2",
+            "reader-r1-0",
+            "reader-r1-2",
+            "reader-r2-0",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "POOL1-gamma",
+          "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+          "defect_class": "resource_leak",
+          "file": "resources/pool_gamma.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2",
+            "reader-r1-0",
+            "reader-r1-2",
+            "reader-r2-0",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "CODEC1-alpha",
+          "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+          "defect_class": "logic",
+          "file": "wire/codec_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2",
+            "reader-r1-0",
+            "reader-r1-2"
+          ]
+        },
+        {
+          "defect_id": "CODEC1-beta",
+          "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+          "defect_class": "logic",
+          "file": "wire/codec_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2",
+            "reader-r1-0",
+            "reader-r1-2"
+          ]
+        },
+        {
+          "defect_id": "CODEC1-gamma",
+          "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+          "defect_class": "logic",
+          "file": "wire/codec_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2",
+            "reader-r1-0",
+            "reader-r1-2"
+          ]
+        },
+        {
+          "defect_id": "REGISTRY1-alpha",
+          "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+          "defect_class": "concurrency",
+          "file": "wiring/registry_alpha.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2",
+            "reader-r1-1",
+            "reader-r1-2",
+            "reader-r2-1",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "REGISTRY1-beta",
+          "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+          "defect_class": "concurrency",
+          "file": "wiring/registry_beta.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2",
+            "reader-r1-1",
+            "reader-r1-2",
+            "reader-r2-1",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "REGISTRY1-gamma",
+          "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+          "defect_class": "concurrency",
+          "file": "wiring/registry_gamma.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2",
+            "reader-r1-1",
+            "reader-r1-2",
+            "reader-r2-1",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "WINDOW1-alpha",
+          "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+          "defect_class": "logic",
+          "file": "analytics/window_alpha.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r1-0",
+            "reader-r1-1",
+            "reader-r2-0",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "WINDOW1-beta",
+          "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+          "defect_class": "logic",
+          "file": "analytics/window_beta.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r1-0",
+            "reader-r1-1",
+            "reader-r2-0",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "WINDOW1-gamma",
+          "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+          "defect_class": "logic",
+          "file": "analytics/window_gamma.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r1-0",
+            "reader-r1-1",
+            "reader-r2-0",
+            "reader-r2-2"
+          ]
+        }
+      ]
+    }
+  ]
+}

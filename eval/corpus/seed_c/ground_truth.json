@@ -1,0 +1,488 @@
+{
+  "task_id": "seed_c",
+  "description": "由 6 种代码形态 × 3 个变体生成，共 18 个模块、18 个植入缺陷。缺陷刻意避开教科书式模式，均为「读起来合理、跑起来出错」的类型。",
+  "repo": "repo",
+  "planted_defect_count": 48,
+  "defects": [
+    {
+      "id": "SCHEDULER1-alpha",
+      "file": "scheduling/scheduler_alpha.py",
+      "line_start": 44,
+      "line_end": 44,
+      "defect_class": "logic",
+      "title": "就地修改堆元素优先级破坏堆不变量",
+      "marker": "item.priority = priority",
+      "rationale": ""
+    },
+    {
+      "id": "SCHEDULER1-beta",
+      "file": "scheduling/scheduler_beta.py",
+      "line_start": 44,
+      "line_end": 44,
+      "defect_class": "logic",
+      "title": "就地修改堆元素优先级破坏堆不变量",
+      "marker": "item.priority = priority",
+      "rationale": ""
+    },
+    {
+      "id": "SCHEDULER1-gamma",
+      "file": "scheduling/scheduler_gamma.py",
+      "line_start": 44,
+      "line_end": 44,
+      "defect_class": "logic",
+      "title": "就地修改堆元素优先级破坏堆不变量",
+      "marker": "item.priority = priority",
+      "rationale": ""
+    },
+    {
+      "id": "SCHEDULER1-delta",
+      "file": "scheduling/scheduler_delta.py",
+      "line_start": 44,
+      "line_end": 44,
+      "defect_class": "logic",
+      "title": "就地修改堆元素优先级破坏堆不变量",
+      "marker": "item.priority = priority",
+      "rationale": ""
+    },
+    {
+      "id": "SCHEDULER1-epsilon",
+      "file": "scheduling/scheduler_epsilon.py",
+      "line_start": 44,
+      "line_end": 44,
+      "defect_class": "logic",
+      "title": "就地修改堆元素优先级破坏堆不变量",
+      "marker": "item.priority = priority",
+      "rationale": ""
+    },
+    {
+      "id": "SCHEDULER1-zeta",
+      "file": "scheduling/scheduler_zeta.py",
+      "line_start": 44,
+      "line_end": 44,
+      "defect_class": "logic",
+      "title": "就地修改堆元素优先级破坏堆不变量",
+      "marker": "item.priority = priority",
+      "rationale": ""
+    },
+    {
+      "id": "SCHEDULER1-eta",
+      "file": "scheduling/scheduler_eta.py",
+      "line_start": 44,
+      "line_end": 44,
+      "defect_class": "logic",
+      "title": "就地修改堆元素优先级破坏堆不变量",
+      "marker": "item.priority = priority",
+      "rationale": ""
+    },
+    {
+      "id": "SCHEDULER1-theta",
+      "file": "scheduling/scheduler_theta.py",
+      "line_start": 44,
+      "line_end": 44,
+      "defect_class": "logic",
+      "title": "就地修改堆元素优先级破坏堆不变量",
+      "marker": "item.priority = priority",
+      "rationale": ""
+    },
+    {
+      "id": "JOURNAL1-alpha",
+      "file": "persistence/journal_alpha.py",
+      "line_start": 50,
+      "line_end": 50,
+      "defect_class": "logic",
+      "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+      "marker": "self.path.write_text(self._serialise(kept), encoding=\"utf-8\")",
+      "rationale": ""
+    },
+    {
+      "id": "JOURNAL1-beta",
+      "file": "persistence/journal_beta.py",
+      "line_start": 50,
+      "line_end": 50,
+      "defect_class": "logic",
+      "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+      "marker": "self.path.write_text(self._serialise(kept), encoding=\"utf-8\")",
+      "rationale": ""
+    },
+    {
+      "id": "JOURNAL1-gamma",
+      "file": "persistence/journal_gamma.py",
+      "line_start": 50,
+      "line_end": 50,
+      "defect_class": "logic",
+      "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+      "marker": "self.path.write_text(self._serialise(kept), encoding=\"utf-8\")",
+      "rationale": ""
+    },
+    {
+      "id": "JOURNAL1-delta",
+      "file": "persistence/journal_delta.py",
+      "line_start": 50,
+      "line_end": 50,
+      "defect_class": "logic",
+      "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+      "marker": "self.path.write_text(self._serialise(kept), encoding=\"utf-8\")",
+      "rationale": ""
+    },
+    {
+      "id": "JOURNAL1-epsilon",
+      "file": "persistence/journal_epsilon.py",
+      "line_start": 50,
+      "line_end": 50,
+      "defect_class": "logic",
+      "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+      "marker": "self.path.write_text(self._serialise(kept), encoding=\"utf-8\")",
+      "rationale": ""
+    },
+    {
+      "id": "JOURNAL1-zeta",
+      "file": "persistence/journal_zeta.py",
+      "line_start": 50,
+      "line_end": 50,
+      "defect_class": "logic",
+      "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+      "marker": "self.path.write_text(self._serialise(kept), encoding=\"utf-8\")",
+      "rationale": ""
+    },
+    {
+      "id": "JOURNAL1-eta",
+      "file": "persistence/journal_eta.py",
+      "line_start": 50,
+      "line_end": 50,
+      "defect_class": "logic",
+      "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+      "marker": "self.path.write_text(self._serialise(kept), encoding=\"utf-8\")",
+      "rationale": ""
+    },
+    {
+      "id": "JOURNAL1-theta",
+      "file": "persistence/journal_theta.py",
+      "line_start": 50,
+      "line_end": 50,
+      "defect_class": "logic",
+      "title": "压缩只改了磁盘，内存 _records 未同步，后续 append 触发 _flush 会把已丢弃的记录全部写回",
+      "marker": "self.path.write_text(self._serialise(kept), encoding=\"utf-8\")",
+      "rationale": ""
+    },
+    {
+      "id": "POOL1-alpha",
+      "file": "resources/pool_alpha.py",
+      "line_start": 46,
+      "line_end": 46,
+      "defect_class": "resource_leak",
+      "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+      "marker": "self._free.append(resource)",
+      "rationale": ""
+    },
+    {
+      "id": "POOL1-beta",
+      "file": "resources/pool_beta.py",
+      "line_start": 46,
+      "line_end": 46,
+      "defect_class": "resource_leak",
+      "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+      "marker": "self._free.append(resource)",
+      "rationale": ""
+    },
+    {
+      "id": "POOL1-gamma",
+      "file": "resources/pool_gamma.py",
+      "line_start": 46,
+      "line_end": 46,
+      "defect_class": "resource_leak",
+      "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+      "marker": "self._free.append(resource)",
+      "rationale": ""
+    },
+    {
+      "id": "POOL1-delta",
+      "file": "resources/pool_delta.py",
+      "line_start": 46,
+      "line_end": 46,
+      "defect_class": "resource_leak",
+      "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+      "marker": "self._free.append(resource)",
+      "rationale": ""
+    },
+    {
+      "id": "POOL1-epsilon",
+      "file": "resources/pool_epsilon.py",
+      "line_start": 46,
+      "line_end": 46,
+      "defect_class": "resource_leak",
+      "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+      "marker": "self._free.append(resource)",
+      "rationale": ""
+    },
+    {
+      "id": "POOL1-zeta",
+      "file": "resources/pool_zeta.py",
+      "line_start": 46,
+      "line_end": 46,
+      "defect_class": "resource_leak",
+      "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+      "marker": "self._free.append(resource)",
+      "rationale": ""
+    },
+    {
+      "id": "POOL1-eta",
+      "file": "resources/pool_eta.py",
+      "line_start": 46,
+      "line_end": 46,
+      "defect_class": "resource_leak",
+      "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+      "marker": "self._free.append(resource)",
+      "rationale": ""
+    },
+    {
+      "id": "POOL1-theta",
+      "file": "resources/pool_theta.py",
+      "line_start": 46,
+      "line_end": 46,
+      "defect_class": "resource_leak",
+      "title": "归还前未校验资源确实在借出集合中，重复归还导致同一资源被重复分配",
+      "marker": "self._free.append(resource)",
+      "rationale": ""
+    },
+    {
+      "id": "CODEC1-alpha",
+      "file": "wire/codec_alpha.py",
+      "line_start": 35,
+      "line_end": 35,
+      "defect_class": "logic",
+      "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+      "marker": "out[\"size\"] = payload.get(\"size\", 0)",
+      "rationale": ""
+    },
+    {
+      "id": "CODEC1-beta",
+      "file": "wire/codec_beta.py",
+      "line_start": 35,
+      "line_end": 35,
+      "defect_class": "logic",
+      "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+      "marker": "out[\"size\"] = payload.get(\"size\", 0)",
+      "rationale": ""
+    },
+    {
+      "id": "CODEC1-gamma",
+      "file": "wire/codec_gamma.py",
+      "line_start": 35,
+      "line_end": 35,
+      "defect_class": "logic",
+      "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+      "marker": "out[\"size\"] = payload.get(\"size\", 0)",
+      "rationale": ""
+    },
+    {
+      "id": "CODEC1-delta",
+      "file": "wire/codec_delta.py",
+      "line_start": 35,
+      "line_end": 35,
+      "defect_class": "logic",
+      "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+      "marker": "out[\"size\"] = payload.get(\"size\", 0)",
+      "rationale": ""
+    },
+    {
+      "id": "CODEC1-epsilon",
+      "file": "wire/codec_epsilon.py",
+      "line_start": 35,
+      "line_end": 35,
+      "defect_class": "logic",
+      "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+      "marker": "out[\"size\"] = payload.get(\"size\", 0)",
+      "rationale": ""
+    },
+    {
+      "id": "CODEC1-zeta",
+      "file": "wire/codec_zeta.py",
+      "line_start": 35,
+      "line_end": 35,
+      "defect_class": "logic",
+      "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+      "marker": "out[\"size\"] = payload.get(\"size\", 0)",
+      "rationale": ""
+    },
+    {
+      "id": "CODEC1-eta",
+      "file": "wire/codec_eta.py",
+      "line_start": 35,
+      "line_end": 35,
+      "defect_class": "logic",
+      "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+      "marker": "out[\"size\"] = payload.get(\"size\", 0)",
+      "rationale": ""
+    },
+    {
+      "id": "CODEC1-theta",
+      "file": "wire/codec_theta.py",
+      "line_start": 35,
+      "line_end": 35,
+      "defect_class": "logic",
+      "title": "v2 记录的体量字段是 size_bytes，回退读 size 导致静默归零",
+      "marker": "out[\"size\"] = payload.get(\"size\", 0)",
+      "rationale": ""
+    },
+    {
+      "id": "REGISTRY1-alpha",
+      "file": "wiring/registry_alpha.py",
+      "line_start": 26,
+      "line_end": 26,
+      "defect_class": "concurrency",
+      "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+      "marker": "self._instances[name] = self._build(name)",
+      "rationale": ""
+    },
+    {
+      "id": "REGISTRY1-beta",
+      "file": "wiring/registry_beta.py",
+      "line_start": 26,
+      "line_end": 26,
+      "defect_class": "concurrency",
+      "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+      "marker": "self._instances[name] = self._build(name)",
+      "rationale": ""
+    },
+    {
+      "id": "REGISTRY1-gamma",
+      "file": "wiring/registry_gamma.py",
+      "line_start": 26,
+      "line_end": 26,
+      "defect_class": "concurrency",
+      "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+      "marker": "self._instances[name] = self._build(name)",
+      "rationale": ""
+    },
+    {
+      "id": "REGISTRY1-delta",
+      "file": "wiring/registry_delta.py",
+      "line_start": 26,
+      "line_end": 26,
+      "defect_class": "concurrency",
+      "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+      "marker": "self._instances[name] = self._build(name)",
+      "rationale": ""
+    },
+    {
+      "id": "REGISTRY1-epsilon",
+      "file": "wiring/registry_epsilon.py",
+      "line_start": 26,
+      "line_end": 26,
+      "defect_class": "concurrency",
+      "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+      "marker": "self._instances[name] = self._build(name)",
+      "rationale": ""
+    },
+    {
+      "id": "REGISTRY1-zeta",
+      "file": "wiring/registry_zeta.py",
+      "line_start": 26,
+      "line_end": 26,
+      "defect_class": "concurrency",
+      "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+      "marker": "self._instances[name] = self._build(name)",
+      "rationale": ""
+    },
+    {
+      "id": "REGISTRY1-eta",
+      "file": "wiring/registry_eta.py",
+      "line_start": 26,
+      "line_end": 26,
+      "defect_class": "concurrency",
+      "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+      "marker": "self._instances[name] = self._build(name)",
+      "rationale": ""
+    },
+    {
+      "id": "REGISTRY1-theta",
+      "file": "wiring/registry_theta.py",
+      "line_start": 26,
+      "line_end": 26,
+      "defect_class": "concurrency",
+      "title": "检查-构造-写入未加锁，并发下同名组件会被构造出两个实例",
+      "marker": "self._instances[name] = self._build(name)",
+      "rationale": ""
+    },
+    {
+      "id": "WINDOW1-alpha",
+      "file": "analytics/window_alpha.py",
+      "line_start": 23,
+      "line_end": 23,
+      "defect_class": "logic",
+      "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+      "marker": "self._total += value",
+      "rationale": ""
+    },
+    {
+      "id": "WINDOW1-beta",
+      "file": "analytics/window_beta.py",
+      "line_start": 23,
+      "line_end": 23,
+      "defect_class": "logic",
+      "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+      "marker": "self._total += value",
+      "rationale": ""
+    },
+    {
+      "id": "WINDOW1-gamma",
+      "file": "analytics/window_gamma.py",
+      "line_start": 23,
+      "line_end": 23,
+      "defect_class": "logic",
+      "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+      "marker": "self._total += value",
+      "rationale": ""
+    },
+    {
+      "id": "WINDOW1-delta",
+      "file": "analytics/window_delta.py",
+      "line_start": 23,
+      "line_end": 23,
+      "defect_class": "logic",
+      "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+      "marker": "self._total += value",
+      "rationale": ""
+    },
+    {
+      "id": "WINDOW1-epsilon",
+      "file": "analytics/window_epsilon.py",
+      "line_start": 23,
+      "line_end": 23,
+      "defect_class": "logic",
+      "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+      "marker": "self._total += value",
+      "rationale": ""
+    },
+    {
+      "id": "WINDOW1-zeta",
+      "file": "analytics/window_zeta.py",
+      "line_start": 23,
+      "line_end": 23,
+      "defect_class": "logic",
+      "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+      "marker": "self._total += value",
+      "rationale": ""
+    },
+    {
+      "id": "WINDOW1-eta",
+      "file": "analytics/window_eta.py",
+      "line_start": 23,
+      "line_end": 23,
+      "defect_class": "logic",
+      "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+      "marker": "self._total += value",
+      "rationale": ""
+    },
+    {
+      "id": "WINDOW1-theta",
+      "file": "analytics/window_theta.py",
+      "line_start": 23,
+      "line_end": 23,
+      "defect_class": "logic",
+      "title": "环形缓冲自动淘汰最旧样本时未从累计和中扣除，均值随样本数持续漂移",
+      "marker": "self._total += value",
+      "rationale": ""
+    }
+  ]
+}

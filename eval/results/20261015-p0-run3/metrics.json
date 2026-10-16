@@ -1,0 +1,393 @@
+{
+  "generated_at": "2026-10-15T14:11:05+00:00",
+  "arms": [
+    {
+      "arm": "baseline_shared",
+      "task_id": "seed_a",
+      "reader_count": 3,
+      "recall": 0.8571,
+      "precision": 1.0,
+      "redundancy": 0.6774,
+      "effective_channels": 1.0,
+      "coverage_fill_rate": 0.3333,
+      "rounds": 1,
+      "total_claims": 31,
+      "hits": 6,
+      "planted": 7,
+      "duplicates": 25,
+      "unmatched": 0,
+      "llm_calls": 3,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "A1",
+          "title": "task_id 自增计数器无锁保护，并发下产生重复 id",
+          "defect_class": "concurrency",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "A2",
+          "title": "export() 未使用上下文管理器，json.dump 抛异常时文件句柄泄漏",
+          "defect_class": "resource_leak",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "A3",
+          "title": "把 ValueError 当成成功返回，调用方无法区分「成功拿到 None」与「解析失败」",
+          "defect_class": "error_handling",
+          "file": "runner/retry.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "B1",
+          "title": "TTL 判定方向写反：未过期条目被删除并返回 None，过期条目反而被返回",
+          "defect_class": "logic",
+          "file": "cache/ttl.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "B2",
+          "title": "容量检查发生在写入之前且用错比较符，缓存可超出 capacity 一条",
+          "defect_class": "boundary",
+          "file": "cache/ttl.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "C1",
+          "title": "load() 使用可变默认参数 dict，多次调用间共享同一对象",
+          "defect_class": "api_misuse",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "C2",
+          "title": "with_endpoint() 用浅拷贝，嵌套 endpoints 被原配置与副本共享",
+          "defect_class": "logic",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        }
+      ]
+    },
+    {
+      "arm": "no_peers_all_evidence",
+      "task_id": "seed_a",
+      "reader_count": 3,
+      "recall": 1.0,
+      "precision": 1.0,
+      "redundancy": 0.5938,
+      "effective_channels": 1.2609,
+      "coverage_fill_rate": 0.375,
+      "rounds": 1,
+      "total_claims": 32,
+      "hits": 7,
+      "planted": 7,
+      "duplicates": 25,
+      "unmatched": 0,
+      "llm_calls": 3,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "A1",
+          "title": "task_id 自增计数器无锁保护，并发下产生重复 id",
+          "defect_class": "concurrency",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "A2",
+          "title": "export() 未使用上下文管理器，json.dump 抛异常时文件句柄泄漏",
+          "defect_class": "resource_leak",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "A3",
+          "title": "把 ValueError 当成成功返回，调用方无法区分「成功拿到 None」与「解析失败」",
+          "defect_class": "error_handling",
+          "file": "runner/retry.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "B1",
+          "title": "TTL 判定方向写反：未过期条目被删除并返回 None，过期条目反而被返回",
+          "defect_class": "logic",
+          "file": "cache/ttl.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "B2",
+          "title": "容量检查发生在写入之前且用错比较符，缓存可超出 capacity 一条",
+          "defect_class": "boundary",
+          "file": "cache/ttl.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "C1",
+          "title": "load() 使用可变默认参数 dict，多次调用间共享同一对象",
+          "defect_class": "api_misuse",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "C2",
+          "title": "with_endpoint() 用浅拷贝，嵌套 endpoints 被原配置与副本共享",
+          "defect_class": "logic",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        }
+      ]
+    },
+    {
+      "arm": "blind_no_coverage",
+      "task_id": "seed_a",
+      "reader_count": 3,
+      "recall": 0.8571,
+      "precision": 1.0,
+      "redundancy": 0.0,
+      "effective_channels": 1.6575,
+      "coverage_fill_rate": 0.375,
+      "rounds": 1,
+      "total_claims": 11,
+      "hits": 6,
+      "planted": 7,
+      "duplicates": 5,
+      "unmatched": 0,
+      "llm_calls": 2,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "A1",
+          "title": "task_id 自增计数器无锁保护，并发下产生重复 id",
+          "defect_class": "concurrency",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "A2",
+          "title": "export() 未使用上下文管理器，json.dump 抛异常时文件句柄泄漏",
+          "defect_class": "resource_leak",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "A3",
+          "title": "把 ValueError 当成成功返回，调用方无法区分「成功拿到 None」与「解析失败」",
+          "defect_class": "error_handling",
+          "file": "runner/retry.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "B1",
+          "title": "TTL 判定方向写反：未过期条目被删除并返回 None，过期条目反而被返回",
+          "defect_class": "logic",
+          "file": "cache/ttl.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "B2",
+          "title": "容量检查发生在写入之前且用错比较符，缓存可超出 capacity 一条",
+          "defect_class": "boundary",
+          "file": "cache/ttl.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "C1",
+          "title": "load() 使用可变默认参数 dict，多次调用间共享同一对象",
+          "defect_class": "api_misuse",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "C2",
+          "title": "with_endpoint() 用浅拷贝，嵌套 endpoints 被原配置与副本共享",
+          "defect_class": "logic",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        }
+      ]
+    },
+    {
+      "arm": "blind_full",
+      "task_id": "seed_a",
+      "reader_count": 3,
+      "recall": 1.0,
+      "precision": 1.0,
+      "redundancy": 0.7,
+      "effective_channels": 2.8613,
+      "coverage_fill_rate": 0.5,
+      "rounds": 3,
+      "total_claims": 60,
+      "hits": 7,
+      "planted": 7,
+      "duplicates": 53,
+      "unmatched": 0,
+      "llm_calls": 9,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "A1",
+          "title": "task_id 自增计数器无锁保护，并发下产生重复 id",
+          "defect_class": "concurrency",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2",
+            "reader-r1-0",
+            "reader-r1-1",
+            "reader-r2-1",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "A2",
+          "title": "export() 未使用上下文管理器，json.dump 抛异常时文件句柄泄漏",
+          "defect_class": "resource_leak",
+          "file": "runner/pool.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2",
+            "reader-r1-0",
+            "reader-r1-1",
+            "reader-r2-1",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "A3",
+          "title": "把 ValueError 当成成功返回，调用方无法区分「成功拿到 None」与「解析失败」",
+          "defect_class": "error_handling",
+          "file": "runner/retry.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2",
+            "reader-r1-0",
+            "reader-r1-1",
+            "reader-r2-1",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "B1",
+          "title": "TTL 判定方向写反：未过期条目被删除并返回 None，过期条目反而被返回",
+          "defect_class": "logic",
+          "file": "cache/ttl.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "B2",
+          "title": "容量检查发生在写入之前且用错比较符，缓存可超出 capacity 一条",
+          "defect_class": "boundary",
+          "file": "cache/ttl.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "C1",
+          "title": "load() 使用可变默认参数 dict，多次调用间共享同一对象",
+          "defect_class": "api_misuse",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r1-0",
+            "reader-r1-2",
+            "reader-r2-0",
+            "reader-r2-1"
+          ]
+        },
+        {
+          "defect_id": "C2",
+          "title": "with_endpoint() 用浅拷贝，嵌套 endpoints 被原配置与副本共享",
+          "defect_class": "logic",
+          "file": "config/loader.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r1-0",
+            "reader-r1-2",
+            "reader-r2-0"
+          ]
+        }
+      ]
+    }
+  ]
+}
