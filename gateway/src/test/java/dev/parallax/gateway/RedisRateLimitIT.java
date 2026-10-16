@@ -40,6 +40,7 @@ class RedisRateLimitIT {
     private static final int REDIS_PORT = 6379;
     private static final AtomicInteger BUCKET_SEQ = new AtomicInteger();
 
+    @SuppressWarnings("resource") // 生命周期由 @Container（Testcontainers JUnit 扩展）托管，IDE 的"资源未关闭"是误报
     @Container
     static final GenericContainer<?> REDIS =
             new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(REDIS_PORT);

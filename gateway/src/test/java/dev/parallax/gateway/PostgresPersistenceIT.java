@@ -59,6 +59,7 @@ class PostgresPersistenceIT {
     private static final String ADMIN_SECRET = "admin-secret-for-it";
     private static final String INTERNAL_TOKEN = "it-internal-token";
 
+    @SuppressWarnings("resource") // 生命周期由 @Container（Testcontainers JUnit 扩展）托管，IDE 的"资源未关闭"是误报
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine")
             .withDatabaseName("parallax")
@@ -118,7 +119,6 @@ class PostgresPersistenceIT {
         return headers;
     }
 
-    @SuppressWarnings("unchecked")
     private String adminToken() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
