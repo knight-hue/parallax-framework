@@ -185,7 +185,7 @@ class AuditRunner:
         elapsed = round(time.perf_counter() - started, 2)
         usage = engine.usage_snapshot()
 
-        self.store.save_report(run_id, render_markdown(report))
+        self.store.save_report(run_id, render_markdown(report, max_items=job.settings.report_max_items))
         self.store.save_summary(run_id, _summary_payload(report, engine))
         self.store.update(
             run_id,

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from parallax.cli import build_parser, main
+from parallax.domain.enums import ClaimStatus
+from parallax.domain.models import Claim, SourceRef
 from parallax.engine import ParallaxEngine
 from parallax.infra.llm_fake import FakeLLMClient
 from parallax.plugins.code_audit import CodeAuditReader, RepoAdapter
@@ -64,6 +66,72 @@ async def test_report_serialises_to_json(demo_repo, defects):
     payload = report.model_dump_json()
     assert "manifest" in payload
     assert "coverage" in payload
+
+
+# ---- 报告截断必须显式（曾静默只渲染前 40 条） ----
+
+
+def _claim(i: int, status: ClaimStatus) -> Claim:
+    return Claim(
+        claim_id=f"c{i}",
+        fingerprint=f"fp-{i}",
+        statement=f"第 {i} 条主张",
+        claim_type="concurrency",
+        extracted_by=f"reader-r0-{i}",
+        source_refs=[
+            SourceRef(
+                adapter="test",
+                evidence_id=f"e{i}",
+                locator=f"pkg/m{i}.py",
+                line_start=1,
+            )
+        ],
+        verified_by=[f"reader-r0-{i}"],
+        status=status,
+        confidence=0.5,
+        metadata={"severity": "high"},
+    )
+
+
+def test_truncated_bucket_announces_true_count_and_limit():
+    from parallax.reporting import _render_claims
+
+    claims = [_claim(i, ClaimStatus.PENDING) for i in range(123)]
+    text = "\n".join(_render_claims("待验证（孤证）", claims, 40))
+
+    assert "共 **123** 条" in text, "截断必须报出真实条数，否则读者会以为总数就是上限"
+    assert "仅列出前 40 条" in text
+    assert "claims.json" in text
+
+
+def test_bucket_below_limit_has_no_truncation_notice():
+    from parallax.reporting import _render_claims
+
+    claims = [_claim(i, ClaimStatus.PENDING) for i in range(5)]
+    text = "\n".join(_render_claims("待验证（孤证）", claims, 40))
+
+    assert "仅列出前" not in text
+    assert text.count("- **") == 5
+
+
+def test_zero_limit_means_unlimited():
+    from parallax.reporting import _render_claims
+
+    claims = [_claim(i, ClaimStatus.PENDING) for i in range(57)]
+    text = "\n".join(_render_claims("待验证（孤证）", claims, 0))
+
+    assert "仅列出前" not in text
+    assert text.count("- **") == 57
+
+
+async def test_render_markdown_honours_max_items(demo_repo, defects):
+    report = await build_report(demo_repo, defects)
+    text = render_markdown(report, max_items=1)
+
+    bucket = len(report.pending) + len(report.disputed) + len(report.high_confidence)
+    if bucket > 1:
+        assert "仅列出前 1 条" in text, "经 render_markdown 的截断同样必须显式"
+    assert "## 覆盖率矩阵" in text
 
 
 # ---- CLI ----

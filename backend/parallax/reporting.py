@@ -61,7 +61,18 @@ def _render_claims(title: str, claims: list[Claim], max_items: int) -> list[str]
         lines.append("（无）")
         lines.append("")
         return lines
-    for claim in claims[:max_items]:
+    # max_items <= 0 表示不限制（交付评审用）
+    limit = max_items if max_items > 0 else len(claims)
+    # 截断必须显式说明。此前这里静默只渲染前 max_items 条，
+    # 于是「待验证 646 条」的报告看上去只有 40 条——读者会以为总数就是 40。
+    # 这与 P0 记录的那批「静默截断」是同一类错误。
+    if len(claims) > limit:
+        lines.append(
+            f"> ⚠️ 本节共 **{len(claims)}** 条，此处**仅列出前 {limit} 条**"
+            f"（按置信度降序）。完整清单见同目录的 `.claims.json`。"
+        )
+        lines.append("")
+    for claim in claims[:limit]:
         severity = claim.metadata.get("severity", "?")
         lines.append(f"- **[{claim.claim_type}/{severity}]** {claim.statement}")
         lines.append(

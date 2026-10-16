@@ -172,7 +172,7 @@ async def _run_audit(args: argparse.Namespace) -> int:
         payload = json.loads(report.model_dump_json())
         text = json.dumps(payload, ensure_ascii=False, indent=2)
     else:
-        text = render_markdown(report)
+        text = render_markdown(report, max_items=settings.report_max_items)
 
     if args.out:
         out_path = Path(args.out)

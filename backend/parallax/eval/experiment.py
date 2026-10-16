@@ -44,6 +44,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from parallax.config import Settings
+from parallax.domain.models import Claim
 from parallax.engine import ParallaxEngine
 from parallax.eval.corpus import GroundTruth, Task
 from parallax.eval.metrics import ArmMetrics, compute_metrics
@@ -134,6 +135,9 @@ class ArmResult:
     elapsed_s: float = 0.0
     report_markdown: str = ""
     errors: list[str] = field(default_factory=list)
+    # 该臂产出的全部 claim（未截断）。报告按档位只渲染前 40 条（已加显式提示），
+    # 但结论质量抽查必须从完整集合里抽样——只从报告抽会偏向高置信，使结论不可外推。
+    claims: list[Claim] = field(default_factory=list)
 
 
 def make_settings(base: Settings, arm: Arm) -> Settings:
@@ -212,8 +216,9 @@ async def run_arm(
     return ArmResult(
         metrics=metrics,
         elapsed_s=round(elapsed, 2),
-        report_markdown=render_markdown(report),
+        report_markdown=render_markdown(report, max_items=settings.report_max_items),
         errors=errors,
+        claims=list(claims),
     )
 
 
@@ -357,8 +362,9 @@ async def run_repo_arm(
     return ArmResult(
         metrics=metrics,
         elapsed_s=round(elapsed, 2),
-        report_markdown=render_markdown(report),
+        report_markdown=render_markdown(report, max_items=settings.report_max_items),
         errors=errors,
+        claims=list(claims),
     )
 
 
@@ -479,6 +485,34 @@ def save_results(results: list[ArmResult], out_dir: Path) -> Path:
         if result.report_markdown:
             name = f"{result.metrics.task_id}__{result.metrics.arm}.md"
             (out_dir / name).write_text(result.report_markdown, encoding="utf-8")
+        if result.claims:
+            # 完整 claim 清单：抽查与后续分析的事实来源，不受报告的 40 条展示上限影响
+            payload = [
+                {
+                    "claim_id": c.claim_id,
+                    "fingerprint": c.fingerprint,
+                    "statement": c.statement,
+                    "claim_type": c.claim_type,
+                    "severity": c.metadata.get("severity"),
+                    "stance": c.metadata.get("stance"),
+                    "extracted_by": c.extracted_by,
+                    "round_index": c.round_index,
+                    "verified_by": c.verified_by,
+                    "disputed_with": c.disputed_with,
+                    "status": c.status.value,
+                    "confidence": c.confidence,
+                    "locator": c.source_refs[0].locator if c.source_refs else None,
+                    "rationale": c.metadata.get("rationale"),
+                    "title": c.metadata.get("title"),
+                    "line_start": c.metadata.get("line_start"),
+                    "line_end": c.metadata.get("line_end"),
+                }
+                for c in result.claims
+            ]
+            cname = f"{result.metrics.task_id}__{result.metrics.arm}.claims.json"
+            (out_dir / cname).write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
 
     return out_dir / "summary.md"
 
