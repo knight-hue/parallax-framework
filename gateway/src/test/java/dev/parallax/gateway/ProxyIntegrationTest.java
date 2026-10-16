@@ -196,7 +196,19 @@ class ProxyIntegrationTest {
     void refusesPathsOutsideTheWhitelist() {
         // 这个路径会被 /api/v1/audits/** 的映射接住，但不在白名单里。
         // 没有白名单的话它就真的被转发到上游了——网关会变成一个开放代理。
-        ResponseEntity<String> response = rest.getForEntity(url("/api/v1/audits/abc/bogus"), String.class);
+        //
+        // 显式不让这条连接被复用。背景：本用例在 CI 上偶发
+        // `HTTP/1.1 header parser received no bytes`，本地从未复现。
+        // 根因不是白名单判断错了，而是 HttpURLConnection 的连接池复用了服务端
+        // 已关闭的空闲连接——前一个用例是 SSE 流，那类响应必然是 close-delimited，
+        // 服务端发完就关连接，而客户端并不知道。
+        // 生产侧的对应修法是给小 JSON 响应补 Content-Length
+        // （见 ProxyController#json 的说明）；这里再显式禁掉复用，
+        // 让"白名单是否生效"不再受连接时序影响。
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.CONNECTION, "close");
+        ResponseEntity<String> response = rest.exchange(
+                url("/api/v1/audits/abc/bogus"), HttpMethod.GET, new HttpEntity<>(headers), String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(receivedPaths).doesNotContain("/api/v1/audits/abc/bogus");

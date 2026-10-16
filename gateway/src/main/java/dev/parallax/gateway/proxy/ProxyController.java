@@ -214,11 +214,24 @@ public class ProxyController {
         return auth.getPrincipal() instanceof AuthPrincipal principal ? principal : null;
     }
 
+    /**
+     * 小体量 JSON 响应刻意带上 `Content-Length`。
+     *
+     * 不带的话这个响应就是 **close-delimited**（无长度、非分块），Tomcat 只能在
+     * 响应结束后关闭连接。客户端的连接池并不知道连接已经死了，下一次请求复用它就会
+     * 得到 `HTTP/1.1 header parser received no bytes`——一个**看起来像服务端崩了**
+     * 的报错，实际只是连接复用撞上了一个已关闭的空闲连接。
+     * 这个 flaky 在 CI 上偶发（本地从未复现），定位花了几轮。
+     *
+     * 代理转发的响应仍然不可预知长度（SSE 必须流式），那类响应保持原样。
+     */
     private ResponseEntity<StreamingResponseBody> json(HttpStatus status, String payload) {
+        byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
         return ResponseEntity.status(status)
                 .contentType(MediaType.APPLICATION_JSON)
+                .contentLength(bytes.length)
                 .body(out -> {
-                    out.write(payload.getBytes(StandardCharsets.UTF_8));
+                    out.write(bytes);
                     out.flush();
                 });
     }
