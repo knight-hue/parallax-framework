@@ -39,6 +39,10 @@ public class ParallaxMetrics {
         for (String metric : new String[] {"daily_runs", "daily_tokens", "monthly_tokens"}) {
             Counter.builder(QUOTA_REJECTIONS).tag("metric", metric).register(registry);
         }
+        // 降级计数同样要预注册。第一次写这个测试时它没有预注册，
+        // 于是"从没降级过"与"降级指标根本没接上"在 /actuator/prometheus 上完全一样——
+        // 这与本类开头写的原则是同一条，只是当时漏了这一项。
+        Counter.builder(RATELIMIT_DEGRADED).register(registry);
     }
 
     /** 一次运行走到终态。 */

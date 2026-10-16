@@ -138,6 +138,35 @@ class ArmResult:
     # 该臂产出的全部 claim（未截断）。报告按档位只渲染前 40 条（已加显式提示），
     # 但结论质量抽查必须从完整集合里抽样——只从报告抽会偏向高置信，使结论不可外推。
     claims: list[Claim] = field(default_factory=list)
+    config: dict = field(default_factory=dict)
+    """该臂的**生效配置**快照。
+
+    必须随产物一起落盘：配置只出现在终端输出里的话，终端一滚就没人知道
+    这批数字是在什么设置下跑出来的。真实事故——一次重复实验漏传 `--readers`，
+    用了默认 3 而头条数字来自 6，两者 K\\* 的上限不同，却看上去同样正常。
+    """
+
+
+def config_snapshot(settings: Settings, **extra: object) -> dict:
+    """记录那些**会改变指标含义**的设置。
+
+    刻意不含 API key、超时这类"不影响结论"的项：快照要能被一眼读完，
+    塞满无关字段等于没有快照。
+    """
+    snapshot: dict[str, object] = {
+        "model": settings.llm_model,
+        "readers": settings.n_readers,
+        "redundancy": settings.redundancy,
+        "support_threshold": settings.support_threshold,
+        "max_rounds": settings.max_rounds,
+        "visibility": settings.reader_visibility,
+        "seed": settings.seed,
+        "max_evidence_per_call": settings.max_evidence_per_call,
+        "max_batch_chars": settings.llm_max_batch_chars,
+        "max_output_tokens": settings.llm_max_output_tokens,
+    }
+    snapshot.update({k: v for k, v in extra.items() if v not in (None, "")})
+    return snapshot
 
 
 def make_settings(base: Settings, arm: Arm) -> Settings:
@@ -219,6 +248,7 @@ async def run_arm(
         report_markdown=render_markdown(report, max_items=settings.report_max_items),
         errors=errors,
         claims=list(claims),
+        config=config_snapshot(settings, task=task.task_id),
     )
 
 
@@ -365,6 +395,34 @@ async def run_repo_arm(
         report_markdown=render_markdown(report, max_items=settings.report_max_items),
         errors=errors,
         claims=list(claims),
+        config=config_snapshot(
+            settings,
+            repo=task.repo_path.name,
+            group_depth=group_depth,
+            max_files=max_files,
+        ),
+    )
+
+
+def _render_config(results: list[ArmResult]) -> str:
+    """把**生效配置**写进汇总表本身。
+
+    存在的理由是一次真实事故：一次重复实验漏传了 `--readers`，于是它用了默认 3 而
+    头条数字来自 6，两者 Agent 数不同、口径不可比，而那批产物看上去完全正常。
+    配置只出现在终端输出里是不够的——终端会滚掉，产物会留下来。
+    """
+    configs = {
+        json.dumps(r.config, ensure_ascii=False, sort_keys=True) for r in results if r.config
+    }
+    if not configs:
+        return ""
+    parts = []
+    for raw in sorted(configs):
+        config = json.loads(raw)
+        label = "；".join(f"{k}={v}" for k, v in sorted(config.items()) if v not in (None, ""))
+        parts.append(f"- {label}" if len(configs) > 1 else f"- 生效配置：{label}")
+    return "**生效配置**（跨臂不同会被分别列出，避免拿不同口径的结果互相比较）\n\n" + "\n".join(
+        parts
     )
 
 
@@ -374,6 +432,9 @@ def render_summary(results: list[ArmResult], arms: list[Arm] | None = None) -> s
 
     lines = ["# 对照实验结果", ""]
     lines.append(f"生成时间：{datetime.now(UTC).isoformat(timespec='seconds')}")
+    lines.append("")
+    lines.append(_render_config(results))
+    lines.append("")
     lines.append("")
 
     lines.append("## 主指标对照")
@@ -494,6 +555,7 @@ def save_results(results: list[ArmResult], out_dir: Path) -> Path:
                 **json.loads(r.metrics.model_dump_json()),
                 "elapsed_s": r.elapsed_s,
                 "errors": r.errors,
+                "config": r.config,
             }
             for r in results
         ],
@@ -555,6 +617,7 @@ def rerender_summary(out_dir: Path, arms: list[Arm] | None = None) -> Path:
             metrics=ArmMetrics.model_validate(entry),
             elapsed_s=entry.get("elapsed_s", 0.0),
             errors=entry.get("errors", []),
+            config=entry.get("config", {}),
         )
         for entry in raw["arms"]
     ]

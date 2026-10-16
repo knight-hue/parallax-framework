@@ -109,6 +109,36 @@ Agent 会迅速学会"不要第一个说不同意见"，于是我们在框架内
 **领域模型**（`domain/models.py`）刻意保持场景无关：
 `EvidenceUnit` / `Claim`（指纹 + 极性 + 源指针）/ `AgentReputation` / `CoverageMatrix` / `RunManifest`。
 
+### 两层分工：Python 管装配，Java 管平台
+
+```
+前端 / 集成方
+     │  X-API-Key
+     ▼
+┌───────────────────────────────────────────────┐
+│  Java 网关（平台层）                          │
+│  身份与配额 · 运行记录 · 分布式限流 · 可观测性 │
+│                                               │
+│  约定：**无编排逻辑，可有平台能力**            │
+└───────────────────────────────────────────────┘
+     │  X-Trace-Id / X-Parallax-Credential-Id
+     ▼
+┌───────────────────────────────────────────────┐
+│  Python 编排服务（框架核心）                  │
+│  证据怎么装配 —— 分区 / 盲读 / 账本 / 聚合 /   │
+│  覆盖率驱动补检                               │
+│                                               │
+│  每次运行结束 → 完成回调把用量回报给网关        │
+└───────────────────────────────────────────────┘
+```
+
+**为什么要拆成两层而不是都写在 Python 里**：这条边界不是为了炫技，
+而是因为两者的失效方式完全不同。编排逻辑写错了会得到错结论；
+平台能力写错了会让人**看不到**自己已经超支。后者需要的是事务、唯一约束、
+跨实例计数——这些恰是 JVM 生态最成熟的地方。
+
+分工的唯一判据：**能在 5 秒内说清"这段代码错了会导致什么"，就属于这一层。**
+
 ---
 
 ## 4. 快速开始
@@ -202,15 +232,30 @@ class MyValidator:                    # ③ 可选：入账否决权
 | 语料生成器（可复现，三档规模至 2712 行） | ✅ 完成 |
 | **FastAPI 服务层 + SSE** | ✅ 完成，**已端到端联调**（含断线重放） |
 | **Next.js 可视化前端** | ✅ 完成，构建与 lint 通过（明暗双色工作台） |
-| **Java 薄网关** | ✅ 完成，**已端到端联调**（含鉴权、限流、SSE 透传、白名单） |
-| Docker 部署（compose 三服务 + 可选 infra profile） | ✅ 完成，`compose config` 校验通过 |
-| 开源治理（License / 贡献指南 / 安全策略 / CI 六项门禁） | ✅ 完成 |
-| 测试 | ✅ **Python 144 项（约 5 秒）+ Java 10 项**，均不需网络与凭据 |
+| **Java 网关 · 平台层** | ✅ 完成（身份配额 / 运行记录 / 分布式限流 / 指标 / 链路追踪），**已端到端联调** |
+| Docker 部署（compose 四服务 + 可选 infra profile） | ✅ 完成，`compose config` 校验通过 |
+| 开源治理（License / 贡献指南 / 安全策略 / CI 七项门禁） | ✅ 完成 |
+| 测试 | ✅ **Python 194 项 + Java 41 项（单元/集成）+ 11 项 Testcontainers 集成**，单元与集成套件均不需网络与凭据 |
 | 跨文件组合型缺陷（P0-4） | ⬜ 未开始——**唯一能测出召回差异的路径** |
-| Redis / Qdrant 适配器 | ⬜ 未开始（当前用内存实现，compose 里已有可选 profile） |
+| 跨进程任务队列与崩溃恢复 | ⬜ 明确不做（理由见 [说明材料/任务总表.md](../说明材料/任务总表.md) 第 7 节） |
 
-> Docker 镜像的实际构建与容器冒烟在 CI 里执行；本地开发机未启动 Docker 守护进程，
-> 因此本地只验证了 `docker compose config`。这一点不做"已验证"的表述。
+> Docker 镜像的实际构建、容器冒烟、以及真实 PostgreSQL + Redis 上的网关集成测试
+> 都在 CI 里执行；本地开发机未启动 Docker 守护进程，因此本地只验证了
+> `docker compose config` 与不依赖 Docker 的测试档。这一点不做"已验证"的表述。
+
+### Java 网关的平台能力
+
+| 能力 | 做法 | 为什么这样做 |
+|---|---|---|
+| 身份与配额 | `X-API-Key` → SHA-256 摘要查库；三重额度（日运行数 / 日 token / 月 token） | 明文 key 只在签发时返回一次，服务端不存；库被拖走也拿不到可用凭据 |
+| 配额执行时机 | 在**转发之前**校验，超限 429 并带 `used`/`limit`/`resetsAt`/`Retry-After` | 事后扣减看起来一样能"记账"，但用户会在额度已满时继续烧掉真实模型费用 |
+| 运行次数计数 | 按**提交**计数，不按完成计数 | 只统计完成的话，用户能在第一次完成之前并发提交上千次 |
+| 记账 | 完成回调写账本，按 `run_id` 唯一约束**幂等** | 回调可能被重投，没有约束就会重复计费 |
+| 运行历史 | `audit_run` + `audit_event`，按状态/凭据/时间过滤与分页 | 事件只记网关自己观察到的生命周期；编排内部事件留在上游总线，不复制第二份事实 |
+| 分布式限流 | bucket4j-redis + Lettuce，多实例共享同一份配额 | 单实例内存桶在多副本下等于没有配额 |
+| **限流降级** | Redis 不可用时**自动回退内存桶**并进入冷却期 | 限流是保护手段，不该成为单点；冷却避免每个请求都白等一次超时 |
+| 可观测性 | Micrometer 三个业务指标 + `%X{traceId}` 日志格式 | "一直在降级"必须能被发现，否则配额会悄悄退化成单实例口径 |
+| 链路追踪 | `X-Trace-Id` 贯穿网关 → 编排 → 完成回调，并写入 run meta | 没有它，"183 次模型调用"和"网关那边的 429"只能靠时间戳猜关系 |
 
 ### 已实测的行为
 
@@ -281,12 +326,17 @@ backend/                        Python 编排核心（唯一包含机制的部�
 │   ├─ engine.py    装配与执行
 │   ├─ reporting.py 报告渲染
 │   └─ cli.py       命令行入口
-└─ tests/           144 项测试
+└─ tests/           194 项测试
 
 frontend/                       Next.js 工作台（提交 / 实时事件流 / 账本 / 覆盖率矩阵）
-gateway/                        Java 薄网关（鉴权 / 限流 / 熔断 / 白名单转发 / SSE 透传）
+gateway/                        Java 网关：平台层（身份配额 / 运行记录 / 限流 / 指标）
+├─ src/main/resources/db/migration/   Flyway 迁移（PG 与 H2 都可执行）
+├─ src/test/java/.../support/         测试用的上游 HTTP 服务桩
+└─ README.md                          网关自身的说明与取舍
+
 eval/corpus/                    可复现语料（三档规模）
-eval/results/                   实验原始产物（每次运行一个目录）
+eval/results/                   合成语料上的对照实验原始产物
+eval/real/                      真实开源仓库上的对照实验（urllib3 / anyio）与重复实验
 ```
 
 > **详细文档与参赛材料不在本仓库内。** 它们位于本项目**同级目录**的 `说明材料/` 下：
@@ -313,18 +363,31 @@ npm install
 npm run dev
 ::   http://localhost:3000
 
-:: ③ 薄网关（可选；需要网关的鉴权/限流时才起）
-cd gateway
-mvn spring-boot:run
-::   起后把前端指向它：NEXT_PUBLIC_PARALLAX_API=http://localhost:8080 npm run build
+:: ③ 网关（可选；需要平台能力——配额、运行历史、多实例限流——时才起）
+::    需要 PostgreSQL。切到 gateway profile 会连 postgres 与 redis 一起起来。
+docker compose --env-file backend/.env --profile gateway up -d
+::   http://localhost:8080/swagger-ui.html 是自动生成的接口文档
+
+::    本地直接跑（不用容器）时需要先备好 PostgreSQL：
+::    set PARALLAX_IDENTITY_ENABLED=true
+::    set PARALLAX_DB_URL=jdbc:postgresql://127.0.0.1:5432/parallax
+::    cd gateway
+::    mvn spring-boot:run
 ```
 
-或一把起：
+或一把起全部：
 
 ```bat
 docker compose --env-file backend/.env up -d                    :: api + web
-docker compose --env-file backend/.env --profile gateway up -d  :: 再加网关
+docker compose --env-file backend/.env --profile gateway up -d  :: 再加 网关 + PostgreSQL + Redis
 ```
+
+### 三条平台的取舍（写在这里，免得被当成遗漏）
+
+- **不引入用户注册体系**：单租户部署，API Key 足够。引入用户库会让网关变成第二个业务后端。
+- **不做跨进程任务队列**：单实例够用，而且它会把"崩溃恢复"的复杂度提前引爆。
+- **不把编排事件再存一份到网关**：上游已有可重放的事件总线，复制只会造出
+  两个可能不一致的事实来源。运行详情直接给出上游的事件流地址。
 
 ---
 

@@ -85,6 +85,14 @@ management:
     web:
       exposure:
         include: health,info,metrics,prometheus
+  # 显式打开 Prometheus 导出。不写这一行时，本工程的环境里
+  # `management.defaults.metrics.export.enabled` 会被当成 false，
+  # 于是 `/actuator/prometheus` 直接 404——而 `/actuator` 的链接列表里
+  # 也不会出现它，看起来像"没配对"而不是"被条件挡住了"。
+  prometheus:
+    metrics:
+      export:
+        enabled: true
   endpoint:
     health:
       probes:
