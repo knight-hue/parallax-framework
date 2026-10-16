@@ -143,5 +143,10 @@ async def test_rerender_rebuilds_summary_without_rerunning(demo_repo, defects, t
     rebuilt = (out / "summary.md").read_text(encoding="utf-8")
     assert "被改坏了" not in rebuilt
     assert f"独立指纹 {result.metrics.distinct_fingerprints}" in rebuilt
-    assert f"耗时 {result.elapsed_s}s" in rebuilt, "耗时随 metrics.json 一并落盘，重建后应保留"
     assert "K*" in rebuilt
+    # 生效配置也要随 metrics.json 一起回来——它正是"这批数字在什么设置下跑出来的"的全部依据
+    assert "生效配置" in rebuilt
+    assert "readers=3" in rebuilt
+    # 耗时不做断言：假客户端跑得太快，`round(elapsed, 2)` 可能是 0.0，
+    # 而 0.0 会被渲染成"不打印耗时"（这是有意的，避免印出误导性的 0.0s）。
+    # 断言它会让测试依赖机器速度。
