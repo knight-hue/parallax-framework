@@ -28,6 +28,23 @@ def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+def _atomic_write(path: Path, text: str) -> None:
+    """先写临时文件再原子替换。
+
+    直接 `write_text` 会先清空原文件再写内容，因此在两个动作之间读到的
+    是一个**空文件**——而空文件不是"旧内容"，是"解析失败"。
+    这个竞态在测试里被真实抓到过：提交后立刻读 `meta.json`，本地 3.13 上碰不到，
+    CI 的 3.11/3.12 上稳定复现，表现为 `json.loads("")` 抛 JSONDecodeError。
+
+    生产上同一窗口更糟：进程若在写入中途被杀，留下的是一个永远解析不了的运行记录。
+    `os.replace`（`Path.replace`）在同一文件系统内是原子的，因此读者要么看到旧内容、
+    要么看到新内容。
+    """
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(path)
+
+
 class RunRecord(BaseModel):
     """一次审查运行的元信息。"""
 
@@ -80,8 +97,9 @@ class RunStore:
         return record
 
     def save_meta(self, record: RunRecord) -> None:
-        self._meta(record.run_id).write_text(
-            json.dumps(record.model_dump(), ensure_ascii=False, indent=2), encoding="utf-8"
+        _atomic_write(
+            self._meta(record.run_id),
+            json.dumps(record.model_dump(), ensure_ascii=False, indent=2),
         )
 
     def get(self, run_id: str) -> RunRecord | None:
@@ -118,7 +136,7 @@ class RunStore:
 
     def save_report(self, run_id: str, markdown: str) -> Path:
         path = self.run_dir(run_id) / "report.md"
-        path.write_text(markdown, encoding="utf-8")
+        _atomic_write(path, markdown)
         return path
 
     def read_report(self, run_id: str) -> str | None:
@@ -127,7 +145,7 @@ class RunStore:
 
     def save_summary(self, run_id: str, payload: dict) -> Path:
         path = self.run_dir(run_id) / "summary.json"
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        _atomic_write(path, json.dumps(payload, ensure_ascii=False, indent=2))
         return path
 
     def read_summary(self, run_id: str) -> dict | None:

@@ -178,6 +178,10 @@ def test_trace_and_credential_headers_reach_meta_json(tmp_path: Path):
         settings, client=httpx.AsyncClient(transport=recording_transport(seen))
     )
 
+    # ⚠️ 必须先离开 `with` 块再读 meta.json。
+    # TestClient 在退出时走 lifespan shutdown → `runner.shutdown()` 会等后台任务收敛；
+    # 在 `with` 里面读，后台任务可能正写到一半，读到的是**空文件**。
+    # 这个竞态在本地 3.13 上没暴露，在 CI 的 3.11/3.12 上稳定复现。
     with TestClient(app) as client:
         response = client.post(
             "/api/v1/audits",
@@ -187,10 +191,10 @@ def test_trace_and_credential_headers_reach_meta_json(tmp_path: Path):
         assert response.status_code == 202
         run_id = response.json()["run_id"]
 
-        # TestClient 的 lifespan 会把后台任务跑完，因此这里能直接读到终态
-        meta = json.loads((tmp_path / "runs" / run_id / "meta.json").read_text(encoding="utf-8"))
-        assert meta["trace_id"] == "trace-e2e", "traceId 必须落到 meta.json，供事后对齐两端日志"
-        assert meta["credential_id"] == CREDENTIAL
+    meta = json.loads((tmp_path / "runs" / run_id / "meta.json").read_text(encoding="utf-8"))
+    assert meta["trace_id"] == "trace-e2e", "traceId 必须落到 meta.json，供事后对齐两端日志"
+    assert meta["credential_id"] == CREDENTIAL
+    assert meta["status"] == "done"
 
     assert len(seen) == 1, "运行结束必须回报一次用量"
     body = parse(seen[0])
@@ -210,9 +214,10 @@ def test_submit_without_gateway_headers_still_works(tmp_path: Path):
         response = client.post("/api/v1/audits", json={"repo_path": str(_tiny_repo(tmp_path))})
         assert response.status_code == 202
         run_id = response.json()["run_id"]
-        meta = json.loads((tmp_path / "runs" / run_id / "meta.json").read_text(encoding="utf-8"))
-        assert meta["trace_id"] is None
-        assert meta["credential_id"] is None
+
+    meta = json.loads((tmp_path / "runs" / run_id / "meta.json").read_text(encoding="utf-8"))
+    assert meta["trace_id"] is None
+    assert meta["credential_id"] is None
 
 
 # ──────────────────────────── 日志注入 ────────────────────────────
@@ -246,3 +251,26 @@ def test_trace_context_is_per_task_not_global():
         return current_trace_id()
 
     assert asyncio.run(scenario()) == ("trace-A", "trace-A")
+
+
+# ──────────────────────────── 持久化 ────────────────────────────
+
+
+def test_meta_write_is_atomic(tmp_path: Path):
+    """`meta.json` 的写入必须是"要么旧内容、要么新内容"，不能有空的中间态。
+
+    直接 `write_text` 会先清空再写，读者在两者之间会读到**空文件**。
+    这个竞态在 CI 的 Python 3.11/3.12 上稳定复现过（本地 3.13 碰不到），
+    表现为 `json.loads("")` 抛 JSONDecodeError。
+    """
+    from parallax.service.store import RunRecord, RunStore
+
+    store = RunStore(tmp_path / "runs")
+    store.create(RunRecord(run_id="r1", status="queued", repo_path="/x"))
+
+    meta_path = store.run_dir("r1") / "meta.json"
+    assert meta_path.exists()
+
+    store.update("r1", status="done")
+    assert json.loads(meta_path.read_text(encoding="utf-8"))["status"] == "done"
+    assert not (store.run_dir("r1") / "meta.json.tmp").exists(), "临时文件必须被替换掉，不能残留"
