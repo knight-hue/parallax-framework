@@ -1,5 +1,9 @@
 # Parallax（视差）
 
+[![CI](https://github.com/knight-hue/parallax-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/knight-hue/parallax-framework/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](backend/pyproject.toml)
+
 > **抗从众的多智能体证据装配框架**
 > 单眼无法判断深度，必须靠两只眼睛从不同位置观察，才能恢复被压平的立体信息。
 > 多智能体从众的本质，就是把 N 个 Agent 压成了一只"平均眼"——视差消失，真相被拍平。
