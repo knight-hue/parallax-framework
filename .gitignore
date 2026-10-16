@@ -14,7 +14,15 @@ venv/
 *.env.local
 
 # 运行产物
-runs/
+#
+# ⚠️ 必须写成**具体路径**而不是裸 `runs/`。裸模式会匹配任意层级的同名目录，
+# 于是 `gateway/src/main/java/dev/parallax/gateway/runs/`（Java 的运行记录包）
+# 会被整包忽略掉——本机能编译，CI 上却是 "package does not exist"。
+# 这个坑真实发生过：本地 41 项测试全绿、推送后 CI 编译失败，
+# 因为 CI 看到的是一个缺了整个包的仓库。
+/runs/
+/backend/runs/
+/eval/real/*.log
 *.log
 
 # Node / 前端
