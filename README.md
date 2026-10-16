@@ -235,7 +235,7 @@ class MyValidator:                    # ③ 可选：入账否决权
 | **Java 网关 · 平台层** | ✅ 完成（身份配额 / 运行记录 / 分布式限流 / 指标 / 链路追踪），**已端到端联调** |
 | Docker 部署（compose 四服务 + 可选 infra profile） | ✅ 完成，`compose config` 校验通过 |
 | 开源治理（License / 贡献指南 / 安全策略 / CI 七项门禁） | ✅ 完成 |
-| 测试 | ✅ **Python 194 项 + Java 41 项（单元/集成）+ 11 项 Testcontainers 集成**，单元与集成套件均不需网络与凭据 |
+| 测试 | ✅ **Python 210 项 + Java 41 项（单元/集成）+ 12 项 Testcontainers 集成**，单元与集成套件均不需网络与凭据 |
 | 跨文件组合型缺陷（P0-4） | ⬜ 未开始——**唯一能测出召回差异的路径** |
 | 跨进程任务队列与崩溃恢复 | ⬜ 明确不做（理由见 [说明材料/任务总表.md](../说明材料/任务总表.md) 第 7 节） |
 
@@ -326,7 +326,7 @@ backend/                        Python 编排核心（唯一包含机制的部�
 │   ├─ engine.py    装配与执行
 │   ├─ reporting.py 报告渲染
 │   └─ cli.py       命令行入口
-└─ tests/           194 项测试
+└─ tests/           210 项测试
 
 frontend/                       Next.js 工作台（提交 / 实时事件流 / 账本 / 覆盖率矩阵）
 gateway/                        Java 网关：平台层（身份配额 / 运行记录 / 限流 / 指标）
