@@ -107,6 +107,21 @@ class Settings(BaseSettings):
     # ---- 运行产物 ----
     runs_dir: Path = Field(default=Path("runs"))
 
+    # ---- 完成回调（Java 网关的平台能力）----
+    callback_url: str = ""
+    """一次审查结束后把用量回报给网关的地址。**默认留空 = 不回调**。
+
+    为什么默认关闭：脱离网关单独跑本服务时那个地址根本不存在，
+    默认打开会让每一次运行都白等一次超时。走 compose 的 gateway profile 时由 .env 显式打开。
+
+    回调失败**只记 WARN，绝不让一次成功的审查因此变成失败**——
+    记账是平台层的事，不该反过来影响编排层的成败。
+    """
+    callback_token: str = ""
+    """回调时携带的 `X-Internal-Token`，与网关的 `PARALLAX_GATEWAY_INTERNAL_TOKEN` 一致。"""
+    callback_timeout_s: float = 5.0
+    """回调超时。放得很短：回调是尽力而为，不能拖住运行收尾。"""
+
     def is_llm_configured(self) -> bool:
         return bool(self.llm_api_key)
 

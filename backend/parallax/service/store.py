@@ -47,6 +47,10 @@ class RunRecord(BaseModel):
     llm_calls: int = 0
     readers_failed: int = 0
     settings_snapshot: dict = Field(default_factory=dict)
+    trace_id: str | None = None
+    """网关为本请求分配的 traceId。两端日志靠它对齐同一次请求。"""
+    credential_id: str | None = None
+    """发起本次运行的 API 凭据。完成回调靠它把用量归到正确的账上。"""
 
 
 class RunStore:

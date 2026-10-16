@@ -29,8 +29,10 @@ from parallax.engine import ParallaxEngine
 from parallax.infra.llm_openai_compat import OpenAICompatClient
 from parallax.plugins.code_audit import CodeAuditReader, RepoAdapter
 from parallax.reporting import render_markdown, summarise
+from parallax.service.callback import CompletionCallback
 from parallax.service.events import RunEventBus
 from parallax.service.store import RunRecord, RunStore
+from parallax.service.trace import current_trace_id
 from parallax.util import stable_id
 
 logger = logging.getLogger(__name__)
@@ -54,6 +56,8 @@ class AuditJob:
     extensions: tuple[str, ...] = (".py",)
     group_depth: int = 2
     max_files: int = 300
+    trace_id: str | None = None
+    credential_id: str | None = None
 
 
 class AuditRunner:
@@ -72,12 +76,20 @@ class AuditRunner:
         self.settings = settings
         self.max_concurrent_runs = max_concurrent_runs
         self._client_factory = client_factory or (lambda s: OpenAICompatClient(s))
+        self._callback = CompletionCallback(settings)
         self._tasks: dict[str, asyncio.Task] = {}
         self._semaphore = asyncio.Semaphore(max_concurrent_runs)
 
     # ---- 提交 ----
 
-    def submit(self, *, repo_path: str, overrides: dict) -> RunRecord:
+    def submit(
+        self,
+        *,
+        repo_path: str,
+        overrides: dict,
+        trace_id: str | None = None,
+        credential_id: str | None = None,
+    ) -> RunRecord:
         """登记一次运行并安排执行。立即返回。"""
         repo = Path(repo_path).expanduser()
         if not repo.is_dir():
@@ -100,6 +112,9 @@ class AuditRunner:
             extensions=tuple(overrides.get("extensions") or (".py",)),
             group_depth=int(overrides.get("group_depth") or 2),
             max_files=int(overrides.get("max_files") or 300),
+            # traceId 取显式传入的；没传就沿用当前上下文（网关的请求头会写进去）
+            trace_id=trace_id or current_trace_id(),
+            credential_id=credential_id,
         )
 
         record = RunRecord(
@@ -107,6 +122,8 @@ class AuditRunner:
             status="queued",
             question=job.question,
             repo_path=str(job.repo_path),
+            trace_id=job.trace_id,
+            credential_id=job.credential_id,
             settings_snapshot={
                 "readers": settings.n_readers,
                 "redundancy": settings.redundancy,
@@ -180,12 +197,24 @@ class AuditRunner:
             self.bus.close(run_id)
             if client is not None and hasattr(client, "aclose"):
                 await client.aclose()  # type: ignore[attr-defined]
+            # 失败也要回报：网关已经为这次提交扣了额度，
+            # 不回传的话它会永远停在 queued，报表上成为一条永远不结束的运行。
+            await self._callback.report(
+                run_id=run_id,
+                credential_id=job.credential_id,
+                status="failed",
+                prompt_tokens=0,
+                completion_tokens=0,
+                elapsed_s=elapsed,
+            )
             return
 
         elapsed = round(time.perf_counter() - started, 2)
         usage = engine.usage_snapshot()
 
-        self.store.save_report(run_id, render_markdown(report, max_items=job.settings.report_max_items))
+        self.store.save_report(
+            run_id, render_markdown(report, max_items=job.settings.report_max_items)
+        )
         self.store.save_summary(run_id, _summary_payload(report, engine))
         self.store.update(
             run_id,
@@ -212,6 +241,19 @@ class AuditRunner:
 
         if hasattr(client, "aclose"):
             await client.aclose()  # type: ignore[attr-defined]
+
+        # 回报用量。放在最后且失败只记 WARN——记账是平台层的事，
+        # 不该反过来把一次成功的审查变成失败。
+        await self._callback.report(
+            run_id=run_id,
+            credential_id=job.credential_id,
+            status="done",
+            prompt_tokens=int(usage.get("prompt_tokens", 0)),
+            completion_tokens=int(usage.get("completion_tokens", 0)),
+            elapsed_s=elapsed,
+            stop_reason=report.manifest.stop_reason.value if report.manifest.stop_reason else None,
+            counts=report.counts(),
+        )
 
     # ---- 生命周期 ----
 

@@ -55,6 +55,11 @@ parallax:
     # 提交审查会真实消耗模型额度，单独给一个更小的桶
     expensive-capacity: ${PARALLAX_RATELIMIT_EXPENSIVE_CAPACITY:10}
     expensive-window-seconds: ${PARALLAX_RATELIMIT_EXPENSIVE_WINDOW_SECONDS:60}
+    # 留空 = 只用单实例内存桶。配了它则多实例共享同一份配额；
+    # Redis 不可用时自动降级回内存桶并打 WARN，服务不受影响。
+    redis-url: ${PARALLAX_RATELIMIT_REDIS_URL:}
+    redis-timeout-ms: ${PARALLAX_RATELIMIT_REDIS_TIMEOUT_MS:250}
+    degraded-cooldown-seconds: ${PARALLAX_RATELIMIT_DEGRADED_COOLDOWN_SECONDS:30}
 
 resilience4j:
   circuitbreaker:
@@ -86,5 +91,8 @@ management:
         enabled: true
 
 logging:
+  # traceId 必须进每一行日志。没有它，"两端日志能对上同一次请求"就只能靠时间戳猜。
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{traceId:-无}] %logger{32} - %msg%n"
   level:
     dev.parallax.gateway: ${PARALLAX_GATEWAY_LOG_LEVEL:INFO}

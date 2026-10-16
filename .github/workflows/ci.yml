@@ -63,7 +63,6 @@ jobs:
       - name: ruff format 检查
         working-directory: backend
         run: ruff format --check .
-
   corpus:
     name: 语料完整性
     runs-on: ubuntu-latest
@@ -116,9 +115,45 @@ jobs:
 
       # ProxyIntegrationTest 会起一个真实的 HTTP 服务桩当上游，
       # 所以这一步同时验证了协议协商、分块透传、请求头透传与路径白名单。
+      #
+      # 这一步不跑网关的集成测试（`-Pit`）：它们要 Docker，
+      # 而且 Testcontainers 拉真实镜像要几分钟。放在下面独立的 job 里，
+      # 这样"逻辑测试失败"和"真实基础设施上失败"能一眼区分开。
       - name: 运行测试
         working-directory: gateway
         run: mvn -B test
+
+  # 真实 PostgreSQL + Redis 上的集成测试。
+  #
+  # 为什么必须单独存在：默认测试档用的是 H2（PostgreSQL 兼容模式）与内存桶，
+  # 它们能让整套测试在没有 Docker 的机器上跑起来，但**不能证伪**以下三件事——
+  #   · 迁移在真实 PG 上是否可执行
+  #   · `coalesce(sum(bigint), 0)` 在 PG 上返回 numeric 时的映射
+  #   · 两个网关实例共享同一份配额，以及 Redis 挂掉后限流降级而服务仍可用
+  # 这三条正是"生产级"与"能跑通"之间的差别。
+  gateway-it:
+    name: Java 网关集成测试（真实 PostgreSQL + Redis）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: 运行集成测试
+        working-directory: gateway
+        run: mvn -B -Pit verify
+
+      - name: 上传失败时的测试报告
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gateway-it-reports
+          path: gateway/target/failsafe-reports/
+          retention-days: 7
 
   frontend:
     name: 前端检查

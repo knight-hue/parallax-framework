@@ -39,6 +39,12 @@ from parallax.service.schemas import (
     RunListResponse,
 )
 from parallax.service.store import RunStore
+from parallax.service.trace import (
+    CREDENTIAL_HEADER,
+    TRACE_HEADER,
+    install_log_filter,
+    set_trace_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +72,7 @@ def create_app(
     store = RunStore(Path(runs_dir) if runs_dir else resolved.runs_dir)
     bus = RunEventBus()
     runner = AuditRunner(store, bus, resolved, client_factory=client_factory)
+    install_log_filter(logging.getLogger("parallax"))
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -142,13 +149,29 @@ def create_app(
     # ---- 提交与查询 ----
 
     @app.post("/api/v1/audits", response_model=AuditSubmitted, status_code=202)
-    async def submit_audit(request: AuditRequest) -> AuditSubmitted:
+    async def submit_audit(
+        request: AuditRequest,
+        x_trace_id: str | None = Header(default=None, alias=TRACE_HEADER),
+        x_credential_id: str | None = Header(default=None, alias=CREDENTIAL_HEADER),
+    ) -> AuditSubmitted:
+        # 把 traceId 放进上下文：本请求的日志与随后派生的后台任务都会带上它。
+        # asyncio.create_task 会复制当前上下文，因此运行期间的日志也能对上。
+        set_trace_id(x_trace_id)
         try:
             record = runner.submit(
-                repo_path=request.repo_path, overrides=request.model_dump(exclude_none=True)
+                repo_path=request.repo_path,
+                overrides=request.model_dump(exclude_none=True),
+                trace_id=x_trace_id,
+                credential_id=x_credential_id,
             )
         except ConfigurationError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.info(
+            "已接受提交 run_id=%s repo=%s credential=%s",
+            record.run_id,
+            record.repo_path,
+            x_credential_id or "-",
+        )
         return AuditSubmitted(
             run_id=record.run_id,
             status=record.status,

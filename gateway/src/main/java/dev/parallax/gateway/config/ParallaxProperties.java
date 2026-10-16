@@ -172,6 +172,22 @@ public class ParallaxProperties {
         private int defaultWindowSeconds = 60;
         private int expensiveCapacity = 10;
         private int expensiveWindowSeconds = 60;
+        /**
+         * Redis 地址。留空（默认）表示只用单实例内存桶。
+         *
+         * 配了它之后限流改为跨实例合并计算——多副本部署时这才是正确的配额语义。
+         * **Redis 不可用时会自动降级回内存桶**，服务不受影响。
+         */
+        private String redisUrl = "";
+        /** Redis 命令超时。限流在请求关键路径上，不能等一个慢 Redis。 */
+        private int redisTimeoutMs = 250;
+        /**
+         * 降级后的冷却时间：这段时间内直接用内存桶，不再尝试 Redis。
+         *
+         * 没有冷却的话，Redis 挂掉时每个请求都要先等一次超时，
+         * 降级就从"服务仍可用"变成"每个请求多花 250ms"。
+         */
+        private int degradedCooldownSeconds = 30;
 
         public boolean isEnabled() {
             return enabled;
@@ -211,6 +227,30 @@ public class ParallaxProperties {
 
         public void setExpensiveWindowSeconds(int expensiveWindowSeconds) {
             this.expensiveWindowSeconds = expensiveWindowSeconds;
+        }
+
+        public String getRedisUrl() {
+            return redisUrl;
+        }
+
+        public void setRedisUrl(String redisUrl) {
+            this.redisUrl = redisUrl;
+        }
+
+        public int getRedisTimeoutMs() {
+            return redisTimeoutMs;
+        }
+
+        public void setRedisTimeoutMs(int redisTimeoutMs) {
+            this.redisTimeoutMs = redisTimeoutMs;
+        }
+
+        public int getDegradedCooldownSeconds() {
+            return degradedCooldownSeconds;
+        }
+
+        public void setDegradedCooldownSeconds(int degradedCooldownSeconds) {
+            this.degradedCooldownSeconds = degradedCooldownSeconds;
         }
     }
 }
