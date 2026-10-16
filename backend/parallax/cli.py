@@ -90,6 +90,30 @@ def build_parser() -> argparse.ArgumentParser:
     experiment.add_argument("--readers", type=int, default=None, help="Reader 数量")
     experiment.add_argument("--tasks", default=None, help="逗号分隔的任务 id，默认全部")
     experiment.add_argument("--list-arms", action="store_true", help="只列出可用实验臂后退出")
+
+    real = sub.add_parser(
+        "real",
+        help="在**真实代码仓库**上跑对照实验（无 ground truth，只测 K*/冗余/覆盖率/成本）",
+    )
+    real.add_argument(
+        "repos",
+        nargs="+",
+        help="一个或多个仓库目录路径",
+    )
+    real.add_argument(
+        "--arms",
+        default="baseline_shared,blind_full",
+        help="逗号分隔的实验臂名，默认 baseline_shared,blind_full",
+    )
+    real.add_argument("--readers", type=int, default=None, help="Reader 数量")
+    real.add_argument(
+        "--group-depth", type=int, default=2, help="模块分组深度（真实仓库目录更深，可调）"
+    )
+    real.add_argument("--max-files", type=int, default=300, help="每个仓库最多扫描多少文件")
+    real.add_argument("--out", default=None, help="结果输出目录（默认 eval/real/<时间戳>）")
+    real.add_argument(
+        "--visibility", default=None, choices=["blind", "shared"], help="覆盖可见性（一般不用）"
+    )
     return parser
 
 
@@ -237,6 +261,91 @@ async def _run_experiment_cli(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _run_real_cli(args: argparse.Namespace) -> int:
+    """在真实仓库上跑对照实验。
+
+    与 `experiment` 子命令的关键差别：**没有 ground truth**。
+    因此不报告召回率/精确率（标为 N/A），只报告不需要标尺就能测的指标——
+    K*、冗余率、覆盖率、成本。这不是缩水：K* 由 Agent 之间的重叠矩阵算出，
+    本来就不需要知道哪条结论是对的。
+    """
+    from parallax.eval.experiment import (
+        ARMS,
+        default_out_dir,
+        render_summary,
+        run_repo_arm,
+        save_results,
+    )
+
+    arms = ARMS
+    if args.arms:
+        wanted = {a.strip() for a in args.arms.split(",") if a.strip()}
+        arms = [a for a in ARMS if a.name in wanted]
+        if not arms:
+            raise SystemExit(f"没有匹配的实验臂：{sorted(wanted)}")
+
+    repos: list[Path] = []
+    for raw in args.repos:
+        path = Path(raw).expanduser().resolve()
+        if not path.is_dir():
+            raise SystemExit(f"仓库目录不存在：{path}")
+        repos.append(path)
+
+    overrides = _overrides(args)
+    settings = load_settings(**overrides)
+    if not settings.is_llm_configured():
+        raise SystemExit("未配置 PARALLAX_LLM_API_KEY（真实仓库实验必须调用真实模型）")
+
+    print("真实仓库对照实验（无 ground truth）")
+    print(f"仓库：{len(repos)} 个｜实验臂：{len(arms)} 个｜总运行数：{len(repos) * len(arms)}")
+    print(f"Reader 数：{settings.n_readers}｜模型：{settings.llm_model}")
+    print(f"分组深度：{args.group_depth}｜文件上限：{args.max_files}")
+    print()
+
+    results: list = []
+    for repo in repos:
+        print(f"── {repo.name} ──")
+        for arm in arms:
+            try:
+                result = await run_repo_arm(
+                    repo,
+                    arm,
+                    settings,
+                    lambda s: OpenAICompatClient(s),
+                    group_depth=args.group_depth,
+                    max_files=args.max_files,
+                )
+            except Exception as exc:  # noqa: BLE001 - 单臂失败不阻断其余
+                print(f"  ✗ {arm.name:24s} {type(exc).__name__}: {exc}")
+                continue
+            m = result.metrics
+            flag = "" if m.readers_failed == 0 else f"｜⚠️ Reader 失败 {m.readers_failed}"
+            print(
+                f"  ✓ {arm.name:24s} claims {m.total_claims:3d}"
+                f"｜K*={m.effective_channels:.2f}"
+                f"｜冗余 {m.redundancy:.0%}"
+                f"｜覆盖 {m.coverage_fill_rate:.0%}"
+                f"｜轮次 {m.rounds}"
+                f"｜调用 {m.llm_calls}"
+                f"｜{result.elapsed_s}s{flag}"
+            )
+            results.append(result)
+        print()
+
+    if not results:
+        raise SystemExit("没有任何成功的实验臂")
+
+    base = Path(args.out) if args.out else _framework_root() / "eval" / "real"
+    out_dir = base if args.out else default_out_dir(base)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    summary_path = save_results(results, out_dir)
+
+    print(render_summary(results, arms))
+    print(f"\n结果已写入：{out_dir}")
+    print(f"摘要：{summary_path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -249,6 +358,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "experiment":
         try:
             return asyncio.run(_run_experiment_cli(args))
+        except KeyboardInterrupt:
+            print("已中断", file=sys.stderr)
+            return 130
+    if args.command == "real":
+        try:
+            return asyncio.run(_run_real_cli(args))
         except KeyboardInterrupt:
             print("已中断", file=sys.stderr)
             return 130

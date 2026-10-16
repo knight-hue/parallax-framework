@@ -74,6 +74,7 @@ class ReaderPool:
         visibility: str = "blind",
         max_output_tokens: int = 8000,
         max_evidence_per_call: int = 6,
+        max_chars_per_call: int = 0,
     ) -> None:
         if visibility not in {"blind", "shared"}:
             raise ValueError("visibility 只能是 'blind' 或 'shared'")
@@ -87,6 +88,8 @@ class ReaderPool:
         self.visibility = visibility
         self.max_output_tokens = max_output_tokens
         self.max_evidence_per_call = max_evidence_per_call
+        self.max_chars_per_call = max_chars_per_call
+        """单批证据的累计字符上限。0 = 只按条数分批（旧行为）。"""
         self.failed_readers: list[str] = []
         """执行失败的 Reader。必须被实验报告出来——失败者会拉低召回，
         若不计入统计就会把「Reader 挂了」误读成「漏检」。"""
@@ -203,9 +206,42 @@ class ReaderPool:
         return outcome
 
     def _chunks(self, shard: list[EvidenceUnit]) -> list[list[EvidenceUnit]]:
-        """按固定的证据条数分批。按条数而非 token 数分批，是为了让分批可复现。"""
+        """按「条数 + 累计字符数」双重上限分批，任一先到即断批。
+
+        只按条数分批在**真实仓库**上会失效。实测：
+
+            合成语料  平均 1,521 字符/文件  → 6 文件/批 ≈ 9,126 字符
+            真实仓库  平均 11,500 字符/文件 → 6 文件/批 ≈ 69,000 字符  （8 倍）
+
+        于是模型一次要吐出的发现太多，输出撞上 8000 token 上限被截断，
+        JSON 不完整 → Reader 批量失败。这与 P0 记录的第 6 号缺陷是同一类问题，
+        只是触发条件从「语料变长」变成了「文件变大」。
+
+        字符上限默认 36,000：合成语料的 9k/批远低于它，因此**仍走 6 文件一批**，
+        已发布的实验结果不受影响；而真实仓库会被收到约 3 文件/批。
+
+        单个超大文件不会被切开——切文件会破坏 claim 的路径与行号语义，
+        宁可让它独占一批。
+        """
         size = self.max_evidence_per_call
-        return [shard[i : i + size] for i in range(0, len(shard), size)]
+        limit = self.max_chars_per_call
+        if limit <= 0:
+            return [shard[i : i + size] for i in range(0, len(shard), size)]
+
+        chunks: list[list[EvidenceUnit]] = []
+        current: list[EvidenceUnit] = []
+        current_chars = 0
+        for unit in shard:
+            size_of_unit = len(unit.content)
+            if current and (len(current) >= size or current_chars + size_of_unit > limit):
+                chunks.append(current)
+                current = []
+                current_chars = 0
+            current.append(unit)
+            current_chars += size_of_unit
+        if current:
+            chunks.append(current)
+        return chunks
 
     async def _read_chunk(
         self,

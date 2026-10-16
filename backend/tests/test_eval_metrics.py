@@ -203,3 +203,37 @@ def test_ground_truth_count_mismatch_is_rejected():
     truth = GroundTruth(task_id="t", planted_defect_count=5, defects=[defect("D1", "a.py", 1, 1)])
     with pytest.raises(ValueError):
         truth.validate_count()
+
+
+# ---- K* 的口径：必须与 Agent 数一起读 ----
+
+
+def test_k_star_is_bounded_by_agent_count():
+    """K* 值域 [1, agent_count]。这是它可解释的前提。"""
+    agent_fps = {f"a{i}": {f"fp{i}"} for i in range(6)}
+    k = effective_channels(agent_fps)
+    assert k == 6, "完全互斥时 K* 应等于 Agent 数"
+
+
+def test_multi_round_raises_the_ceiling_of_k_star():
+    """多轮换新身份会把 K* 的上限从 6 抬到 18——这正是裸 K* 不可跨臂比较的原因。"""
+    single_round = {f"reader-r0-{i}": {f"r0-{i}"} for i in range(6)}
+    three_rounds = {f"reader-r{r}-{i}": {f"r{r}-{i}"} for r in range(3) for i in range(6)}
+    assert effective_channels(single_round) == 6
+    assert effective_channels(three_rounds) == 18
+
+
+def test_channels_ratio_normalises_across_different_agent_counts():
+    """归一化占比让"1 轮 6 Agent"与"3 轮 18 Agent"可比。"""
+    from parallax.eval.metrics import ArmMetrics
+
+    a = ArmMetrics(arm="x", task_id="t", effective_channels=3.0, agent_count=6)
+    b = ArmMetrics(arm="y", task_id="t", effective_channels=9.0, agent_count=18)
+    assert a.channels_ratio == 0.5
+    assert b.channels_ratio == 0.5, "两者独立性相同，裸 K* 差 3 倍但占比应相等"
+
+
+def test_channels_ratio_is_zero_without_agents():
+    from parallax.eval.metrics import ArmMetrics
+
+    assert ArmMetrics(arm="x", task_id="t").channels_ratio == 0.0
