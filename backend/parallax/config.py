@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     max_rounds: int = 3
     seed: int = 0
     max_concurrency: int = 4
+    worker_lease_seconds: float = 300.0
+    """跨进程任务租约时长；失联 worker 超时后可被其他副本接管。"""
     max_schema_retries: int = 2
     max_evidence_per_call: int = 6
     """单次模型调用最多读入几条证据。
@@ -111,6 +113,8 @@ class Settings(BaseSettings):
     # ---- 预算护栏（0 = 不限）----
     max_llm_calls: int = 0
     max_tokens: int = 0
+    enable_reproduction: bool = False
+    """是否执行 Claim 提供的最小复现命令；生产环境应在隔离 worker 中显式开启。"""
 
     # ---- 运行产物 ----
     runs_dir: Path = Field(default=Path("runs"))
@@ -138,6 +142,10 @@ class Settings(BaseSettings):
     """回调时携带的 `X-Internal-Token`，与网关的 `PARALLAX_GATEWAY_INTERNAL_TOKEN` 一致。"""
     callback_timeout_s: float = 5.0
     """回调超时。放得很短：回调是尽力而为，不能拖住运行收尾。"""
+
+    # ---- Git provider webhook ----
+    webhook_secret: str = ""
+    """GitHub webhook 的 HMAC secret；为空时 webhook 端点保持关闭。"""
 
     def is_llm_configured(self) -> bool:
         return bool(self.llm_api_key)

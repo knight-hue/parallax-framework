@@ -13,6 +13,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import socket
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -52,6 +55,8 @@ class RunRecord(BaseModel):
     status: RunStatus = "queued"
     question: str = ""
     repo_path: str = ""
+    repo_url: str | None = None
+    commit_sha: str | None = None
     plugin: str = "code_audit"
     created_at: str = Field(default_factory=_now)
     started_at: str | None = None
@@ -89,6 +94,9 @@ class RunStore:
     def _meta(self, run_id: str) -> Path:
         return self.run_dir(run_id) / "meta.json"
 
+    def _lease(self, run_id: str) -> Path:
+        return self.run_dir(run_id) / "worker.lease"
+
     # ---- 元信息 ----
 
     def create(self, record: RunRecord) -> RunRecord:
@@ -119,6 +127,62 @@ class RunStore:
         updated = record.model_copy(update=fields)
         self.save_meta(updated)
         return updated
+
+    def claim(self, run_id: str, *, lease_seconds: float = 300.0) -> bool:
+        """Atomically claim a queued run for one worker process.
+
+        The service normally runs with one process, but deployments often scale it
+        horizontally while sharing the runs volume.  ``O_EXCL`` makes the lease
+        creation a cross-process compare-and-set on every supported platform.
+        A dead worker leaves a lease behind; its mtime is the heartbeat and an
+        expired lease can be reclaimed by the next worker.
+        """
+        record = self.get(run_id)
+        if record is None or record.status not in {"queued", "running"}:
+            return False
+        lease = self._lease(run_id)
+        lease.parent.mkdir(parents=True, exist_ok=True)
+        now = time.time()
+        try:
+            if lease.exists() and now - lease.stat().st_mtime <= lease_seconds:
+                return False
+            if lease.exists():
+                lease.unlink()
+            fd = os.open(str(lease), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                json.dump(
+                    {"pid": os.getpid(), "host": socket.gethostname(), "claimed_at": _now()},
+                    stream,
+                )
+            return True
+        except FileExistsError:
+            return False
+        except OSError as exc:
+            logger.warning("无法领取运行 %s：%s", run_id, exc)
+            return False
+
+    def release(self, run_id: str) -> None:
+        """Release a worker lease; safe to call after a crash or cancellation."""
+        try:
+            self._lease(run_id).unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("无法释放运行 %s 的租约：%s", run_id, exc)
+
+    def lease_active(self, run_id: str, *, lease_seconds: float = 300.0) -> bool:
+        lease = self._lease(run_id)
+        try:
+            return lease.exists() and time.time() - lease.stat().st_mtime <= lease_seconds
+        except OSError:
+            return False
+
+    def refresh_lease(self, run_id: str) -> None:
+        """Heartbeat a lease while a long model run is in progress."""
+        try:
+            lease = self._lease(run_id)
+            if lease.exists():
+                os.utime(lease, None)
+        except OSError as exc:
+            logger.warning("无法刷新运行 %s 的租约：%s", run_id, exc)
 
     def list(self, limit: int = 50) -> list[RunRecord]:
         """按创建时间倒序列出。只读 meta.json，不碰结果文件。"""

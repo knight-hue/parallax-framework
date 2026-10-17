@@ -25,6 +25,7 @@ from parallax.ports.evidence_adapter import EvidenceAdapter
 from parallax.ports.falsifier import Falsifier
 from parallax.ports.llm import Budget, UsageStats
 from parallax.ports.reader_plugin import ReaderPlugin
+from parallax.ports.reproduction import ReproductionExecutor
 from parallax.util import stable_id
 
 _logger = logging.getLogger(__name__)
@@ -80,6 +81,7 @@ class ParallaxRuntime:
     """可选的争议仲裁器（实现 ports.arbitrator.Arbitrator）。
     为 None 时争议组原样保留为 DISPUTED——不猜、不投票、不静默丢弃。"""
     falsifier: Falsifier | None = None
+    reproduction_executor: ReproductionExecutor | None = None
 
     event_sink: Callable[[str, dict], None] | None = None
     """进度事件回调（用于 SSE 推流）。
