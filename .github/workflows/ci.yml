@@ -145,6 +145,23 @@ jobs:
         working-directory: gateway
         run: mvn -B test
 
+  gateway-mutation:
+    name: Java 网关变异审计
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 运行 Java mutation audit
+        working-directory: gateway
+        run: python tools/mutation_audit.py
+
   # 真实 PostgreSQL + Redis 上的集成测试。
   #
   # 为什么必须单独存在：默认测试档用的是 H2（PostgreSQL 兼容模式）与内存桶，
