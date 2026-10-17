@@ -28,9 +28,11 @@ from parallax.domain.errors import ConfigurationError
 from parallax.engine import ParallaxEngine
 from parallax.infra.llm_openai_compat import OpenAICompatClient
 from parallax.plugins.code_audit import CodeAuditReader, RepoAdapter
+from parallax.ports.reproduction import SubprocessReproductionExecutor
 from parallax.reporting import render_markdown, summarise
 from parallax.service.callback import CompletionCallback
 from parallax.service.events import RunEventBus
+from parallax.service.sources import RepoSourceManager, validate_commit_sha, validate_git_url
 from parallax.service.store import RunRecord, RunStore
 from parallax.service.trace import current_trace_id
 from parallax.util import stable_id
@@ -50,9 +52,11 @@ class AuditJob:
     """
 
     run_id: str
-    repo_path: Path
+    repo_path: Path | None
     question: str
     settings: Settings
+    repo_url: str | None = None
+    commit_sha: str | None = None
     extensions: tuple[str, ...] = (".py",)
     group_depth: int = 2
     max_files: int = 300
@@ -77,6 +81,7 @@ class AuditRunner:
         self.max_concurrent_runs = max_concurrent_runs
         self._client_factory = client_factory or (lambda s: OpenAICompatClient(s))
         self._callback = CompletionCallback(settings)
+        self._sources = RepoSourceManager(store.root / ".sources")
         self._tasks: dict[str, asyncio.Task] = {}
         self._semaphore = asyncio.Semaphore(max_concurrent_runs)
 
@@ -85,17 +90,23 @@ class AuditRunner:
     def submit(
         self,
         *,
-        repo_path: str,
+        repo_path: str | None,
         overrides: dict,
         trace_id: str | None = None,
         credential_id: str | None = None,
     ) -> RunRecord:
         """登记一次运行并安排执行。立即返回。"""
-        repo = Path(repo_path).expanduser()
-        if not repo.is_dir():
+        requested_path = Path(repo_path).expanduser() if repo_path else None
+        repo_url = str(overrides.get("repo_url") or "").strip() or None
+        commit_sha = validate_commit_sha(overrides.get("commit_sha"))
+        if requested_path is None and repo_url is None:
+            raise ConfigurationError("repo_path 或 repo_url 至少提供一个")
+        repo = requested_path.resolve() if requested_path is not None else None
+        if repo is not None and not repo.is_dir():
             raise ConfigurationError(f"仓库路径不存在或不是目录：{repo}")
-        repo = repo.resolve()
-        if self.settings.audit_root.strip():
+        if repo_url:
+            repo_url = validate_git_url(repo_url)
+        if repo is not None and self.settings.audit_root.strip():
             root = Path(self.settings.audit_root).expanduser().resolve()
             if repo != root and root not in repo.parents:
                 raise ConfigurationError(f"仓库路径必须位于允许的审查根目录内：{root}")
@@ -103,7 +114,8 @@ class AuditRunner:
         settings = self._merge_settings(overrides)
         job = AuditJob(
             run_id=stable_id(
-                str(repo.resolve()),
+                str(repo or repo_url),
+                commit_sha or "HEAD",
                 settings.n_readers,
                 settings.redundancy,
                 settings.support_threshold,
@@ -112,6 +124,8 @@ class AuditRunner:
                 datetime.now(UTC).timestamp(),  # 允许同一路径重复审查
             ),
             repo_path=repo,
+            repo_url=repo_url,
+            commit_sha=commit_sha,
             question=overrides.get("question") or DEFAULT_QUESTION,
             settings=settings,
             extensions=tuple(overrides.get("extensions") or (".py",)),
@@ -126,7 +140,9 @@ class AuditRunner:
             run_id=job.run_id,
             status="queued",
             question=job.question,
-            repo_path=str(job.repo_path),
+            repo_path=str(job.repo_path) if job.repo_path else "",
+            repo_url=job.repo_url,
+            commit_sha=job.commit_sha,
             trace_id=job.trace_id,
             credential_id=job.credential_id,
             settings_snapshot={
@@ -139,6 +155,8 @@ class AuditRunner:
                 "extensions": list(job.extensions),
                 "group_depth": job.group_depth,
                 "max_files": job.max_files,
+                "repo_url": job.repo_url,
+                "commit_sha": job.commit_sha,
             },
         )
         self.store.create(record)
@@ -147,7 +165,9 @@ class AuditRunner:
             "queued",
             {
                 "run_id": job.run_id,
-                "repo_path": str(job.repo_path),
+                "repo_path": str(job.repo_path) if job.repo_path else None,
+                "repo_url": job.repo_url,
+                "commit_sha": job.commit_sha,
                 "settings": record.settings_snapshot,
             },
         )
@@ -177,13 +197,18 @@ class AuditRunner:
         for record in self.store.list(limit=10_000):
             if record.status not in {"queued", "running"}:
                 continue
-            repo = Path(record.repo_path)
-            if not repo.is_dir():
+            if self.store.lease_active(
+                record.run_id, lease_seconds=self.settings.worker_lease_seconds
+            ):
+                # 另一个副本仍在执行；不能把它抢回来造成双重模型调用。
+                continue
+            repo = Path(record.repo_path) if record.repo_path else None
+            if not record.repo_url and (repo is None or not repo.is_dir()):
                 self.store.update(
                     record.run_id,
                     status="failed",
                     finished_at=_now(),
-                    error=f"服务恢复时仓库路径不可用：{repo}",
+                    error=f"服务恢复时仓库路径不可用：{repo or record.repo_url}",
                 )
                 self.bus.publish(record.run_id, "failed", {"error": "仓库路径不可用"})
                 self.bus.close(record.run_id)
@@ -201,6 +226,8 @@ class AuditRunner:
             job = AuditJob(
                 run_id=record.run_id,
                 repo_path=repo,
+                repo_url=record.repo_url,
+                commit_sha=record.commit_sha or snapshot.get("commit_sha"),
                 question=record.question or DEFAULT_QUESTION,
                 settings=settings,
                 extensions=tuple(snapshot.get("extensions") or (".py",)),
@@ -219,7 +246,18 @@ class AuditRunner:
     async def _guarded_run(self, job: AuditJob) -> None:
         try:
             async with self._semaphore:
-                await self._run(job)
+                if not self.store.claim(
+                    job.run_id, lease_seconds=self.settings.worker_lease_seconds
+                ):
+                    logger.info("运行 %s 已被其他 worker 领取，跳过本地副本", job.run_id)
+                    return
+                heartbeat = asyncio.create_task(self._heartbeat(job.run_id))
+                try:
+                    await self._run(job)
+                finally:
+                    heartbeat.cancel()
+                    await asyncio.gather(heartbeat, return_exceptions=True)
+                    self.store.release(job.run_id)
         except asyncio.CancelledError:
             # CancelledError 继承 BaseException，不会被 _run 的普通异常分支捕获。
             # 这里必须显式落终态，否则重启恢复会把用户主动取消当成僵尸任务。
@@ -240,6 +278,15 @@ class AuditRunner:
                 completion_tokens=0,
             )
             raise
+
+    async def _heartbeat(self, run_id: str) -> None:
+        interval = max(1.0, self.settings.worker_lease_seconds / 3.0)
+        try:
+            while True:
+                await asyncio.sleep(interval)
+                self.store.refresh_lease(run_id)
+        except asyncio.CancelledError:
+            return
 
     def cancel(self, run_id: str) -> RunRecord | None:
         """请求取消一次运行；重复取消是幂等的。"""
@@ -272,10 +319,23 @@ class AuditRunner:
 
         client = None
         try:
+            source = await asyncio.to_thread(
+                self._sources.resolve,
+                run_id=run_id,
+                repo_path=job.repo_path,
+                repo_url=job.repo_url,
+                commit_sha=job.commit_sha,
+            )
+            self.store.update(
+                run_id,
+                repo_path=str(source.path),
+                repo_url=source.source_url,
+                commit_sha=source.commit_sha,
+            )
             client = self._client_factory(job.settings)
             engine = ParallaxEngine.build(
                 adapter=RepoAdapter(
-                    job.repo_path,
+                    source.path,
                     extensions=job.extensions,
                     group_depth=job.group_depth,
                     max_files=job.max_files,
@@ -283,6 +343,11 @@ class AuditRunner:
                 plugin=CodeAuditReader(),
                 client=client,  # type: ignore[arg-type]
                 settings=job.settings,
+                reproduction_executor=(
+                    SubprocessReproductionExecutor(source.path)
+                    if job.settings.enable_reproduction
+                    else None
+                ),
             )
             # 把编排内部的进度事件直接接进总线（同一条事件流，前端无需区分来源）
             engine.runtime.event_sink = lambda event_type, payload: self.bus.publish(

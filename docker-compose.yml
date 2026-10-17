@@ -29,6 +29,9 @@ services:
       PARALLAX_MAX_EVIDENCE_PER_CALL: ${PARALLAX_MAX_EVIDENCE_PER_CALL:-6}
       PARALLAX_RUNS_DIR: /data/runs
       PARALLAX_AUDIT_ROOT: /workspace
+      PARALLAX_WORKER_LEASE_SECONDS: ${PARALLAX_WORKER_LEASE_SECONDS:-300}
+      PARALLAX_ENABLE_REPRODUCTION: ${PARALLAX_ENABLE_REPRODUCTION:-false}
+      PARALLAX_WEBHOOK_SECRET: ${PARALLAX_WEBHOOK_SECRET:-}
       # 完成回调：一次审查结束后把 token 用量回报给网关。
       # **默认留空 = 不回调**——脱离网关单独跑 api 时那个地址根本不存在。
       # 走 compose 的 gateway profile 时由 .env 显式打开。

@@ -24,6 +24,7 @@ from parallax.ports.evidence_adapter import EvidenceAdapter
 from parallax.ports.falsifier import Falsifier
 from parallax.ports.llm import LLMClient
 from parallax.ports.reader_plugin import ReaderPlugin
+from parallax.ports.reproduction import ReproductionExecutor
 from parallax.util import stable_id
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,7 @@ class ParallaxEngine:
         validators: Sequence[ClaimValidator] = (),
         arbitrator: object | None = None,
         falsifier: Falsifier | None = None,
+        reproduction_executor: ReproductionExecutor | None = None,
         reputation_store: InMemoryReputationStore | None = None,
     ) -> ParallaxEngine:
         settings = settings or load_settings()
@@ -108,6 +110,7 @@ class ParallaxEngine:
             ),
             arbitrator=arbitrator if arbitrator is not None else NullArbitrator(),
             falsifier=falsifier,
+            reproduction_executor=reproduction_executor,
         )
         return cls(runtime, adapter, plugin)
 

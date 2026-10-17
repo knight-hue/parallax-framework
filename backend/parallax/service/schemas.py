@@ -12,7 +12,9 @@ from parallax.service.store import RunRecord
 class AuditRequest(BaseModel):
     """提交一次审查。"""
 
-    repo_path: str = Field(description="本地代码仓库的绝对路径或相对服务进程的路径")
+    repo_path: str | None = Field(default=None, description="本地代码仓库路径")
+    repo_url: str | None = Field(default=None, description="HTTPS Git 仓库地址")
+    commit_sha: str | None = Field(default=None, description="固定审查版本的 Git commit SHA")
     question: str | None = Field(default=None, description="审查目标；留空使用插件默认问题")
     extensions: list[str] | None = Field(default=None, description="要扫描的扩展名，默认 ['.py']")
     group_depth: int | None = Field(default=None, description="模块分组深度")

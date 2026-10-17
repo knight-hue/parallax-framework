@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 from pathlib import Path
 
@@ -120,6 +122,17 @@ def test_store_list_is_newest_first(tmp_path: Path):
     store.create(RunRecord(run_id="old", created_at="2026-01-01T00:00:00+00:00"))
     store.create(RunRecord(run_id="new", created_at="2026-12-31T00:00:00+00:00"))
     assert [r.run_id for r in store.list()] == ["new", "old"]
+
+
+def test_store_claim_is_cross_process_safe_and_releasable(tmp_path: Path):
+    store = RunStore(tmp_path / "runs")
+    store.create(RunRecord(run_id="claim-me"))
+    other_view = RunStore(tmp_path / "runs")
+    assert store.claim("claim-me") is True
+    assert other_view.claim("claim-me") is False
+    assert store.lease_active("claim-me") is True
+    store.release("claim-me")
+    assert other_view.claim("claim-me") is True
 
 
 # ──────────────────────────── 编排执行 ────────────────────────────
@@ -371,6 +384,26 @@ def test_cancel_endpoint_is_idempotent(client: TestClient, demo_repo):
     response = client.delete(f"/api/v1/audits/{run_id}")
     assert response.status_code == 200
     assert response.json()["run_id"] == run_id
+
+
+def test_github_webhook_requires_signature(tmp_path: Path):
+    app = create_app(
+        make_settings(webhook_secret="secret"),
+        runs_dir=tmp_path / "runs",
+        client_factory=lambda _s: FakeLLMClient(responder=lambda _m: {"findings": []}),
+    )
+    with TestClient(app) as c:
+        payload = b'{"action":"opened"}'
+        assert c.post("/api/v1/webhooks/github", content=payload).status_code == 401
+        signature = "sha256=" + hmac.new(b"secret", payload, hashlib.sha256).hexdigest()
+        assert (
+            c.post(
+                "/api/v1/webhooks/github",
+                content=payload,
+                headers={"X-Hub-Signature-256": signature, "X-GitHub-Event": "closed"},
+            ).json()["accepted"]
+            is False
+        )
 
 
 def test_result_is_pending_until_ready(client: TestClient, demo_repo):

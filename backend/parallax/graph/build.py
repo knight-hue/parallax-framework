@@ -32,6 +32,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Mapping
 
@@ -210,7 +211,8 @@ def build_graph(runtime: ParallaxRuntime):
     async def verify(state: ParallaxState) -> ParallaxState:
         """执行可选的独立反证；结果只写入验证状态，不参与多数票聚合。"""
         falsifier = runtime.falsifier
-        if falsifier is None:
+        executor = runtime.reproduction_executor
+        if falsifier is None and executor is None:
             return {}
         results = []
         current_claims = [
@@ -221,19 +223,31 @@ def build_graph(runtime: ParallaxRuntime):
         ]
         evidence = list(runtime.evidence)
         for claim in current_claims:
-            result = falsifier.evaluate(claim, evidence)
-            claim.verification_status = result.verdict
-            claim.metadata["falsifier"] = getattr(falsifier, "name", type(falsifier).__name__)
-            claim.metadata["verification_evidence_ids"] = list(result.evidence_ids)
-            claim.metadata["verification_reason"] = result.reason
-            results.append(
-                {
-                    "claim_id": claim.claim_id,
-                    "verdict": result.verdict,
-                    "evidence_ids": result.evidence_ids,
-                    "reason": result.reason,
-                }
-            )
+            result = None
+            if falsifier is not None:
+                result = falsifier.evaluate(claim, evidence)
+                claim.verification_status = result.verdict
+                claim.metadata["falsifier"] = getattr(falsifier, "name", type(falsifier).__name__)
+                claim.metadata["verification_evidence_ids"] = list(result.evidence_ids)
+                claim.metadata["verification_reason"] = result.reason
+            item = {
+                "claim_id": claim.claim_id,
+                "verdict": result.verdict if result is not None else "unverified",
+                "evidence_ids": result.evidence_ids if result is not None else [],
+                "reason": result.reason if result is not None else "",
+            }
+            if executor is not None and claim.reproduction_plan:
+                reproduction = await asyncio.to_thread(executor.execute, claim)
+                claim.metadata["reproduction"] = reproduction.model_dump(mode="json")
+                claim.metadata["verification_reason"] = reproduction.reason
+                if reproduction.status in {"reproduced", "not_reproduced"} and (
+                    result is None or result.verdict != "refuted"
+                ):
+                    # A deterministic reproduction is additional evidence.  It
+                    # never silently overturns an explicit falsifier refutation.
+                    claim.verification_status = reproduction.status
+                item["reproduction"] = reproduction.model_dump(mode="json")
+            results.append(item)
         runtime.emit("verification", round=state.get("round_index", 0), results=results)
         runtime.record_receipt(
             "verification",
@@ -241,7 +255,12 @@ def build_graph(runtime: ParallaxRuntime):
             claim_ids=[item["claim_id"] for item in results],
             evidence_ids=sorted({e for item in results for e in item["evidence_ids"]}),
             payload={
-                "falsifier": getattr(falsifier, "name", type(falsifier).__name__),
+                "falsifier": getattr(falsifier, "name", type(falsifier).__name__)
+                if falsifier is not None
+                else None,
+                "reproduction_executor": getattr(executor, "name", type(executor).__name__)
+                if executor is not None
+                else None,
                 "results": results,
             },
         )

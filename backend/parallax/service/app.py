@@ -17,6 +17,9 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
+import hmac
+import json
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -182,6 +185,53 @@ def create_app(
             events_url=f"/api/v1/audits/{record.run_id}/events",
             result_url=f"/api/v1/audits/{record.run_id}/result",
         )
+
+    @app.post("/api/v1/webhooks/github", status_code=202)
+    async def github_webhook(
+        request: Request,
+        x_hub_signature_256: str | None = Header(default=None),
+        x_github_event: str | None = Header(default=None),
+        x_trace_id: str | None = Header(default=None, alias=TRACE_HEADER),
+    ) -> dict:
+        """接受签名 GitHub PR 事件，并固定审查 head commit。"""
+        if not resolved.webhook_secret:
+            raise HTTPException(status_code=404, detail="GitHub webhook 未启用")
+        body = await request.body()
+        expected = (
+            "sha256=" + hmac.new(resolved.webhook_secret.encode(), body, hashlib.sha256).hexdigest()
+        )
+        if not x_hub_signature_256 or not hmac.compare_digest(expected, x_hub_signature_256):
+            raise HTTPException(status_code=401, detail="webhook 签名无效")
+        if x_github_event not in {"opened", "reopened", "synchronize"}:
+            return {"accepted": False, "reason": "事件类型不触发审查"}
+        try:
+            payload = json.loads(body)
+            repo_url = payload["repository"]["clone_url"]
+            commit_sha = payload["pull_request"]["head"]["sha"]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=400, detail="webhook 缺少 repository/PR head 信息"
+            ) from exc
+        set_trace_id(x_trace_id)
+        try:
+            record = runner.submit(
+                repo_path=None,
+                overrides={
+                    "repo_url": repo_url,
+                    "commit_sha": commit_sha,
+                    "question": "审查这个 Pull Request 中真实存在的缺陷，并说明触发条件。",
+                },
+                trace_id=x_trace_id,
+            )
+        except ConfigurationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {
+            "accepted": True,
+            "run_id": record.run_id,
+            "status": record.status,
+            "commit_sha": record.commit_sha,
+            "events_url": f"/api/v1/audits/{record.run_id}/events",
+        }
 
     @app.get("/api/v1/audits", response_model=RunListResponse)
     async def list_audits(limit: int = Query(default=50, ge=1, le=200)) -> RunListResponse:

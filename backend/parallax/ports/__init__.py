@@ -16,6 +16,11 @@ from parallax.ports.evidence_adapter import EvidenceAdapter
 from parallax.ports.falsifier import Falsifier, FalsifierResult, OfflineFalsifier
 from parallax.ports.llm import ChatMessage, LLMClient
 from parallax.ports.reader_plugin import ReaderPlugin
+from parallax.ports.reproduction import (
+    ReproductionExecutor,
+    ReproductionResult,
+    SubprocessReproductionExecutor,
+)
 from parallax.ports.stores import ReputationStore
 
 __all__ = [
@@ -27,6 +32,9 @@ __all__ = [
     "LLMClient",
     "ReaderPlugin",
     "OfflineFalsifier",
+    "ReproductionExecutor",
+    "ReproductionResult",
     "ReputationStore",
+    "SubprocessReproductionExecutor",
     "ValidationResult",
 ]

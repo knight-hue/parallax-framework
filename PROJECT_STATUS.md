@@ -18,10 +18,13 @@ Parallax 是面向 AI 生成代码审查的独立证据装配与可验证审计�
 - 报告、服务摘要和前端已展示独立性、Receipt 与 Claim 来源链。
 - 相关性预算已成为运行约束：超出证据重叠上限或独立支持下限时，Claim 不得自动进入高置信；
 - verification Receipt、仲裁节点和 `arbitrated_by` 来源关系已进入报告与前端数据模型。
+- 文件租约任务领取已接入服务层：共享 runs 卷上的多副本不会重复领取同一运行，失联 worker 的租约过期后可恢复。
+- Git 来源支持安全 HTTPS URL、固定 commit SHA、浅克隆和 detached checkout；GitHub PR webhook 使用 HMAC 校验。
+- Claim 可携带最小复现计划；可选 argv 复现执行器具备超时、输出上限、环境脱敏和仓库路径边界。
 
 本次升级已通过 Python 全量测试（222 项）、Ruff 和 `compileall`，前端
 `typecheck`、ESLint 源码检查和生产构建也已通过。反证器目前是离线规则实现，
-真实模型反证调度、自动修复和回归验证仍属于后续阶段。
+真实模型反证调度、自动修复仍属于后续阶段；复现执行需要显式开启并部署到隔离 worker。
 
 ## 当前证据边界
 

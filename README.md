@@ -243,7 +243,7 @@ class MyValidator:                    # ③ 可选：入账否决权
 | Receipt、独立性画像、可证伪 Claim、离线反证和证据血缘 | ✅ 已实现，Python 离线测试覆盖 |
 | 测试 | ✅ **Python 222 项 + Java 41 项（单元/集成）+ 12 项 Testcontainers 集成**，单元与集成套件均不需网络与凭据 |
 | 跨文件组合型缺陷（P0-4） | ⬜ 未开始——**唯一能测出召回差异的路径** |
-| 跨进程任务队列与崩溃恢复 | ⬜ 明确不做（理由见 [说明材料/任务总表.md](../说明材料/任务总表.md) 第 7 节） |
+| 跨进程任务领取与崩溃恢复 | ✅ 共享 runs 卷上的文件租约、过期接管与事件恢复 |
 
 ### 当前升级边界与后续路线
 
@@ -403,10 +403,21 @@ docker compose --env-file backend/.env up -d                    :: api + web
 docker compose --env-file backend/.env --profile gateway up -d  :: 再加 网关 + PostgreSQL + Redis
 ```
 
+### Git/PR 来源与复现验证
+
+提交接口除了 `repo_path` 还接受 `repo_url` 与 `commit_sha`。远程来源只允许 HTTPS，服务会浅克隆并以 detached HEAD
+检出指定提交；本地来源提供 `commit_sha` 时也会校验当前 HEAD，避免审查漂移代码。GitHub PR webhook 为
+`POST /api/v1/webhooks/github`，配置 `PARALLAX_WEBHOOK_SECRET` 后，服务只接受 HMAC-SHA256 签名的
+`opened`、`reopened`、`synchronize` 事件，并固定 PR head SHA。
+
+Claim 的 `reproduction_plan.command` 是显式 argv 列表。设置 `PARALLAX_ENABLE_REPRODUCTION=true` 才会执行，
+执行器会限制工作目录、超时、输出大小并清理环境变量。生产部署应把该 worker 放入无网络、只读源码和受限资源的
+容器或虚拟机；默认关闭可避免把模型输出直接当成可信程序执行。
+
 ### 三条平台的取舍（写在这里，免得被当成遗漏）
 
 - **不引入用户注册体系**：单租户部署，API Key 足够。引入用户库会让网关变成第二个业务后端。
-- **不做跨进程任务队列**：单实例够用，而且它会把"崩溃恢复"的复杂度提前引爆。
+- **任务领取与恢复**：服务使用共享 runs 卷上的原子 worker 租约，副本不会重复执行同一 run；租约过期后由新副本接管。
 - **不把编排事件再存一份到网关**：上游已有可重放的事件总线，复制只会造出
   两个可能不一致的事实来源。运行详情直接给出上游的事件流地址。
 
