@@ -65,8 +65,17 @@ class AuditReceipt(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    protocol_version: str = "parallax.receipt/v1"
     receipt_id: str
-    kind: Literal["ingest", "partition", "reader", "claim", "coverage", "arbitration"]
+    kind: Literal[
+        "ingest",
+        "partition",
+        "reader",
+        "claim",
+        "coverage",
+        "verification",
+        "arbitration",
+    ]
     run_id: str
     round_index: int = 0
     actor_id: str | None = None
@@ -310,6 +319,10 @@ class IndependenceProfile(BaseModel):
     claim_count: int = 0
     claims_with_independent_support: int = 0
     coverage_fill_rate: float = 0.0
+    correlation_budget_violated: bool = False
+    """是否超过本次运行声明的证据相关性预算。"""
+    correlation_budget: dict[str, float] = Field(default_factory=dict)
+    """运行时采用的相关性预算快照，便于复现与审计。"""
 
     @property
     def normalized_channel_ratio(self) -> float:
@@ -334,9 +347,7 @@ class IndependenceProfile(BaseModel):
 
 class ProvenanceNode(BaseModel):
     node_id: str
-    node_type: Literal[
-        "evidence", "reader", "claim", "coverage", "arbitration", "verification"
-    ]
+    node_type: Literal["evidence", "reader", "claim", "coverage", "arbitration", "verification"]
     label: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -352,6 +363,7 @@ class ProvenanceEdge(BaseModel):
         "contradicts",
         "covers",
         "verified_by",
+        "arbitrated_by",
     ]
 
 

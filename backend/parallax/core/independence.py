@@ -40,21 +40,29 @@ def _effective_channel_count(assignments: Mapping[str, list[str]]) -> float:
     return (trace * trace / trace_square) if trace_square else 0.0
 
 
+def evidence_overlap_rate(assignments: Mapping[str, list[str]]) -> float:
+    """计算活跃 Reader 两两证据分区的平均 Jaccard 重叠。"""
+    active = [set(evidence) for evidence in assignments.values() if evidence]
+    pairs: list[float] = []
+    for index, left in enumerate(active):
+        for right in active[index + 1 :]:
+            union = left | right
+            pairs.append(len(left & right) / len(union) if union else 0.0)
+    return round(sum(pairs) / len(pairs), 6) if pairs else 0.0
+
+
 def build_independence_profile(
     claims: Iterable[Claim],
     assignments: Mapping[str, list[str]],
     *,
     output_contamination: bool = False,
     coverage_fill_rate: float = 0.0,
+    max_evidence_overlap_rate: float = 1.0,
+    min_independent_support: int = 0,
 ) -> IndependenceProfile:
     claims = list(claims)
     active = {reader: set(evidence) for reader, evidence in assignments.items() if evidence}
-    pairs: list[float] = []
-    readers = sorted(active)
-    for index, left in enumerate(readers):
-        for right in readers[index + 1 :]:
-            union = active[left] | active[right]
-            pairs.append(len(active[left] & active[right]) / len(union) if union else 0.0)
+    overlap_rate = evidence_overlap_rate(assignments)
     effective = _effective_channel_count(assignments)
     reader_count = len(active)
     by_subject: dict[tuple[str, object], set[str]] = defaultdict(set)
@@ -66,12 +74,17 @@ def build_independence_profile(
         for claim in claims
     ]
     claims_with_support = sum(value >= 2 for value in support)
-    isolation_status = "violated" if output_contamination else ("verified" if reader_count else "unknown")
+    isolation_status = (
+        "violated" if output_contamination else ("verified" if reader_count else "unknown")
+    )
+    correlation_budget_violated = output_contamination or overlap_rate > max(
+        0.0, min(1.0, max_evidence_overlap_rate)
+    )
     return IndependenceProfile(
         reader_count=reader_count,
         effective_channel_count=round(effective, 6),
         normalized_independence=round(effective / reader_count, 6) if reader_count else 0.0,
-        evidence_overlap_rate=round(sum(pairs) / len(pairs), 6) if pairs else 0.0,
+        evidence_overlap_rate=overlap_rate,
         mean_independent_support=round(sum(support) / len(support), 6) if support else 0.0,
         max_independent_support=max(support, default=0),
         output_contamination=output_contamination,
@@ -80,11 +93,18 @@ def build_independence_profile(
         claim_count=len(claims),
         claims_with_independent_support=claims_with_support,
         coverage_fill_rate=round(max(0.0, min(1.0, coverage_fill_rate)), 6),
+        correlation_budget_violated=correlation_budget_violated,
+        correlation_budget={
+            "max_evidence_overlap_rate": max(0.0, min(1.0, max_evidence_overlap_rate)),
+            "min_independent_support": float(max(0, min_independent_support)),
+        },
     )
 
 
 def build_provenance_graph(
-    claims: Iterable[Claim], assignments: Mapping[str, list[str]]
+    claims: Iterable[Claim],
+    assignments: Mapping[str, list[str]],
+    receipts: Iterable[object] = (),
 ) -> ProvenanceGraph:
     claims = list(claims)
     nodes: dict[str, ProvenanceNode] = {}
@@ -92,7 +112,9 @@ def build_provenance_graph(
 
     for reader_id, evidence_ids in assignments.items():
         reader_node = f"reader:{reader_id}"
-        nodes[reader_node] = ProvenanceNode(node_id=reader_node, node_type="reader", label=reader_id)
+        nodes[reader_node] = ProvenanceNode(
+            node_id=reader_node, node_type="reader", label=reader_id
+        )
         for evidence_id in evidence_ids:
             evidence_node = f"evidence:{evidence_id}"
             nodes.setdefault(
@@ -104,7 +126,9 @@ def build_provenance_graph(
     by_fingerprint: dict[str, list[Claim]] = defaultdict(list)
     for claim in claims:
         claim_node = f"claim:{claim.claim_id}"
-        nodes[claim_node] = ProvenanceNode(node_id=claim_node, node_type="claim", label=claim.statement)
+        nodes[claim_node] = ProvenanceNode(
+            node_id=claim_node, node_type="claim", label=claim.statement
+        )
         reader_node = f"reader:{claim.extracted_by}"
         edges.add((reader_node, claim_node, "produced"))
         for ref in claim.source_refs:
@@ -118,6 +142,38 @@ def build_provenance_graph(
                     continue
                 relation = "supports" if left.polarity == right.polarity else "contradicts"
                 edges.add((f"claim:{left.claim_id}", f"claim:{right.claim_id}", relation))
+
+    for claim in claims:
+        if claim.verification_status != "unverified":
+            verification_node = f"verification:{claim.claim_id}"
+            nodes[verification_node] = ProvenanceNode(
+                node_id=verification_node,
+                node_type="verification",
+                label=claim.verification_status,
+                metadata={
+                    "status": claim.verification_status,
+                    "evidence_ids": claim.metadata.get("verification_evidence_ids", []),
+                    "falsifier": claim.metadata.get("falsifier"),
+                },
+            )
+            edges.add((verification_node, f"claim:{claim.claim_id}", "verified_by"))
+
+    for receipt in receipts:
+        if getattr(receipt, "kind", None) != "arbitration":
+            continue
+        receipt_id = getattr(receipt, "receipt_id", "")
+        if not receipt_id:
+            continue
+        node_id = f"arbitration:{receipt_id}"
+        payload = dict(getattr(receipt, "payload", {}) or {})
+        nodes[node_id] = ProvenanceNode(
+            node_id=node_id,
+            node_type="arbitration",
+            label=str(payload.get("status", "")),
+            metadata=payload,
+        )
+        for claim_id in getattr(receipt, "claim_ids", []) or []:
+            edges.add((node_id, f"claim:{claim_id}", "arbitrated_by"))
 
     return ProvenanceGraph(
         nodes=sorted(nodes.values(), key=lambda node: node.node_id),

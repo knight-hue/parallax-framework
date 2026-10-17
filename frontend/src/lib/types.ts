@@ -48,6 +48,8 @@ export interface ClaimRow {
   confidence: number;
   locator: string | null;
   rationale: string | null;
+  verification_status: string;
+  verification_reason: string | null;
 }
 
 export interface RoundRow {
@@ -73,6 +75,7 @@ export interface RunResult {
     total_claims: number;
     reader_ids: string[];
     receipts: number;
+    correlation_budget: Record<string, number>;
     independence: IndependenceProfile;
     rounds: RoundRow[];
   };
@@ -96,6 +99,8 @@ export interface IndependenceProfile {
   claim_count: number;
   claims_with_independent_support: number;
   coverage_fill_rate: number;
+  correlation_budget_violated: boolean;
+  correlation_budget: Record<string, number>;
 }
 
 export interface ProvenanceNode {
@@ -108,7 +113,7 @@ export interface ProvenanceNode {
 export interface ProvenanceEdge {
   source: string;
   target: string;
-  relation: 'reviewed_by' | 'produced' | 'derived_from' | 'supports' | 'contradicts' | 'covers' | 'verified_by';
+  relation: 'reviewed_by' | 'produced' | 'derived_from' | 'supports' | 'contradicts' | 'covers' | 'verified_by' | 'arbitrated_by';
 }
 
 export interface ProvenanceGraph {

@@ -21,6 +21,7 @@ from parallax.graph.state import ParallaxRuntime
 from parallax.ports.arbitrator import NullArbitrator
 from parallax.ports.claim_validator import ClaimValidator
 from parallax.ports.evidence_adapter import EvidenceAdapter
+from parallax.ports.falsifier import Falsifier
 from parallax.ports.llm import LLMClient
 from parallax.ports.reader_plugin import ReaderPlugin
 from parallax.util import stable_id
@@ -54,6 +55,7 @@ class ParallaxEngine:
         settings: Settings | None = None,
         validators: Sequence[ClaimValidator] = (),
         arbitrator: object | None = None,
+        falsifier: Falsifier | None = None,
         reputation_store: InMemoryReputationStore | None = None,
     ) -> ParallaxEngine:
         settings = settings or load_settings()
@@ -105,6 +107,7 @@ class ParallaxEngine:
                 support_threshold=settings.support_threshold,
             ),
             arbitrator=arbitrator if arbitrator is not None else NullArbitrator(),
+            falsifier=falsifier,
         )
         return cls(runtime, adapter, plugin)
 
@@ -168,6 +171,8 @@ class ParallaxEngine:
             assignments,
             output_contamination=runtime.output_contamination,
             coverage_fill_rate=matrix.fill_rate(),
+            max_evidence_overlap_rate=runtime.settings.max_evidence_overlap_rate,
+            min_independent_support=runtime.settings.effective_min_independent_support(),
         )
         return Report(
             run_id=run_id,
@@ -178,7 +183,7 @@ class ParallaxEngine:
             coverage=matrix,
             manifest=runtime.manifest,
             independence=independence,
-            provenance=build_provenance_graph(all_claims, assignments),
+            provenance=build_provenance_graph(all_claims, assignments, runtime.manifest.receipts),
         )
 
     def _representative(self, group: LedgerGroup) -> Claim | None:

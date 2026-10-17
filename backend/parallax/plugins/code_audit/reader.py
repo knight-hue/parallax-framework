@@ -75,6 +75,9 @@ _SYSTEM_PROMPT = """你是一名资深代码审查者。你的任务是在给定
 - stance       "defect"（确认是缺陷）或 "not_a_defect"（确认不是缺陷）
 - rationale    为什么这是（或不是）缺陷，讲清触发条件
 - quote        从代码中原样摘录的 1-8 行
+- trigger_conditions 触发该结论所需的条件列表
+- counter_conditions 能推翻该结论的条件列表
+- reproduction_plan 可执行的最小复现参数（没有把握时留空）
 
 只输出 JSON：{{"findings": [...], "notes": "..."}}"""
 
@@ -89,6 +92,9 @@ class Finding(BaseModel):
     stance: Literal["defect", "not_a_defect"] = "defect"
     rationale: str = ""
     quote: str = ""
+    trigger_conditions: list[str] = Field(default_factory=list)
+    counter_conditions: list[str] = Field(default_factory=list)
+    reproduction_plan: dict[str, object] = Field(default_factory=dict)
 
 
 class ReviewOutput(BaseModel):
@@ -226,6 +232,9 @@ class CodeAuditReader:
                 "stance": finding.stance,
                 "line_bucket": self.line_bucket,
             },
+            trigger_conditions=list(finding.trigger_conditions),
+            counter_conditions=list(finding.counter_conditions),
+            reproduction_plan=dict(finding.reproduction_plan),
         )
 
     def _render_unit(self, unit: EvidenceUnit, budget: int) -> str:
