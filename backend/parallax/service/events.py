@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 
 HISTORY_LIMIT = 2000
 """每次运行保留的事件条数上限。够覆盖一次常见重连，又不至于内存无界。"""
@@ -48,15 +50,79 @@ class _Run:
 
 
 class RunEventBus:
-    """进程内事件总线。
+    """带可选持久化日志的事件总线。
 
-    刻意不做跨进程：审查任务本身就是单进程后台任务，
-    引入 Redis Pub/Sub 只会增加部署负担而不增加能力。
-    将来要多副本时替换这一个类即可（接口只有 publish / history / subscribe）。
+    默认仍是纯内存模式，便于单测和离线运行。服务模式传入 ``journal_dir``
+    后，每个运行会额外写入 ``<run_id>/events.jsonl`` 与 ``events.closed``。
+    进程重启后 ``history`` 可以从日志恢复，SSE 不会因为实例重启而丢失审计事件。
+    日志使用追加写入并在每条事件后 flush + fsync；跨多副本部署时应替换为共享
+    数据库或消息日志实现，但上层接口保持不变。
     """
 
-    def __init__(self) -> None:
+    def __init__(self, journal_dir: Path | str | None = None) -> None:
         self._runs: dict[str, _Run] = {}
+        self._journal_dir = Path(journal_dir) if journal_dir else None
+        if self._journal_dir:
+            self._journal_dir.mkdir(parents=True, exist_ok=True)
+
+    def _journal_path(self, run_id: str) -> Path | None:
+        if self._journal_dir is None:
+            return None
+        return self._journal_dir / run_id / "events.jsonl"
+
+    def _closed_path(self, run_id: str) -> Path | None:
+        if self._journal_dir is None:
+            return None
+        return self._journal_dir / run_id / "events.closed"
+
+    def _append_journal(self, run_id: str, event: Event) -> None:
+        path = self._journal_path(run_id)
+        if path is None:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(
+                json.dumps(
+                    {
+                        "seq": event.seq,
+                        "type": event.type,
+                        "payload": event.payload,
+                        "at": event.at,
+                    },
+                    ensure_ascii=False,
+                    default=str,
+                )
+                + "\n"
+            )
+            stream.flush()
+            os.fsync(stream.fileno())
+
+    def _load_history(self, run_id: str) -> _Run | None:
+        path = self._journal_path(run_id)
+        if path is None or not path.exists():
+            return None
+        run = _Run()
+        try:
+            with path.open(encoding="utf-8") as stream:
+                for line in stream:
+                    if not line.strip():
+                        continue
+                    item = json.loads(line)
+                    event = Event(
+                        seq=int(item["seq"]),
+                        type=str(item["type"]),
+                        payload=dict(item.get("payload") or {}),
+                        at=str(item["at"]),
+                    )
+                    run.events.append(event)
+                    run.seq = max(run.seq, event.seq)
+        except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+            # 损坏的尾行不能阻止服务查询其他运行；meta.json 仍是状态事实来源。
+            return None
+        closed = self._closed_path(run_id)
+        run.closed = bool(closed and closed.exists())
+        self._runs[run_id] = run
+        return run
 
     # ---- 发布 ----
 
@@ -70,6 +136,7 @@ class RunEventBus:
             at=datetime.now(UTC).isoformat(timespec="milliseconds"),
         )
         run.events.append(event)
+        self._append_journal(run_id, event)
         for queue in list(run.subscribers):
             queue.put_nowait(event)
         return event
@@ -78,6 +145,10 @@ class RunEventBus:
         """标记运行结束。订阅者会在消费完剩余事件后收到终止信号。"""
         run = self._runs.setdefault(run_id, _Run())
         run.closed = True
+        closed = self._closed_path(run_id)
+        if closed is not None:
+            closed.parent.mkdir(parents=True, exist_ok=True)
+            closed.touch()
         for queue in list(run.subscribers):
             # None 作为终止哨兵：订阅者据此退出生成器
             queue.put_nowait(None)
@@ -86,13 +157,13 @@ class RunEventBus:
     # ---- 读取 ----
 
     def history(self, run_id: str, after_seq: int = 0) -> list[Event]:
-        run = self._runs.get(run_id)
+        run = self._runs.get(run_id) or self._load_history(run_id)
         if run is None:
             return []
         return [e for e in run.events if e.seq > after_seq]
 
     def is_closed(self, run_id: str) -> bool:
-        run = self._runs.get(run_id)
+        run = self._runs.get(run_id) or self._load_history(run_id)
         return bool(run and run.closed)
 
     def subscriber_count(self, run_id: str) -> int:
@@ -105,7 +176,8 @@ class RunEventBus:
     # ---- 订阅 ----
 
     def subscribe(self, run_id: str) -> asyncio.Queue:
-        run = self._runs.setdefault(run_id, _Run())
+        run = self._runs.get(run_id) or self._load_history(run_id) or _Run()
+        self._runs[run_id] = run
         queue: asyncio.Queue = asyncio.Queue()
         run.subscribers.append(queue)
         return queue

@@ -70,13 +70,17 @@ def create_app(
     """
     resolved = settings or load_settings()
     store = RunStore(Path(runs_dir) if runs_dir else resolved.runs_dir)
-    bus = RunEventBus()
+    # 事件日志与运行产物放在同一目录：重启后 SSE 可以从磁盘恢复历史。
+    bus = RunEventBus(store.root)
     runner = AuditRunner(store, bus, resolved, client_factory=client_factory)
     install_log_filter(logging.getLogger("parallax"))
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         logger.info("Parallax 服务启动：runs_dir=%s model=%s", store.root, resolved.llm_model)
+        recovered = runner.recover()
+        if recovered:
+            logger.info("已恢复 %d 个未完成审查任务", recovered)
         yield
         logger.info("Parallax 服务停止：等待在跑任务收敛")
         await runner.shutdown()
@@ -187,6 +191,13 @@ def create_app(
     @app.get("/api/v1/audits/{run_id}")
     async def get_audit(run_id: str) -> dict:
         record = store.get(run_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail=f"未找到运行 {run_id}")
+        return record.model_dump()
+
+    @app.delete("/api/v1/audits/{run_id}")
+    async def cancel_audit(run_id: str) -> dict:
+        record = runner.cancel(run_id)
         if record is None:
             raise HTTPException(status_code=404, detail=f"未找到运行 {run_id}")
         return record.model_dump()

@@ -115,6 +115,15 @@ class Settings(BaseSettings):
     # ---- 运行产物 ----
     runs_dir: Path = Field(default=Path("runs"))
 
+    # ---- 输入边界 ----
+    audit_root: str = ""
+    """允许提交审查的仓库根目录。
+
+    空值表示开发模式不限制路径；生产容器应设置为 ``/workspace``，
+    防止 HTTP 调用方借 ``repo_path`` 读取服务进程上的任意目录。
+    路径会先 resolve，再做祖先关系检查以阻断符号链接逃逸。
+    """
+
     # ---- 完成回调（Java 网关的平台能力）----
     callback_url: str = ""
     """一次审查结束后把用量回报给网关的地址。**默认留空 = 不回调**。
