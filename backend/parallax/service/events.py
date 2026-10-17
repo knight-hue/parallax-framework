@@ -127,7 +127,8 @@ class RunEventBus:
     # ---- 发布 ----
 
     def publish(self, run_id: str, event_type: str, payload: dict | None = None) -> Event:
-        run = self._runs.setdefault(run_id, _Run())
+        run = self._runs.get(run_id) or self._load_history(run_id) or _Run()
+        self._runs[run_id] = run
         run.seq += 1
         event = Event(
             seq=run.seq,
@@ -143,7 +144,8 @@ class RunEventBus:
 
     def close(self, run_id: str) -> None:
         """标记运行结束。订阅者会在消费完剩余事件后收到终止信号。"""
-        run = self._runs.setdefault(run_id, _Run())
+        run = self._runs.get(run_id) or self._load_history(run_id) or _Run()
+        self._runs[run_id] = run
         run.closed = True
         closed = self._closed_path(run_id)
         if closed is not None:

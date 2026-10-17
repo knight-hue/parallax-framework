@@ -111,7 +111,7 @@ class AuditRunner:
                 settings.reader_visibility,
                 datetime.now(UTC).timestamp(),  # 允许同一路径重复审查
             ),
-                repo_path=repo,
+            repo_path=repo,
             question=overrides.get("question") or DEFAULT_QUESTION,
             settings=settings,
             extensions=tuple(overrides.get("extensions") or (".py",)),
