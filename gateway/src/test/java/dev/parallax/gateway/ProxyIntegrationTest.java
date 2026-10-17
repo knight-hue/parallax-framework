@@ -169,6 +169,15 @@ class ProxyIntegrationTest {
     }
 
     @Test
+    void forwardsCancelDelete() {
+        ResponseEntity<String> response = rest.exchange(
+                url("/api/v1/audits/abc"), HttpMethod.DELETE, HttpEntity.EMPTY, String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(receivedPaths).contains("/api/v1/audits/abc");
+    }
+
+    @Test
     void forwardsLastEventIdHeaderForSseReplay() {
         HttpHeaders headers = new HttpHeaders();
         headers.set("Last-Event-ID", "42");

@@ -142,7 +142,9 @@ public class RunService {
         // 上游 id 写进 detail 里做交叉引用，详情接口拿到 run 后再按提交 id 取事件。
         events.save(new AuditEvent(
                 run.getId(),
-                RunStatus.FAILED.equals(status) ? AuditEvent.FAILED : AuditEvent.COMPLETED,
+                RunStatus.FAILED.equals(status)
+                        ? AuditEvent.FAILED
+                        : RunStatus.CANCELED.equals(status) ? AuditEvent.CANCELED : AuditEvent.COMPLETED,
                 "上游 run_id=" + runId + "，用量 " + (promptTokens + completionTokens)
                         + " tokens，状态 " + status,
                 run.getTraceId()));
