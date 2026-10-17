@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](backend/pyproject.toml)
 
-> **抗从众的多智能体证据装配框架**
+> **面向 AI 生成代码审查的独立证据装配与可验证审计框架**
 > 单眼无法判断深度，必须靠两只眼睛从不同位置观察，才能恢复被压平的立体信息。
 > 多智能体从众的本质，就是把 N 个 Agent 压成了一只"平均眼"——视差消失，真相被拍平。
 > Parallax 做的事，就是把视差还给系统。
@@ -28,11 +28,12 @@
 学术界的多样化杠杆是**模型 / prompt / 工具异构**。但现实中多数团队只有一两个模型可用
 （预算、合规、内网），这条杠杆常常拉不动。
 
-> **Parallax 的位置：当所有 Agent 都是同一个模型时，如何造出有效的独立通道？**
+> **Parallax 的位置：当所有 Agent 都是同一个模型时，如何把独立证据、争议和覆盖率做成可审计的代码审查协议？**
 > **答案是信息分区，不是模型异构。**
 
-Diversity Collapse 的作者给出的建议是 NGT（先独立产出、后群体综合）——方向与我们一致，
-但他们只给了设计原则，没有给出可用的框架。
+Diversity Collapse 的作者给出的建议是 NGT（先独立产出、后群体综合）。这类研究和 InfoDelphi
+构成了本项目的公开研究背景；Parallax 不把信息分区或有效独立通道指标宣称为理论首创，
+而是把相关认识落成面向代码审查的可运行、可追溯协议。
 
 ---
 
@@ -98,16 +99,20 @@ Agent 会迅速学会"不要第一个说不同意见"，于是我们在框架内
     aggregator.py     规则化聚合：状态判定 + 对数几率置信度
     coverage.py       覆盖率监控：两个覆盖语义 + 补检调度
     reputation.py     声誉：Beta 后验 + 反从众更新策略
+    independence.py   独立性运行时画像 + 证据血缘图
 
-扩展点（ports/，只此三个 + 一个可选）
+扩展点（ports/，边界清晰、按需注入）
     EvidenceAdapter   证据从哪来、怎么切、按什么维度分区
     ReaderPlugin      怎么问、怎么解析、怎么给 claim 打指纹
     ClaimValidator    入账前的否决权（可选，可串联）
+    Falsifier         Claim 的独立反证/验证（可选，当前提供离线规则实现）
     Arbitrator        争议仲裁（可选，默认 NullArbitrator 不做裁决）
 ```
 
 **领域模型**（`domain/models.py`）刻意保持场景无关：
-`EvidenceUnit` / `Claim`（指纹 + 极性 + 源指针）/ `AgentReputation` / `CoverageMatrix` / `RunManifest`。
+`EvidenceUnit` / `Claim`（指纹 + 极性 + 源指针 + 可证伪字段）/ `AgentReputation` /
+`CoverageMatrix` / `RunManifest` / `AuditReceipt` / `IndependenceProfile` /
+`ProvenanceGraph`。
 
 ### 两层分工：Python 管装配，Java 管平台
 
@@ -217,11 +222,11 @@ class MyValidator:                    # ③ 可选：入账否决权
 
 ---
 
-## 6. 当前状态
+## 6. 当前状态与边界
 
 | 模块 | 状态 |
 |---|---|
-| 领域模型、三个扩展点协议 | ✅ 完成 |
+| 领域模型、扩展点协议 | ✅ 完成 |
 | 盲读分区 / 账本 / 聚合器 / 覆盖率 / 声誉 | ✅ 完成 + 单测覆盖 |
 | LangGraph 编排（含补检回环） | ✅ 完成 |
 | 代码审查插件（RepoAdapter + CodeAuditReader） | ✅ 完成 |
@@ -235,9 +240,20 @@ class MyValidator:                    # ③ 可选：入账否决权
 | **Java 网关 · 平台层** | ✅ 完成（身份配额 / 运行记录 / 分布式限流 / 指标 / 链路追踪），**已端到端联调** |
 | Docker 部署（compose 四服务 + 可选 infra profile） | ✅ 完成，`compose config` 校验通过 |
 | 开源治理（License / 贡献指南 / 安全策略 / CI 七项门禁） | ✅ 完成 |
-| 测试 | ✅ **Python 210 项 + Java 41 项（单元/集成）+ 12 项 Testcontainers 集成**，单元与集成套件均不需网络与凭据 |
+| Receipt、独立性画像、可证伪 Claim、离线反证和证据血缘 | ✅ 已实现，Python 离线测试覆盖 |
+| 测试 | ✅ **Python 222 项 + Java 41 项（单元/集成）+ 12 项 Testcontainers 集成**，单元与集成套件均不需网络与凭据 |
 | 跨文件组合型缺陷（P0-4） | ⬜ 未开始——**唯一能测出召回差异的路径** |
 | 跨进程任务队列与崩溃恢复 | ⬜ 明确不做（理由见 [说明材料/任务总表.md](../说明材料/任务总表.md) 第 7 节） |
+
+### 当前升级边界与后续路线
+
+Receipt、独立性运行时画像、可证伪 Claim、离线反证协议和基础证据血缘图已经接入
+主链路、报告和前端。下一阶段不是简单增加 Reader 数量，而是把相关性预算和共同污染
+检测升级为运行约束，接入真实模型反证调度，并继续完成公平消融、重复实验和复现测试。
+
+`K*` 是本项目采用的有效独立通道评估思想，不是 Parallax 首创。真实仓库没有 ground truth 时，
+只报告独立性、冗余、覆盖、成本和失败数，不把结果写成召回率或精确率。完整路线见
+[`PROJECT_STATUS.md`](PROJECT_STATUS.md) 和同级目录的 [`../说明材料/最终完成路线图.md`](../说明材料/最终完成路线图.md)。
 
 > Docker 镜像的实际构建、容器冒烟、以及真实 PostgreSQL + Redis 上的网关集成测试
 > 都在 CI 里执行；本地开发机未启动 Docker 守护进程，因此本地只验证了
@@ -316,8 +332,8 @@ class MyValidator:                    # ③ 可选：入账否决权
 backend/                        Python 编排核心（唯一包含机制的部分）
 ├─ parallax/
 │   ├─ domain/      领域模型与枚举、异常
-│   ├─ ports/       扩展点协议（EvidenceAdapter / ReaderPlugin / ClaimValidator / Arbitrator）
-│   ├─ core/        五模块机制实现
+│   ├─ ports/       扩展点协议（EvidenceAdapter / ReaderPlugin / ClaimValidator / Falsifier / Arbitrator）
+│   ├─ core/        七模块机制实现（含独立性画像与血缘）
 │   ├─ graph/       LangGraph 编排
 │   ├─ infra/       模型客户端、仲裁器
 │   ├─ plugins/     内置场景插件
@@ -326,7 +342,7 @@ backend/                        Python 编排核心（唯一包含机制的部�
 │   ├─ engine.py    装配与执行
 │   ├─ reporting.py 报告渲染
 │   └─ cli.py       命令行入口
-└─ tests/           210 项测试
+└─ tests/           222 项测试
 
 frontend/                       Next.js 工作台（提交 / 实时事件流 / 账本 / 覆盖率矩阵）
 gateway/                        Java 网关：平台层（身份配额 / 运行记录 / 限流 / 指标）

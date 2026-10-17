@@ -57,6 +57,25 @@ class EvidenceUnit(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class AuditReceipt(BaseModel):
+    """一次可审计动作的不可变凭证。
+
+    Receipt 只记录事实，不替代事件流：事件用于进度推送，Receipt 用于最终复盘。
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    receipt_id: str
+    kind: Literal["ingest", "partition", "reader", "claim", "coverage", "arbitration"]
+    run_id: str
+    round_index: int = 0
+    actor_id: str | None = None
+    evidence_ids: list[str] = Field(default_factory=list)
+    claim_ids: list[str] = Field(default_factory=list)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    at: datetime = Field(default_factory=_now)
+
+
 class Claim(BaseModel):
     """账本条目：一条被结构化记录的主张。"""
 
@@ -83,7 +102,33 @@ class Claim(BaseModel):
     disputed_with: list[str] = Field(default_factory=list)
     status: ClaimStatus = ClaimStatus.PENDING
     confidence: float = 0.0
+    trigger_conditions: list[str] = Field(default_factory=list)
+    """使主张可被复现/验证的触发条件。旧插件可暂时留空。"""
+    counter_conditions: list[str] = Field(default_factory=list)
+    """可能推翻主张的边界条件或反证条件。"""
+    reproduction_plan: dict[str, Any] = Field(default_factory=dict)
+    """可选的最小复现计划；不把自然语言意见误标为已验证。"""
+    verification_status: Literal[
+        "unverified",
+        "confirmed",
+        "refuted",
+        "insufficient_evidence",
+        "reproduced",
+        "not_reproduced",
+        "fixed",
+        "regression_passed",
+    ] = "unverified"
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def is_verified(self) -> bool:
+        """是否已有外部验证结果；不把 Agent 聚合状态当作事实验证。"""
+        return self.verification_status in {
+            "confirmed",
+            "reproduced",
+            "fixed",
+            "regression_passed",
+        }
 
     @field_validator("source_refs")
     @classmethod
@@ -232,6 +277,10 @@ class RunManifest(BaseModel):
     stop_reason: RoundStopReason | None = None
     total_claims: int = 0
     reader_ids: list[str] = Field(default_factory=list)
+    receipts: list[AuditReceipt] = Field(default_factory=list)
+
+    correlation_budget: dict[str, float] = Field(default_factory=dict)
+    """本次运行允许的相关性预算快照，便于复现实验口径。"""
 
     def all_assignments(self) -> dict[str, list[str]]:
         merged: dict[str, list[str]] = {}
@@ -239,6 +288,84 @@ class RunManifest(BaseModel):
             for reader_id, ev_ids in r.assignments.items():
                 merged.setdefault(reader_id, []).extend(ev_ids)
         return merged
+
+
+class IndependenceProfile(BaseModel):
+    """一次运行的独立性画像。
+
+    这里报告的是证据通道的独立程度，不是事实正确率。
+    ``effective_channel_count`` 采用有效通道数思想，具体计算由
+    ``core.independence`` 完成，并同时给出归一化值避免不同 Reader 数量下误比较。
+    """
+
+    reader_count: int = 0
+    effective_channel_count: float = 0.0
+    normalized_independence: float = 0.0
+    evidence_overlap_rate: float = 0.0
+    mean_independent_support: float = 0.0
+    max_independent_support: int = 0
+    output_contamination: bool = False
+    isolation_status: Literal["verified", "unknown", "violated"] = "unknown"
+    evidence_units: int = 0
+    claim_count: int = 0
+    claims_with_independent_support: int = 0
+    coverage_fill_rate: float = 0.0
+
+    @property
+    def normalized_channel_ratio(self) -> float:
+        """兼容早期草稿的命名。"""
+        return self.normalized_independence
+
+    @property
+    def evidence_count(self) -> int:
+        """兼容早期草稿的命名。"""
+        return self.evidence_units
+
+    @property
+    def output_contamination_detected(self) -> bool:
+        """兼容早期草稿的命名。"""
+        return self.output_contamination
+
+    @property
+    def claims_total(self) -> int:
+        """兼容早期草稿的命名。"""
+        return self.claim_count
+
+
+class ProvenanceNode(BaseModel):
+    node_id: str
+    node_type: Literal[
+        "evidence", "reader", "claim", "coverage", "arbitration", "verification"
+    ]
+    label: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProvenanceEdge(BaseModel):
+    source: str
+    target: str
+    relation: Literal[
+        "reviewed_by",
+        "produced",
+        "derived_from",
+        "supports",
+        "contradicts",
+        "covers",
+        "verified_by",
+    ]
+
+
+class ProvenanceGraph(BaseModel):
+    """可序列化的证据血缘图；先用 JSON 表达，不引入图数据库依赖。"""
+
+    nodes: list[ProvenanceNode] = Field(default_factory=list)
+    edges: list[ProvenanceEdge] = Field(default_factory=list)
+
+
+# 早期升级草稿曾使用 Lineage 命名。类型别名保留兼容性，不复制领域模型。
+LineageNode = ProvenanceNode
+LineageEdge = ProvenanceEdge
+EvidenceLineage = ProvenanceGraph
 
 
 class Report(BaseModel):
@@ -251,6 +378,13 @@ class Report(BaseModel):
     disputed: list[Claim] = Field(default_factory=list)
     coverage: CoverageMatrix = Field(default_factory=CoverageMatrix)
     manifest: RunManifest
+    independence: IndependenceProfile = Field(default_factory=IndependenceProfile)
+    provenance: ProvenanceGraph = Field(default_factory=ProvenanceGraph)
+
+    @property
+    def lineage(self) -> EvidenceLineage:
+        """兼容早期升级草稿中的 `lineage` 命名。"""
+        return self.provenance
 
     def counts(self) -> dict[str, int]:
         return {

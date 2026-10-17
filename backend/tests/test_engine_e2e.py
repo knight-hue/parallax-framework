@@ -210,8 +210,8 @@ async def test_control_group_shows_herding_loss(demo_repo, defects):
         settings=shared,
     )
 
-    await engine_blind.run("审查")
-    await engine_shared.run("审查")
+    blind_report = await engine_blind.run("审查")
+    shared_report = await engine_shared.run("审查")
 
     blind_recall = len(fingerprints(engine_blind))
     shared_recall = len(fingerprints(engine_shared))
@@ -219,6 +219,8 @@ async def test_control_group_shows_herding_loss(demo_repo, defects):
     assert blind_recall == 2
     assert shared_recall == 1
     assert shared_recall < blind_recall, "实验台必须能区分出抗从众带来的召回差异"
+    assert blind_report.independence.isolation_status == "verified"
+    assert shared_report.independence.isolation_status == "violated"
 
 
 async def test_shared_mode_records_how_many_claims_a_reader_saw(demo_repo, defects):

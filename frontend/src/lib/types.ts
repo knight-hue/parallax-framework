@@ -72,12 +72,48 @@ export interface RunResult {
     stop_reason: string | null;
     total_claims: number;
     reader_ids: string[];
+    receipts: number;
+    independence: IndependenceProfile;
     rounds: RoundRow[];
   };
   coverage: CoverageMatrix;
+  provenance: ProvenanceGraph;
   claims: ClaimRow[];
   usage: Record<string, number>;
   readers_failed: string[];
+}
+
+export interface IndependenceProfile {
+  reader_count: number;
+  effective_channel_count: number;
+  normalized_independence: number;
+  evidence_overlap_rate: number;
+  mean_independent_support: number;
+  max_independent_support: number;
+  output_contamination: boolean;
+  isolation_status: 'verified' | 'unknown' | 'violated';
+  evidence_units: number;
+  claim_count: number;
+  claims_with_independent_support: number;
+  coverage_fill_rate: number;
+}
+
+export interface ProvenanceNode {
+  node_id: string;
+  node_type: 'evidence' | 'reader' | 'claim' | 'coverage' | 'arbitration' | 'verification';
+  label: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface ProvenanceEdge {
+  source: string;
+  target: string;
+  relation: 'reviewed_by' | 'produced' | 'derived_from' | 'supports' | 'contradicts' | 'covers' | 'verified_by';
+}
+
+export interface ProvenanceGraph {
+  nodes: ProvenanceNode[];
+  edges: ProvenanceEdge[];
 }
 
 export interface RunResultEnvelope {

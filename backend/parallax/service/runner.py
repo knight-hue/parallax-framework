@@ -306,6 +306,8 @@ def _summary_payload(report, engine) -> dict:
             ),
             "total_claims": report.manifest.total_claims,
             "reader_ids": report.manifest.reader_ids,
+            "receipts": len(report.manifest.receipts),
+            "independence": report.independence.model_dump(mode="json"),
             "rounds": [
                 {
                     "round": r.round_index,
@@ -324,6 +326,10 @@ def _summary_payload(report, engine) -> dict:
             "cols": report.coverage.cols,
             "cells": report.coverage.cells,
             "fill_rate": report.coverage.fill_rate(),
+        },
+        "provenance": {
+            "nodes": [node.model_dump(mode="json") for node in report.provenance.nodes],
+            "edges": [edge.model_dump(mode="json") for edge in report.provenance.edges],
         },
         "claims": [
             {

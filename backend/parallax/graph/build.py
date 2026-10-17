@@ -77,6 +77,11 @@ def build_graph(runtime: ParallaxRuntime):
             claim_type_count=len(cols),
             modules=rows,
         )
+        runtime.record_receipt(
+            "ingest",
+            evidence_ids=[unit.evidence_id for unit in evidence],
+            payload={"question": question, "rows": rows, "cols": cols},
+        )
         logger.info(
             "ingest: %d 条证据 / %d 个审视维度 / %d 个 claim 类型",
             len(evidence),
@@ -125,6 +130,12 @@ def build_graph(runtime: ParallaxRuntime):
             ],
             focus=focus or [],
         )
+        runtime.record_receipt(
+            "partition",
+            round_index=round_index,
+            evidence_ids=[unit.evidence_id for partition in non_empty for unit in partition.units],
+            payload={"readers": [partition.reader_id for partition in non_empty], "focus": focus or []},
+        )
         return {"partitions": non_empty, "stop_reason": None}
 
     async def blind_read(state: ParallaxState) -> ParallaxState:
@@ -146,6 +157,17 @@ def build_graph(runtime: ParallaxRuntime):
                 error=outcome.error,
                 saw_prior_claims=outcome.saw_prior_claims,
             )
+            runtime.record_receipt(
+                "reader",
+                round_index=outcome.round_index,
+                actor_id=outcome.reader_id,
+                evidence_ids=outcome.evidence_ids,
+                claim_ids=[claim.claim_id for claim in outcome.claims],
+                payload={"ok": outcome.ok, "error": outcome.error},
+            )
+        runtime.output_contamination = runtime.output_contamination or any(
+            outcome.saw_prior_claims > 0 for outcome in outcomes
+        )
         return {"outcomes": outcomes}
 
     async def collect(state: ParallaxState) -> ParallaxState:
@@ -172,6 +194,12 @@ def build_graph(runtime: ParallaxRuntime):
             admitted=admitted,
             ledger_size=len(runtime.ledger),
             rejected=len(runtime.ledger.rejections),
+        )
+        runtime.record_receipt(
+            "claim",
+            round_index=record.round_index,
+            claim_ids=[claim.claim_id for claim in runtime.ledger.claims],
+            payload={"admitted": admitted, "rejected": len(runtime.ledger.rejections)},
         )
         return {}
 
@@ -250,6 +278,16 @@ def build_graph(runtime: ParallaxRuntime):
             dispute_rate=decision.dispute_rate,
             stop_reason=decision.stop_reason.value if decision.stop_reason else None,
             focus_groups=decision.focus_groups,
+        )
+        runtime.record_receipt(
+            "coverage",
+            round_index=state.get("round_index", 0),
+            payload={
+                "should_retrieve": decision.should_retrieve,
+                "evidence_fill_rate": decision.evidence_fill_rate,
+                "claim_cell_fill_rate": decision.claim_cell_fill_rate,
+                "stop_reason": decision.stop_reason.value if decision.stop_reason else None,
+            },
         )
 
         if not decision.should_retrieve:
@@ -374,4 +412,9 @@ async def _arbitrate_disputes(runtime: ParallaxRuntime, groups: list) -> None:
         runtime.aggregator.apply_arbitration(group, verdict)
         runtime.reputation_policy.apply_arbitration(
             group, runtime.ledger, runtime.manifest.run_id, verdict
+        )
+        runtime.record_receipt(
+            "arbitration",
+            claim_ids=list(group.claim_ids),
+            payload={"fingerprint": group.fingerprint, "status": verdict.value},
         )

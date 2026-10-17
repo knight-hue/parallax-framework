@@ -79,11 +79,20 @@ def test_a_failed_arm_is_excluded_not_counted_as_zero():
     当 0 处理会把均值无端拉低——这正是本项目一直在修的那类"看起来真实的错误数字"。
     """
     good = [arm_result("baseline_shared", channels=2.0, calls=100)] * 2
-    failed = [arm_result("baseline_shared", channels=0.0, agents=0, claims=0, calls=0)]
-    stats = collect([good, failed[:0], [arm_result("blind_full", channels=3.0)]])
+    failed = arm_result("baseline_shared", channels=0.0, agents=0, claims=0, calls=0)
+    failed.errors = ["LLMError: quota exhausted"]
+    stats = collect([good, [failed], [arm_result("blind_full", channels=3.0)]])
 
     assert stats["baseline_shared"]["effective_channels"].values == [2.0, 2.0]
     assert stats["baseline_shared"]["effective_channels"].mean == 2.0
+
+
+def test_render_marks_failed_arms_as_excluded():
+    failed = arm_result("baseline_shared", channels=0.0, agents=0, claims=0, calls=0)
+    failed.errors = ["LLMError: quota exhausted"]
+    text = render_variance([[failed, arm_result("blind_full", channels=3.0)]])
+    assert "失败实验臂" in text
+    assert "quota exhausted" not in text
 
 
 # ---- 稳定性判定 ----

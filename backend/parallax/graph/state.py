@@ -20,10 +20,11 @@ from parallax.core.partitioning import BlindPartitioner, Partition
 from parallax.core.reader_pool import ReaderOutcome, ReaderPool
 from parallax.core.reputation import InMemoryReputationStore, ReputationPolicy
 from parallax.domain.enums import RoundStopReason
-from parallax.domain.models import EvidenceUnit, RunManifest
+from parallax.domain.models import AuditReceipt, EvidenceUnit, RunManifest
 from parallax.ports.evidence_adapter import EvidenceAdapter
 from parallax.ports.llm import Budget, UsageStats
 from parallax.ports.reader_plugin import ReaderPlugin
+from parallax.util import stable_id
 
 _logger = logging.getLogger(__name__)
 
@@ -69,6 +70,8 @@ class ParallaxRuntime:
     """
     rows: list[str] = field(default_factory=list)
     cols: list[str] = field(default_factory=list)
+    output_contamination: bool = False
+    """是否有 Reader 在盲读阶段观察到其他 Reader 的结论。"""
     budget: Budget = field(default_factory=Budget)
     usage: UsageStats = field(default_factory=UsageStats)
     arbitrator: object | None = None
@@ -94,6 +97,35 @@ class ParallaxRuntime:
 
     def reputation_of(self, agent_id: str) -> float:
         return self.reputation_store.get(agent_id, role="reader").score()
+
+    def record_receipt(
+        self,
+        kind: str,
+        *,
+        round_index: int = 0,
+        actor_id: str | None = None,
+        evidence_ids: list[str] | None = None,
+        claim_ids: list[str] | None = None,
+        payload: dict | None = None,
+    ) -> AuditReceipt:
+        """记录一次可复盘动作，并用确定性序号生成 Receipt ID。"""
+        receipt = AuditReceipt(
+            receipt_id=stable_id(
+                self.manifest.run_id,
+                kind,
+                round_index,
+                len(self.manifest.receipts),
+            ),
+            kind=kind,  # type: ignore[arg-type]
+            run_id=self.manifest.run_id,
+            round_index=round_index,
+            actor_id=actor_id,
+            evidence_ids=list(evidence_ids or []),
+            claim_ids=list(claim_ids or []),
+            payload=payload or {},
+        )
+        self.manifest.receipts.append(receipt)
+        return receipt
 
     def record_usage(self, success: bool, schema_retries: int) -> None:
         self.usage.calls += 1

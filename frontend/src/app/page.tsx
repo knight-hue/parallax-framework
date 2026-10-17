@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Download, RefreshCw, RotateCcw } from 'lucide-react';
 import { api, API_BASE, ApiError } from '@/lib/api';
-import type { ClaimRow, RunRecord, RunResult } from '@/lib/types';
+import type { ClaimRow, ProvenanceGraph, RunRecord, RunResult } from '@/lib/types';
 import { AuditForm } from '@/components/audit-form';
 import { ClaimLedger } from '@/components/claim-ledger';
 import { CoverageHeatmap } from '@/components/coverage-heatmap';
@@ -313,6 +313,8 @@ export default function Page() {
                   </CardBody>
                 </Card>
               </div>
+
+              <IndependencePanel result={result} />
             </>
           ) : activeRun?.status === 'done' || viewRunId === null ? null : (
             <Card>
@@ -346,10 +348,34 @@ export default function Page() {
             </Card>
           )}
 
-          {selectedClaim ? <ClaimDetail claim={selectedClaim} /> : null}
+          {selectedClaim ? (
+            <ClaimDetail claim={selectedClaim} provenance={result?.provenance} />
+          ) : null}
         </div>
       </div>
     </div>
+  );
+}
+
+function IndependencePanel({ result }: { result: RunResult }) {
+  const profile = result.manifest.independence;
+  return (
+    <Card>
+      <CardHeader
+        title="独立性与证据血缘"
+        hint="结构指标描述证据路径，不代表事实正确率"
+      />
+      <CardBody className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+        <Field label="有效通道 K* / N" value={`${profile.effective_channel_count.toFixed(2)} / ${profile.reader_count}`} />
+        <Field label="归一化独立性" value={formatPercent(profile.normalized_independence)} />
+        <Field label="证据重叠" value={formatPercent(profile.evidence_overlap_rate)} />
+        <Field label="输出隔离" value={profile.isolation_status} />
+        <Field label="独立支持 Claim" value={`${profile.claims_with_independent_support} / ${profile.claim_count}`} />
+        <Field label="Receipt" value={String(result.manifest.receipts)} />
+        <Field label="血缘节点" value={String(result.provenance.nodes.length)} />
+        <Field label="血缘关系" value={String(result.provenance.edges.length)} />
+      </CardBody>
+    </Card>
   );
 }
 
@@ -362,7 +388,21 @@ function AuditRow({ label, value, mono }: { label: string; value: string; mono?:
   );
 }
 
-function ClaimDetail({ claim }: { claim: ClaimRow }) {
+function ClaimDetail({
+  claim,
+  provenance,
+}: {
+  claim: ClaimRow;
+  provenance?: ProvenanceGraph;
+}) {
+  const claimNodeId = `claim:${claim.claim_id}`;
+  const lineageEdges = provenance?.edges.filter(
+    (edge) => edge.source === claimNodeId || edge.target === claimNodeId,
+  ) ?? [];
+  const lineageNodeIds = new Set(
+    lineageEdges.flatMap((edge) => [edge.source, edge.target]),
+  );
+  const lineageNodes = provenance?.nodes.filter((node) => lineageNodeIds.has(node.node_id)) ?? [];
   return (
     <Card>
       <CardHeader
@@ -411,6 +451,21 @@ function ClaimDetail({ claim }: { claim: ClaimRow }) {
             )}
           </div>
         </div>
+
+        {lineageEdges.length > 0 ? (
+          <div>
+            <div className="mb-1 text-[11px] text-[var(--color-muted)]">来源链</div>
+            <div className="space-y-1 text-[10px]">
+              {lineageEdges.map((edge) => (
+                <div key={`${edge.source}-${edge.target}-${edge.relation}`} className="mono break-all">
+                  {lineageNodes.find((node) => node.node_id === edge.source)?.label ?? edge.source}
+                  <span className="mx-1 text-[var(--color-muted)]">—{edge.relation}→</span>
+                  {lineageNodes.find((node) => node.node_id === edge.target)?.label ?? edge.target}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </CardBody>
     </Card>
   );

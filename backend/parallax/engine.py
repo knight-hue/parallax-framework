@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from parallax.config import Settings, load_settings
 from parallax.core.aggregator import AggregationRules, Aggregator
 from parallax.core.coverage import CoverageMonitor
+from parallax.core.independence import build_independence_profile, build_provenance_graph
 from parallax.core.ledger import ClaimLedger, LedgerGroup
 from parallax.core.partitioning import BlindPartitioner
 from parallax.core.reader_pool import ReaderPool
@@ -139,6 +140,8 @@ class ParallaxEngine:
 
     def _build_report(self, run_id: str, question: str) -> Report:
         runtime = self.runtime
+        all_claims = runtime.ledger.claims
+        assignments = runtime.manifest.all_assignments()
         groups = runtime.ledger.groups()
         matrix = runtime.monitor.build(
             runtime.ledger.claims,
@@ -160,6 +163,12 @@ class ParallaxEngine:
         for claims in buckets.values():
             claims.sort(key=lambda c: (-c.confidence, c.fingerprint))
 
+        independence = build_independence_profile(
+            all_claims,
+            assignments,
+            output_contamination=runtime.output_contamination,
+            coverage_fill_rate=matrix.fill_rate(),
+        )
         return Report(
             run_id=run_id,
             question=question,
@@ -168,6 +177,8 @@ class ParallaxEngine:
             disputed=buckets[ClaimStatus.DISPUTED],
             coverage=matrix,
             manifest=runtime.manifest,
+            independence=independence,
+            provenance=build_provenance_graph(all_claims, assignments),
         )
 
     def _representative(self, group: LedgerGroup) -> Claim | None:
