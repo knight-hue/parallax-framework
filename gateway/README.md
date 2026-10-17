@@ -170,7 +170,7 @@ export PARALLAX_CALLBACK_TOKEN=$PARALLAX_GATEWAY_INTERNAL_TOKEN
 ## 测试
 
 ```bat
-mvn test          :: 42 项：单元 + 集成（H2 + 内存桶，不需要 Docker）
+mvn test          :: 43 项：单元 + 集成（H2 + 内存桶，不需要 Docker）
 mvn -Pit verify   :: 另加 Testcontainers 集成（真实 PostgreSQL + Redis，需要 Docker）
 python tools/mutation_audit.py :: Java 关键策略变异门禁（临时副本，不修改工作树）
 ```
