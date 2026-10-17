@@ -1,4 +1,4 @@
-"""OpenAI 兼容模型客户端（适配 DeepSeek）。
+"""OpenAI-compatible Chat Completions 客户端。
 
 ## 为什么自己写而不是套 LangChain 的 ChatModel
 
