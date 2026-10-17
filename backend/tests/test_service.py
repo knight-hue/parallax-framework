@@ -63,6 +63,9 @@ def test_event_journal_survives_bus_restart(tmp_path: Path):
     assert [event.type for event in restarted.history("r1")] == ["queued", "done"]
     assert restarted.history("r1", after_seq=1)[0].payload == {"n": 2}
     assert restarted.is_closed("r1")
+    recovered = restarted.publish("r1", "recovered")
+    assert recovered.seq == 3
+    assert [event.seq for event in restarted.history("r1")] == [1, 2, 3]
 
 
 async def test_subscriber_receives_live_events_then_sentinel():
@@ -228,7 +231,9 @@ async def test_runner_records_failures_instead_of_raising(tmp_path: Path, demo_r
 async def test_runner_recovers_queued_record_after_restart(tmp_path: Path, demo_repo, defects):
     """进程重启后，已落盘的 queued 任务应重新执行而不是永久卡住。"""
     store = RunStore(tmp_path / "runs")
-    first = AuditRunner(store, RunEventBus(store.root), make_settings(), client_factory=lambda _s: None)
+    first = AuditRunner(
+        store, RunEventBus(store.root), make_settings(), client_factory=lambda _s: None
+    )
     record = first.submit(repo_path=str(demo_repo), overrides={})
     # 模拟进程在 task 启动前退出：只保留 queued 记录，不等待旧 runner。
     task = first._tasks.pop(record.run_id)  # noqa: SLF001
@@ -252,7 +257,9 @@ async def test_runner_recovers_queued_record_after_restart(tmp_path: Path, demo_
 
 async def test_runner_cancel_has_terminal_state(tmp_path: Path, demo_repo):
     store = RunStore(tmp_path / "runs")
-    runner = AuditRunner(store, RunEventBus(store.root), make_settings(), client_factory=lambda _s: None)
+    runner = AuditRunner(
+        store, RunEventBus(store.root), make_settings(), client_factory=lambda _s: None
+    )
     record = runner.submit(repo_path=str(demo_repo), overrides={})
     assert runner.cancel(record.run_id) is not None
     await runner.shutdown()
@@ -284,7 +291,6 @@ def test_runner_enforces_audit_root(tmp_path: Path, demo_repo):
     )
     with pytest.raises(ConfigurationError, match="允许的审查根目录"):
         runner.submit(repo_path=str(demo_repo), overrides={})
-
 
 
 def test_runner_settings_whitelist(tmp_path: Path):
