@@ -241,7 +241,7 @@ class MyValidator:                    # ③ 可选：入账否决权
 | Docker 部署（compose 四服务 + 可选 infra profile） | ✅ 完成，`compose config` 校验通过 |
 | 开源治理（License / 贡献指南 / 安全策略 / CI 八项门禁） | ✅ 完成 |
 | Receipt、独立性画像、可证伪 Claim、离线反证和证据血缘 | ✅ 已实现，Python 离线测试覆盖 |
-| 测试 | ✅ **Python 222 项 + Java 42 项（单元/集成）+ 12 项 Testcontainers 集成**，单元与集成套件均不需网络与凭据 |
+| 测试 | ✅ **Python 222 项 + Java 43 项（单元/集成）+ 12 项 Testcontainers 集成**，单元与集成套件均不需网络与凭据 |
 | 跨文件组合型缺陷（P0-4） | ⬜ 未开始——**唯一能测出召回差异的路径** |
 | 跨进程任务领取与崩溃恢复 | ✅ 共享 runs 卷上的文件租约、过期接管与事件恢复 |
 

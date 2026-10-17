@@ -8,6 +8,7 @@ in a security or lifecycle rule. The checkout itself is never modified.
 from __future__ import annotations
 
 import shutil
+import os
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ class Mutant:
     file: str
     needle: str
     replacement: str
+    test_class: str
 
 
 MUTANTS = (
@@ -28,12 +30,14 @@ MUTANTS = (
         "src/main/java/dev/parallax/gateway/runs/RunStatus.java",
         "|| CANCELED.equals(status);",
         "|| true;",
+        "RunStatusTest",
     ),
     Mutant(
         "proxy-whitelist-allows-everything",
         "src/main/java/dev/parallax/gateway/proxy/ProxyController.java",
         '"^/(health|ready)$"',
         '".*"',
+        "ProxyIntegrationTest",
     ),
 )
 
@@ -41,6 +45,7 @@ MUTANTS = (
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
     survivors: list[str] = []
+    maven = "mvn.cmd" if os.name == "nt" else "mvn"
     for mutant in MUTANTS:
         with tempfile.TemporaryDirectory(prefix="parallax-gateway-mutant-") as temp:
             worktree = Path(temp) / "gateway"
@@ -55,7 +60,7 @@ def main() -> int:
                 raise RuntimeError(f"{mutant.name}: mutation target is not unique")
             path.write_text(original.replace(mutant.needle, mutant.replacement), encoding="utf-8")
             result = subprocess.run(
-                ["mvn", "-B", "-DskipITs=true", "test"],
+                [maven, "-B", "-DskipITs=true", f"-Dtest={mutant.test_class}", "test"],
                 cwd=worktree,
                 capture_output=True,
                 text=True,
