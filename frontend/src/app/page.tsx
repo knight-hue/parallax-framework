@@ -370,6 +370,10 @@ function IndependencePanel({ result }: { result: RunResult }) {
         <Field label="归一化独立性" value={formatPercent(profile.normalized_independence)} />
         <Field label="证据重叠" value={formatPercent(profile.evidence_overlap_rate)} />
         <Field label="输出隔离" value={profile.isolation_status} />
+        <Field
+          label="相关性预算"
+          value={profile.correlation_budget_violated ? '超限' : '满足'}
+        />
         <Field label="独立支持 Claim" value={`${profile.claims_with_independent_support} / ${profile.claim_count}`} />
         <Field label="Receipt" value={String(result.manifest.receipts)} />
         <Field label="血缘节点" value={String(result.provenance.nodes.length)} />
@@ -425,7 +429,12 @@ function ClaimDetail({
           <Field label="置信度" value={formatPercent(claim.confidence, 1)} />
           <Field label="独立来源" value={`${claim.verified_by.length} 个`} />
           <Field label="争议对手" value={`${claim.disputed_with.length} 条`} />
+          <Field label="反证状态" value={claim.verification_status} />
         </div>
+
+        {claim.verification_reason ? (
+          <div className="text-[var(--color-muted)]">反证说明：{claim.verification_reason}</div>
+        ) : null}
 
         <div>
           <div className="mb-1 text-[11px] text-[var(--color-muted)]">指纹</div>

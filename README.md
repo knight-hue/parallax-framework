@@ -1,4 +1,4 @@
-# Parallax（视差）
+﻿# Parallax（视差）
 
 [![CI](https://github.com/knight-hue/parallax-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/knight-hue/parallax-framework/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -239,7 +239,7 @@ class MyValidator:                    # ③ 可选：入账否决权
 | **Next.js 可视化前端** | ✅ 完成，构建与 lint 通过（明暗双色工作台） |
 | **Java 网关 · 平台层** | ✅ 完成（身份配额 / 运行记录 / 分布式限流 / 指标 / 链路追踪），**已端到端联调** |
 | Docker 部署（compose 四服务 + 可选 infra profile） | ✅ 完成，`compose config` 校验通过 |
-| 开源治理（License / 贡献指南 / 安全策略 / CI 七项门禁） | ✅ 完成 |
+| 开源治理（License / 贡献指南 / 安全策略 / CI 八项门禁） | ✅ 完成 |
 | Receipt、独立性画像、可证伪 Claim、离线反证和证据血缘 | ✅ 已实现，Python 离线测试覆盖 |
 | 测试 | ✅ **Python 222 项 + Java 41 项（单元/集成）+ 12 项 Testcontainers 集成**，单元与集成套件均不需网络与凭据 |
 | 跨文件组合型缺陷（P0-4） | ⬜ 未开始——**唯一能测出召回差异的路径** |
@@ -247,13 +247,18 @@ class MyValidator:                    # ③ 可选：入账否决权
 
 ### 当前升级边界与后续路线
 
-Receipt、独立性运行时画像、可证伪 Claim、离线反证协议和基础证据血缘图已经接入
-主链路、报告和前端。下一阶段不是简单增加 Reader 数量，而是把相关性预算和共同污染
-检测升级为运行约束，接入真实模型反证调度，并继续完成公平消融、重复实验和复现测试。
+Receipt、独立性运行时画像、可证伪 Claim、离线反证协议、相关性预算和基础证据血缘图
+已经接入主链路、报告和前端。相关性预算超限时不会自动给 Claim 高置信。下一阶段是
+共同污染的更完整检测、真实模型反证调度、公平消融、重复实验和复现测试。
 
 `K*` 是本项目采用的有效独立通道评估思想，不是 Parallax 首创。真实仓库没有 ground truth 时，
 只报告独立性、冗余、覆盖、成本和失败数，不把结果写成召回率或精确率。完整路线见
 [`PROJECT_STATUS.md`](PROJECT_STATUS.md) 和同级目录的 [`../说明材料/最终完成路线图.md`](../说明材料/最终完成路线图.md)。
+
+真实仓库历史产物使用 DeepSeek，仅作为历史基线保存；2026-10-17 已按要求切换
+OpenAI 环境变量，但当前执行环境到 `api.openai.com` 的 DNS/HTTPS 连接失败，
+因此没有把失败调用冒充成 OpenAI 实验结果。真实仓库无 ground truth 时，任何模型
+口径都只能报告独立性、冗余、覆盖、成本和失败数。
 
 > Docker 镜像的实际构建、容器冒烟、以及真实 PostgreSQL + Redis 上的网关集成测试
 > 都在 CI 里执行；本地开发机未启动 Docker 守护进程，因此本地只验证了
@@ -410,3 +415,4 @@ docker compose --env-file backend/.env --profile gateway up -d  :: 再加 网关
 ## 9. 许可
 
 Apache-2.0
+

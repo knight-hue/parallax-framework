@@ -307,6 +307,7 @@ def _summary_payload(report, engine) -> dict:
             "total_claims": report.manifest.total_claims,
             "reader_ids": report.manifest.reader_ids,
             "receipts": len(report.manifest.receipts),
+            "correlation_budget": report.manifest.correlation_budget,
             "independence": report.independence.model_dump(mode="json"),
             "rounds": [
                 {
@@ -344,6 +345,8 @@ def _summary_payload(report, engine) -> dict:
                 "confidence": c.confidence,
                 "locator": c.source_refs[0].locator if c.source_refs else None,
                 "rationale": c.metadata.get("rationale"),
+                "verification_status": c.verification_status,
+                "verification_reason": c.metadata.get("verification_reason"),
             }
             for bucket, claims in (
                 ("high_confidence", report.high_confidence),

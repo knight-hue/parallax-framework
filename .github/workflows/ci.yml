@@ -101,6 +101,28 @@ jobs:
               raise SystemExit(1)
           PY
 
+  mutation:
+    name: 语义变异审计
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: 安装依赖
+        working-directory: backend
+        run: pip install -e ".[dev]"
+
+      # 20 个单点注入缺陷必须全部被现有回归测试杀死；审计在临时副本中运行，
+      # 不改动 checkout，也不需要网络或模型凭据。
+      - name: 运行 mutation audit
+        working-directory: backend
+        run: python tools/mutation_audit.py
+
   gateway:
     name: Java 网关测试
     runs-on: ubuntu-latest

@@ -93,6 +93,12 @@ class Settings(BaseSettings):
     """`"blind"` = 框架正常模式（Reader 互不可见）；
     `"shared"` = 传统多智能体协作，作为实验对照组。见 core/reader_pool.py。"""
 
+    # ---- 独立性运行约束 ----
+    max_evidence_overlap_rate: float = 1.0
+    """允许的 Reader 证据重叠率上限（0..1）。超过后运行会标记约束违例。"""
+    min_independent_support: int = 0
+    """每条 Claim 允许进入高置信前所需的最小独立支持数；0 表示沿用 support_threshold。"""
+
     # ---- 覆盖率 ----
     min_evidence_fill_rate: float = 1.0
     """证据覆盖率硬要求：多大比例的证据必须被 >= coverage_min_support 个独立 Reader 看过。"""
@@ -124,6 +130,9 @@ class Settings(BaseSettings):
 
     def is_llm_configured(self) -> bool:
         return bool(self.llm_api_key)
+
+    def effective_min_independent_support(self) -> int:
+        return self.min_independent_support or self.support_threshold
 
 
 def load_settings(**overrides: object) -> Settings:

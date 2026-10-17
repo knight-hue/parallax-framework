@@ -63,13 +63,24 @@ def test_profile_marks_shared_evidence_as_overlap():
     assert profile.effective_channel_count < 2
 
 
+def test_profile_marks_correlation_budget_violation():
+    profile = build_independence_profile(
+        [_claim("r0"), _claim("r1")],
+        {"r0": ["e1", "e2"], "r1": ["e2", "e3"]},
+        max_evidence_overlap_rate=0.0,
+        min_independent_support=2,
+    )
+
+    assert profile.correlation_budget_violated is True
+    assert profile.correlation_budget["max_evidence_overlap_rate"] == 0
+    assert profile.correlation_budget["min_independent_support"] == 2
+
+
 def test_profile_counts_distinct_reader_support():
     first = _claim("r0")
     second = _claim("r1")
     second.claim_id = "c-r1-1"
-    profile = build_independence_profile(
-        [first, second], {"r0": ["e1"], "r1": ["e2"]}
-    )
+    profile = build_independence_profile([first, second], {"r0": ["e1"], "r1": ["e2"]})
     assert profile.mean_independent_support == 2
     assert profile.claims_with_independent_support == 2
 

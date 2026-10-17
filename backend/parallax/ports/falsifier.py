@@ -36,9 +36,7 @@ class Falsifier(Protocol):
 
     name: str
 
-    def evaluate(
-        self, claim: Claim, evidence: Sequence[EvidenceUnit]
-    ) -> FalsifierResult:
+    def evaluate(self, claim: Claim, evidence: Sequence[EvidenceUnit]) -> FalsifierResult:
         """在给定证据上尝试确认、推翻或判定证据不足。"""
         ...
 
@@ -53,9 +51,7 @@ class OfflineFalsifier:
 
     name = "offline-rule-falsifier"
 
-    def evaluate(
-        self, claim: Claim, evidence: Sequence[EvidenceUnit]
-    ) -> FalsifierResult:
+    def evaluate(self, claim: Claim, evidence: Sequence[EvidenceUnit]) -> FalsifierResult:
         referenced = {ref.evidence_id for ref in claim.source_refs}
         candidates = [unit for unit in evidence if unit.evidence_id in referenced]
         if not candidates:
@@ -103,7 +99,5 @@ class OfflineFalsifier:
         )
 
     # ``falsify`` 是更直观的别名，方便接入已有调用方。
-    def falsify(
-        self, claim: Claim, evidence: Sequence[EvidenceUnit]
-    ) -> FalsifierResult:
+    def falsify(self, claim: Claim, evidence: Sequence[EvidenceUnit]) -> FalsifierResult:
         return self.evaluate(claim, evidence)

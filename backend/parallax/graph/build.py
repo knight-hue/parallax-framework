@@ -37,7 +37,8 @@ from collections.abc import Mapping
 
 from langgraph.graph import END, START, StateGraph
 
-from parallax.domain.enums import RoundStopReason
+from parallax.core.independence import evidence_overlap_rate
+from parallax.domain.enums import ClaimStatus, RoundStopReason
 from parallax.domain.models import EvidenceUnit, RoundRecord
 from parallax.graph.state import ParallaxRuntime, ParallaxState
 
@@ -134,7 +135,10 @@ def build_graph(runtime: ParallaxRuntime):
             "partition",
             round_index=round_index,
             evidence_ids=[unit.evidence_id for partition in non_empty for unit in partition.units],
-            payload={"readers": [partition.reader_id for partition in non_empty], "focus": focus or []},
+            payload={
+                "readers": [partition.reader_id for partition in non_empty],
+                "focus": focus or [],
+            },
         )
         return {"partitions": non_empty, "stop_reason": None}
 
@@ -203,9 +207,61 @@ def build_graph(runtime: ParallaxRuntime):
         )
         return {}
 
+    async def verify(state: ParallaxState) -> ParallaxState:
+        """执行可选的独立反证；结果只写入验证状态，不参与多数票聚合。"""
+        falsifier = runtime.falsifier
+        if falsifier is None:
+            return {}
+        results = []
+        current_claims = [
+            claim
+            for outcome in state.get("outcomes", [])
+            for claim in outcome.claims
+            if runtime.ledger.claim(claim.claim_id) is not None
+        ]
+        evidence = list(runtime.evidence)
+        for claim in current_claims:
+            result = falsifier.evaluate(claim, evidence)
+            claim.verification_status = result.verdict
+            claim.metadata["falsifier"] = getattr(falsifier, "name", type(falsifier).__name__)
+            claim.metadata["verification_evidence_ids"] = list(result.evidence_ids)
+            claim.metadata["verification_reason"] = result.reason
+            results.append(
+                {
+                    "claim_id": claim.claim_id,
+                    "verdict": result.verdict,
+                    "evidence_ids": result.evidence_ids,
+                    "reason": result.reason,
+                }
+            )
+        runtime.emit("verification", round=state.get("round_index", 0), results=results)
+        runtime.record_receipt(
+            "verification",
+            round_index=state.get("round_index", 0),
+            claim_ids=[item["claim_id"] for item in results],
+            evidence_ids=sorted({e for item in results for e in item["evidence_ids"]}),
+            payload={
+                "falsifier": getattr(falsifier, "name", type(falsifier).__name__),
+                "results": results,
+            },
+        )
+        return {}
+
     async def aggregate(state: ParallaxState) -> ParallaxState:
         """规则化聚合 + 声誉结算。"""
+        overlap_rate = evidence_overlap_rate(runtime.manifest.all_assignments())
+        runtime.correlation_budget_violated = runtime.output_contamination or overlap_rate > max(
+            0.0, min(1.0, runtime.settings.max_evidence_overlap_rate)
+        )
+        runtime.manifest.correlation_budget = {
+            "max_evidence_overlap_rate": max(
+                0.0, min(1.0, runtime.settings.max_evidence_overlap_rate)
+            ),
+            "min_independent_support": float(runtime.settings.effective_min_independent_support()),
+        }
         groups = runtime.aggregator.sweep()
+        if runtime.correlation_budget_violated:
+            _downgrade_budget_violations(runtime, groups)
         runtime.reputation_policy.apply_cross_validation(
             groups, runtime.ledger, runtime.manifest.run_id
         )
@@ -214,6 +270,8 @@ def build_graph(runtime: ParallaxRuntime):
             await _arbitrate_disputes(runtime, groups)
             # 仲裁会改写状态与声誉，因此重算一次，避免把陈旧结论写进本轮记录
             groups = runtime.aggregator.sweep()
+            if runtime.correlation_budget_violated:
+                _downgrade_budget_violations(runtime, groups)
 
         current_fingerprints = {g.fingerprint for g in groups}
         runtime.new_fingerprints_last_round = len(current_fingerprints - runtime.fingerprints_seen)
@@ -308,6 +366,8 @@ def build_graph(runtime: ParallaxRuntime):
 
         runtime.aggregator.sweep()
         groups = runtime.ledger.groups()
+        if runtime.correlation_budget_violated:
+            _downgrade_budget_violations(runtime, groups)
         high = sum(1 for g in groups if g.status.value == "high_confidence")
         pending = sum(1 for g in groups if g.status.value == "pending")
         disputed = sum(1 for g in groups if g.status.value == "disputed")
@@ -350,6 +410,7 @@ def build_graph(runtime: ParallaxRuntime):
     graph.add_node("partition", partition)
     graph.add_node("blind_read", blind_read)
     graph.add_node("collect", collect)
+    graph.add_node("verify", verify)
     graph.add_node("aggregate", aggregate)
     graph.add_node("coverage", coverage)
     graph.add_node("finalize", finalize)
@@ -360,7 +421,8 @@ def build_graph(runtime: ParallaxRuntime):
         "partition", route_after_partition, {"blind_read": "blind_read", "finalize": "finalize"}
     )
     graph.add_edge("blind_read", "collect")
-    graph.add_edge("collect", "aggregate")
+    graph.add_edge("collect", "verify")
+    graph.add_edge("verify", "aggregate")
     graph.add_edge("aggregate", "coverage")
     graph.add_conditional_edges(
         "coverage", route_after_coverage, {"partition": "partition", "finalize": "finalize"}
@@ -380,6 +442,21 @@ def _resolve_stop_reason(
     if runtime.budget_exhausted():
         return RoundStopReason.BUDGET_EXHAUSTED
     return fallback or RoundStopReason.COVERAGE_SATISFIED
+
+
+def _downgrade_budget_violations(runtime: ParallaxRuntime, groups: list) -> None:
+    """相关性预算超限时，禁止自动把重复意见标成高置信。"""
+    threshold = runtime.settings.effective_min_independent_support()
+    for group in groups:
+        if group.status != ClaimStatus.HIGH_CONFIDENCE:
+            continue
+        if group.cross_validation_count < threshold:
+            continue
+        group.status = ClaimStatus.PENDING
+        for claim_id in group.claim_ids:
+            claim = runtime.ledger.claim(claim_id)
+            if claim is not None:
+                claim.status = ClaimStatus.PENDING
 
 
 def _dispute_rows(

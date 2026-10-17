@@ -13,6 +13,7 @@ import re
 from parallax.engine import ParallaxEngine
 from parallax.infra.llm_fake import FakeLLMClient
 from parallax.plugins.code_audit import CodeAuditReader, RepoAdapter
+from parallax.ports.falsifier import FalsifierResult
 from tests.conftest import make_responder, make_settings
 
 SHARED_BLOCK_RE = re.compile(
@@ -25,12 +26,13 @@ def settings(**overrides):
     return make_settings(**overrides)
 
 
-def build_engine(repo, defects, settings_obj) -> ParallaxEngine:
+def build_engine(repo, defects, settings_obj, falsifier=None) -> ParallaxEngine:
     return ParallaxEngine.build(
         adapter=RepoAdapter(repo, group_depth=2),
         plugin=CodeAuditReader(),
         client=FakeLLMClient(make_responder(defects)),
         settings=settings_obj,
+        falsifier=falsifier,
     )
 
 
@@ -237,3 +239,40 @@ async def test_shared_mode_records_how_many_claims_a_reader_saw(demo_repo, defec
     # （这里不直接断言，因为是否触发共享取决于该 Reader 是否为空分区；
     #   改为断言整体有产出，具体隔离性由 test_reader_pool 覆盖）
     assert engine.runtime.usage.calls > 0
+
+
+class ConfirmEverything:
+    name = "test-confirm-falsifier"
+
+    def evaluate(self, claim, evidence):  # noqa: ANN001
+        return FalsifierResult(
+            claim_id=claim.claim_id,
+            verdict="confirmed",
+            reason="test verifier",
+            evidence_ids=[ref.evidence_id for ref in claim.source_refs],
+        )
+
+
+async def test_falsifier_is_recorded_without_overriding_aggregation(demo_repo, defects):
+    engine = build_engine(demo_repo, defects, settings(), falsifier=ConfirmEverything())
+
+    report = await engine.run("审查")
+
+    claims = report.high_confidence + report.pending + report.disputed
+    assert claims
+    assert all(claim.verification_status == "confirmed" for claim in claims)
+    assert any(receipt.kind == "verification" for receipt in report.manifest.receipts)
+    assert any(node.node_type == "verification" for node in report.provenance.nodes)
+
+
+async def test_correlation_budget_blocks_automatic_high_confidence(demo_repo, defects):
+    engine = build_engine(
+        demo_repo,
+        defects,
+        settings(max_evidence_overlap_rate=0.0, max_rounds=1),
+    )
+
+    report = await engine.run("审查")
+
+    assert report.independence.correlation_budget_violated is True
+    assert not report.high_confidence

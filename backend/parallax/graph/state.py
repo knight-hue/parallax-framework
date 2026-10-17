@@ -22,6 +22,7 @@ from parallax.core.reputation import InMemoryReputationStore, ReputationPolicy
 from parallax.domain.enums import RoundStopReason
 from parallax.domain.models import AuditReceipt, EvidenceUnit, RunManifest
 from parallax.ports.evidence_adapter import EvidenceAdapter
+from parallax.ports.falsifier import Falsifier
 from parallax.ports.llm import Budget, UsageStats
 from parallax.ports.reader_plugin import ReaderPlugin
 from parallax.util import stable_id
@@ -72,11 +73,13 @@ class ParallaxRuntime:
     cols: list[str] = field(default_factory=list)
     output_contamination: bool = False
     """是否有 Reader 在盲读阶段观察到其他 Reader 的结论。"""
+    correlation_budget_violated: bool = False
     budget: Budget = field(default_factory=Budget)
     usage: UsageStats = field(default_factory=UsageStats)
     arbitrator: object | None = None
     """可选的争议仲裁器（实现 ports.arbitrator.Arbitrator）。
     为 None 时争议组原样保留为 DISPUTED——不猜、不投票、不静默丢弃。"""
+    falsifier: Falsifier | None = None
 
     event_sink: Callable[[str, dict], None] | None = None
     """进度事件回调（用于 SSE 推流）。

@@ -45,9 +45,13 @@ def render_markdown(report: Report, *, max_items: int = 40) -> str:
         f"证据重叠 {independence.evidence_overlap_rate:.1%}，"
         f"输出隔离 `{independence.isolation_status}`"
     )
+    budget_status = "超限，已禁止自动高置信" if independence.correlation_budget_violated else "满足"
     lines.append(
-        f"- 证据血缘：{len(report.provenance.nodes)} 个节点 / "
-        f"{len(report.provenance.edges)} 条边"
+        f"- 相关性预算：`{budget_status}`｜证据重叠上限 "
+        f"{independence.correlation_budget.get('max_evidence_overlap_rate', 1.0):.1%}"
+    )
+    lines.append(
+        f"- 证据血缘：{len(report.provenance.nodes)} 个节点 / {len(report.provenance.edges)} 条边"
     )
     lines.append("")
     if m.rounds:
@@ -91,6 +95,10 @@ def _render_claims(title: str, claims: list[Claim], max_items: int) -> list[str]
             f"  - 独立来源 {len(claim.verified_by)} 个：{', '.join(claim.verified_by) or '—'}"
             f"｜置信度 {claim.confidence}"
         )
+        lines.append(f"  - 反证状态：`{claim.verification_status}`")
+        verification_reason = claim.metadata.get("verification_reason")
+        if verification_reason:
+            lines.append(f"  - 反证说明：{verification_reason}")
         for ref in claim.source_refs:
             lines.append(f"  - 源：`{ref.locator}`")
         rationale = claim.metadata.get("rationale")
