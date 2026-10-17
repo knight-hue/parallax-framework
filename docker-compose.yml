@@ -19,8 +19,8 @@ services:
     container_name: parallax-api
     environment:
       PARALLAX_LLM_API_KEY: ${PARALLAX_LLM_API_KEY:-}
-      PARALLAX_LLM_BASE_URL: ${PARALLAX_LLM_BASE_URL:-https://api.deepseek.com/v1}
-      PARALLAX_LLM_MODEL: ${PARALLAX_LLM_MODEL:-deepseek-chat}
+      PARALLAX_LLM_BASE_URL: ${PARALLAX_LLM_BASE_URL:-https://api.openai.com/v1}
+      PARALLAX_LLM_MODEL: ${PARALLAX_LLM_MODEL:-gpt-4o-mini}
       PARALLAX_N_READERS: ${PARALLAX_N_READERS:-3}
       PARALLAX_REDUNDANCY: ${PARALLAX_REDUNDANCY:-2}
       PARALLAX_SUPPORT_THRESHOLD: ${PARALLAX_SUPPORT_THRESHOLD:-2}

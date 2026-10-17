@@ -21,14 +21,16 @@ class Settings(BaseSettings):
     )
 
     # ---- 模型 ----
-    llm_base_url: str = "https://api.deepseek.com/v1"
+    # 默认使用 OpenAI 的兼容端点；部署时仍可通过 PARALLAX_LLM_BASE_URL
+    # 切换到经过批准的 OpenAI-compatible 服务。
+    llm_base_url: str = "https://api.openai.com/v1"
     llm_api_key: str = ""
-    llm_model: str = "deepseek-chat"
+    llm_model: str = "gpt-4o-mini"
     llm_temperature: float = 0.0
     llm_timeout_s: float = 90.0
     llm_max_retries: int = 3
     llm_use_json_mode: bool = True
-    """优先使用服务端的 JSON 输出模式（DeepSeek / OpenAI 兼容端点均支持）。"""
+    """优先使用服务端的 JSON 输出模式（OpenAI-compatible 端点均支持）。"""
     llm_max_output_tokens: int = 16000
     """单次调用允许的最大输出长度。
 
