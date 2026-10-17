@@ -37,6 +37,18 @@ def render_markdown(report: Report, *, max_items: int = 40) -> str:
     )
     lines.append(f"- 参与 Reader：{len(m.reader_ids)} 个（每轮全新身份）")
     lines.append(f"- 账本条目：{m.total_claims}")
+    independence = report.independence
+    lines.append(
+        "- 独立性画像：有效通道 "
+        f"{independence.effective_channel_count:.2f} / {independence.reader_count}，"
+        f"归一化 {independence.normalized_independence:.1%}，"
+        f"证据重叠 {independence.evidence_overlap_rate:.1%}，"
+        f"输出隔离 `{independence.isolation_status}`"
+    )
+    lines.append(
+        f"- 证据血缘：{len(report.provenance.nodes)} 个节点 / "
+        f"{len(report.provenance.edges)} 条边"
+    )
     lines.append("")
     if m.rounds:
         lines.append("| 轮次 | Reader 数 | 本轮新主体 | 证据覆盖 | 矩阵填充 |")

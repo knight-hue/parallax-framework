@@ -32,8 +32,8 @@ python -m venv .venv
 ```
 parallax/
 ├─ domain/    领域模型与枚举（场景无关）
-├─ ports/     扩展点协议：EvidenceAdapter / ReaderPlugin / ClaimValidator / Arbitrator
-├─ core/      五个机制模块：partitioning / reader_pool / ledger / aggregator / coverage
+├─ ports/     扩展点协议：EvidenceAdapter / ReaderPlugin / ClaimValidator / Falsifier / Arbitrator
+├─ core/      六个机制模块：partitioning / reader_pool / ledger / aggregator / coverage / independence
 ├─ graph/     LangGraph 编排
 ├─ infra/     模型客户端、仲裁器
 ├─ plugins/   内置场景插件（code_audit）

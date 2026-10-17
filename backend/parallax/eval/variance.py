@@ -93,6 +93,10 @@ def collect(repetitions: list[list[ArmResult]]) -> dict[str, dict[str, Stat]]:
     raw: dict[str, dict[str, list[float]]] = {}
     for rep in repetitions:
         for result in rep:
+            # run_arm/run_repo_arm 会保留失败臂的错误与占位 metrics，方便报告定位。
+            # 这些 metrics 不能进入方差，否则一次 API 故障会伪装成机制退化。
+            if result.errors:
+                continue
             by_metric = raw.setdefault(result.metrics.arm, {})
             for name in TRACKED:
                 by_metric.setdefault(name, []).append(_metric(result, name))
@@ -211,11 +215,14 @@ def render_variance(
         lines.extend(drift)
         lines.append("")
 
-    n_ok = sum(1 for rep in repetitions if rep)
+    n_ok = sum(1 for rep in repetitions if rep and all(not result.errors for result in rep))
+    failed_arms = sum(1 for rep in repetitions for result in rep if result.errors)
     lines.append(
         f"完整完成的重复：{n_ok}/{len(repetitions)}。"
         "统计口径为**样本标准差（ddof=1）**；单次失败的臂不参与该臂统计（当 0 处理会拉低均值）。"
     )
+    if failed_arms:
+        lines.append(f"检测到 {failed_arms} 个失败实验臂，已从统计值中排除；错误详见原始产物。")
     lines.append("")
 
     for arm in sorted(stats):
