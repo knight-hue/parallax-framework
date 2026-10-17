@@ -94,6 +94,11 @@ class AuditRunner:
         repo = Path(repo_path).expanduser()
         if not repo.is_dir():
             raise ConfigurationError(f"仓库路径不存在或不是目录：{repo}")
+        repo = repo.resolve()
+        if self.settings.audit_root.strip():
+            root = Path(self.settings.audit_root).expanduser().resolve()
+            if repo != root and root not in repo.parents:
+                raise ConfigurationError(f"仓库路径必须位于允许的审查根目录内：{root}")
 
         settings = self._merge_settings(overrides)
         job = AuditJob(
@@ -106,7 +111,7 @@ class AuditRunner:
                 settings.reader_visibility,
                 datetime.now(UTC).timestamp(),  # 允许同一路径重复审查
             ),
-            repo_path=repo.resolve(),
+                repo_path=repo,
             question=overrides.get("question") or DEFAULT_QUESTION,
             settings=settings,
             extensions=tuple(overrides.get("extensions") or (".py",)),
@@ -147,16 +152,117 @@ class AuditRunner:
             },
         )
 
+        self._schedule(job)
+        return record
+
+    def _schedule(self, job: AuditJob) -> None:
+        """把已落盘的任务放入当前进程执行。
+
+        先写 ``queued`` 再创建 Task，服务进程在任意时刻退出时都能从
+        RunStore 找回任务。任务本身只保存在内存，恢复入口见 ``recover``。
+        """
+        if job.run_id in self._tasks and not self._tasks[job.run_id].done():
+            return
         task = asyncio.create_task(self._guarded_run(job))
         self._tasks[job.run_id] = task
         task.add_done_callback(lambda _t, rid=job.run_id: self._tasks.pop(rid, None))
-        return record
+
+    def recover(self) -> int:
+        """恢复上次进程退出时遗留的 queued/running 任务。
+
+        ``running`` 任务没有可靠的跨进程锁，不能假设原 Worker 仍存在，
+        因此统一重新排队；run_id 保持不变，结果和计费仍然幂等。
+        """
+        recovered = 0
+        for record in self.store.list(limit=10_000):
+            if record.status not in {"queued", "running"}:
+                continue
+            repo = Path(record.repo_path)
+            if not repo.is_dir():
+                self.store.update(
+                    record.run_id,
+                    status="failed",
+                    finished_at=_now(),
+                    error=f"服务恢复时仓库路径不可用：{repo}",
+                )
+                self.bus.publish(record.run_id, "failed", {"error": "仓库路径不可用"})
+                self.bus.close(record.run_id)
+                continue
+            if record.status == "running":
+                self.store.update(
+                    record.run_id,
+                    status="queued",
+                    error="服务重启后自动重新排队",
+                    started_at=None,
+                    finished_at=None,
+                )
+            snapshot = record.settings_snapshot
+            settings = self._settings_from_snapshot(snapshot)
+            job = AuditJob(
+                run_id=record.run_id,
+                repo_path=repo,
+                question=record.question or DEFAULT_QUESTION,
+                settings=settings,
+                extensions=tuple(snapshot.get("extensions") or (".py",)),
+                group_depth=int(snapshot.get("group_depth") or 2),
+                max_files=int(snapshot.get("max_files") or 300),
+                trace_id=record.trace_id,
+                credential_id=record.credential_id,
+            )
+            self.bus.publish(record.run_id, "recovered", {"run_id": record.run_id})
+            self._schedule(job)
+            recovered += 1
+        return recovered
 
     # ---- 执行 ----
 
     async def _guarded_run(self, job: AuditJob) -> None:
-        async with self._semaphore:
-            await self._run(job)
+        try:
+            async with self._semaphore:
+                await self._run(job)
+        except asyncio.CancelledError:
+            # CancelledError 继承 BaseException，不会被 _run 的普通异常分支捕获。
+            # 这里必须显式落终态，否则重启恢复会把用户主动取消当成僵尸任务。
+            if (current := self.store.get(job.run_id)) is None or current.status != "canceled":
+                self.store.update(
+                    job.run_id,
+                    status="canceled",
+                    finished_at=_now(),
+                    error="任务被请求取消",
+                )
+                self.bus.publish(job.run_id, "canceled", {"run_id": job.run_id})
+                self.bus.close(job.run_id)
+            await self._callback.report(
+                run_id=job.run_id,
+                credential_id=job.credential_id,
+                status="canceled",
+                prompt_tokens=0,
+                completion_tokens=0,
+            )
+            raise
+
+    def cancel(self, run_id: str) -> RunRecord | None:
+        """请求取消一次运行；重复取消是幂等的。"""
+        record = self.store.get(run_id)
+        if record is None:
+            return None
+        if record.status in {"done", "failed", "canceled"}:
+            return record
+        task = self._tasks.get(run_id)
+        if task is None:
+            updated = self.store.update(
+                run_id, status="canceled", finished_at=_now(), error="任务被请求取消"
+            )
+            self.bus.publish(run_id, "canceled", {"run_id": run_id})
+            self.bus.close(run_id)
+            return updated
+        # 先落盘再取消 Task。若任务尚未被事件循环首次调度，
+        # Python 不会进入 CancelledError 处理分支，提前写终态可避免永久 queued。
+        self.store.update(run_id, status="canceled", finished_at=_now(), error="任务被请求取消")
+        self.bus.publish(run_id, "canceled", {"run_id": run_id})
+        self.bus.close(run_id)
+        task.cancel()
+        return self.store.get(run_id)
 
     async def _run(self, job: AuditJob) -> None:
         run_id = job.run_id
@@ -287,6 +393,23 @@ class AuditRunner:
             value = overrides.get(key)
             if value is not None:
                 base[target] = value
+        return Settings(**base)
+
+    def _settings_from_snapshot(self, snapshot: dict) -> Settings:
+        """按任务落盘时的机制参数恢复 Settings，模型沿用当前服务端点。"""
+        base = self.settings.model_dump()
+        mapping = {
+            "readers": "n_readers",
+            "redundancy": "redundancy",
+            "support_threshold": "support_threshold",
+            "max_rounds": "max_rounds",
+            "visibility": "reader_visibility",
+        }
+        for source, target in mapping.items():
+            if snapshot.get(source) is not None:
+                base[target] = snapshot[source]
+        if snapshot.get("model"):
+            base["llm_model"] = snapshot["model"]
         return Settings(**base)
 
 

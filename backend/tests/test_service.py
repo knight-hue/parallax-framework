@@ -51,6 +51,20 @@ def test_history_is_isolated_per_run():
     assert bus.history("missing") == []
 
 
+def test_event_journal_survives_bus_restart(tmp_path: Path):
+    """生产模式重启事件总线后，SSE 仍可重放历史事件。"""
+    journal = tmp_path / "runs"
+    first = RunEventBus(journal)
+    first.publish("r1", "queued", {"n": 1})
+    first.publish("r1", "done", {"n": 2})
+    first.close("r1")
+
+    restarted = RunEventBus(journal)
+    assert [event.type for event in restarted.history("r1")] == ["queued", "done"]
+    assert restarted.history("r1", after_seq=1)[0].payload == {"n": 2}
+    assert restarted.is_closed("r1")
+
+
 async def test_subscriber_receives_live_events_then_sentinel():
     bus = RunEventBus()
     queue = bus.subscribe("r1")
@@ -211,6 +225,42 @@ async def test_runner_records_failures_instead_of_raising(tmp_path: Path, demo_r
     assert bus.is_closed(record.run_id)
 
 
+async def test_runner_recovers_queued_record_after_restart(tmp_path: Path, demo_repo, defects):
+    """进程重启后，已落盘的 queued 任务应重新执行而不是永久卡住。"""
+    store = RunStore(tmp_path / "runs")
+    first = AuditRunner(store, RunEventBus(store.root), make_settings(), client_factory=lambda _s: None)
+    record = first.submit(repo_path=str(demo_repo), overrides={})
+    # 模拟进程在 task 启动前退出：只保留 queued 记录，不等待旧 runner。
+    task = first._tasks.pop(record.run_id)  # noqa: SLF001
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    store.update(record.run_id, status="queued")
+
+    bus = RunEventBus(store.root)
+    restarted = AuditRunner(
+        store,
+        bus,
+        make_settings(max_rounds=1),
+        client_factory=lambda _s: FakeLLMClient(make_responder(defects)),
+    )
+    assert restarted.recover() == 1
+    await restarted.shutdown()
+    assert store.get(record.run_id).status == "done"
+    assert any(event.type == "recovered" for event in bus.history(record.run_id))
+
+
+async def test_runner_cancel_has_terminal_state(tmp_path: Path, demo_repo):
+    store = RunStore(tmp_path / "runs")
+    runner = AuditRunner(store, RunEventBus(store.root), make_settings(), client_factory=lambda _s: None)
+    record = runner.submit(repo_path=str(demo_repo), overrides={})
+    assert runner.cancel(record.run_id) is not None
+    await runner.shutdown()
+    saved = store.get(record.run_id)
+    assert saved.status == "canceled"
+    assert any(event.type == "canceled" for event in runner.bus.history(record.run_id))
+
+
 def test_runner_rejects_missing_repo(tmp_path: Path):
     from parallax.domain.errors import ConfigurationError
 
@@ -219,6 +269,22 @@ def test_runner_rejects_missing_repo(tmp_path: Path):
     )
     with pytest.raises(ConfigurationError):
         runner.submit(repo_path=str(tmp_path / "nope"), overrides={})
+
+
+def test_runner_enforces_audit_root(tmp_path: Path, demo_repo):
+    from parallax.domain.errors import ConfigurationError
+
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    runner = AuditRunner(
+        RunStore(tmp_path / "runs"),
+        RunEventBus(),
+        make_settings(audit_root=str(allowed)),
+        client_factory=lambda _s: None,
+    )
+    with pytest.raises(ConfigurationError, match="允许的审查根目录"):
+        runner.submit(repo_path=str(demo_repo), overrides={})
+
 
 
 def test_runner_settings_whitelist(tmp_path: Path):
@@ -292,6 +358,13 @@ def test_unknown_run_returns_404(client: TestClient):
     assert client.get("/api/v1/audits/nope").status_code == 404
     assert client.get("/api/v1/audits/nope/result").status_code == 404
     assert client.get("/api/v1/audits/nope/events").status_code == 404
+
+
+def test_cancel_endpoint_is_idempotent(client: TestClient, demo_repo):
+    run_id = client.post("/api/v1/audits", json={"repo_path": str(demo_repo)}).json()["run_id"]
+    response = client.delete(f"/api/v1/audits/{run_id}")
+    assert response.status_code == 200
+    assert response.json()["run_id"] == run_id
 
 
 def test_result_is_pending_until_ready(client: TestClient, demo_repo):

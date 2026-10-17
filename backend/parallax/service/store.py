@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-RunStatus = Literal["queued", "running", "done", "failed"]
+RunStatus = Literal["queued", "running", "done", "failed", "canceled"]
 
 
 def _now() -> str:
