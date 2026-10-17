@@ -12,6 +12,8 @@ from pydantic import BaseModel
 
 from parallax.domain.models import Claim
 
+_SHELL_LAUNCHERS = {"sh", "bash", "zsh", "cmd", "cmd.exe", "powershell", "pwsh"}
+
 
 class ReproductionResult(BaseModel):
     claim_id: str
@@ -56,6 +58,12 @@ class SubprocessReproductionExecutor:
                 claim_id=claim.claim_id,
                 status="insufficient_evidence",
                 reason="reproduction_plan.command 必须是非空 argv 列表",
+            )
+        if Path(command[0]).name.casefold() in _SHELL_LAUNCHERS:
+            return ReproductionResult(
+                claim_id=claim.claim_id,
+                status="insufficient_evidence",
+                reason="复现命令不得通过 shell 包装器启动",
             )
         cwd = self.repo_root
         requested_cwd = plan.get("cwd")

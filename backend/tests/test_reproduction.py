@@ -28,3 +28,10 @@ def test_reproduction_executor_rejects_path_escape(tmp_path: Path):
         claim({"command": ["python", "-c", "pass"], "cwd": ".."})
     )
     assert result.status == "insufficient_evidence"
+
+
+def test_reproduction_executor_rejects_shell_wrappers(tmp_path: Path):
+    result = SubprocessReproductionExecutor(tmp_path).execute(
+        claim({"command": ["sh", "-c", "echo unsafe"]})
+    )
+    assert result.status == "insufficient_evidence"
