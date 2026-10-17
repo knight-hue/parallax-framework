@@ -26,6 +26,8 @@ public class AuditEvent {
     public static final String COMPLETED = "completed";
     /** 失败：没能转发成功，或上游报告运行失败。 */
     public static final String FAILED = "failed";
+    /** 用户主动取消或服务恢复时取消的运行。 */
+    public static final String CANCELED = "canceled";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -33,7 +33,7 @@ public class ParallaxMetrics {
         this.registry = registry;
         // 预先注册零值：指标在第一次事件发生前就该可查，否则"没有曲线"
         // 与"还没有事件"看起来一样，正好错过最该告警的那段时间。
-        for (String status : new String[] {"queued", "done", "failed"}) {
+        for (String status : new String[] {"queued", "done", "failed", "canceled"}) {
             Counter.builder(RUNS).tag("status", status).register(registry);
         }
         for (String metric : new String[] {"daily_runs", "daily_tokens", "monthly_tokens"}) {

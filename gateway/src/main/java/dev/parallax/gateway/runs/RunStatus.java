@@ -12,6 +12,7 @@ public final class RunStatus {
     public static final String RUNNING = "running";
     public static final String DONE = "done";
     public static final String FAILED = "failed";
+    public static final String CANCELED = "canceled";
 
     private RunStatus() {
     }
@@ -20,6 +21,7 @@ public final class RunStatus {
         return QUEUED.equals(status)
                 || RUNNING.equals(status)
                 || DONE.equals(status)
-                || FAILED.equals(status);
+                || FAILED.equals(status)
+                || CANCELED.equals(status);
     }
 }
