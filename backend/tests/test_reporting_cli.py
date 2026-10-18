@@ -173,4 +173,4 @@ def test_cli_requires_api_key_without_dry_run(demo_repo):
 
     with pytest.raises(SystemExit) as exc:
         main(["audit", str(demo_repo)])
-    assert "PARALLAX_LLM_API_KEY" in str(exc.value)
+    assert "OPENAI_API_KEY" in str(exc.value)

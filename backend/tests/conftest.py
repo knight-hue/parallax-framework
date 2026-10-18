@@ -25,6 +25,9 @@ def _isolate_llm_credentials(monkeypatch):
     """
     monkeypatch.setenv("PARALLAX_LLM_API_KEY", "")
     monkeypatch.delenv("PARALLAX_LLM_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
 
 
 @pytest.fixture
