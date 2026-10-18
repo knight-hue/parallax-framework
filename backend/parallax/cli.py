@@ -61,6 +61,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="blind = 框架正常模式；shared = 传统协作对照组",
     )
+    audit.add_argument(
+        "--llm-falsifier",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="启用独立真实模型反证（默认跟随 PARALLAX_ENABLE_LLM_FALSIFIER）",
+    )
+    audit.add_argument(
+        "--adaptive-scheduling",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="启用缺口优先的确定性补检调度（默认跟随 PARALLAX_ADAPTIVE_SCHEDULING）",
+    )
 
     audit.add_argument("--json", action="store_true", help="输出 JSON 而非 Markdown")
     audit.add_argument("--out", default=None, help="把报告写入文件")
@@ -159,6 +171,8 @@ def _overrides(args: argparse.Namespace) -> dict:
         "max_rounds": getattr(args, "max_rounds", None),
         "max_llm_calls": getattr(args, "max_llm_calls", None),
         "reader_visibility": getattr(args, "visibility", None),
+        "enable_llm_falsifier": getattr(args, "llm_falsifier", None),
+        "adaptive_scheduling": getattr(args, "adaptive_scheduling", None),
     }
     return {k: v for k, v in pairs.items() if v is not None}
 

@@ -25,3 +25,18 @@ class ReputationStore(Protocol):
     def save(self, reputation: AgentReputation) -> None: ...
 
     def all(self) -> list[AgentReputation]: ...
+
+    def scores(self) -> dict[str, float]:
+        """返回可观测的 agent_id → 声誉分快照。"""
+        ...
+
+    def record_event(
+        self,
+        agent_id: str,
+        run_id: str,
+        claim_id: str,
+        outcome: str,
+        role: str = "reader",
+    ) -> AgentReputation:
+        """以存储层事务记录一次声誉事件，避免多进程丢更新。"""
+        ...

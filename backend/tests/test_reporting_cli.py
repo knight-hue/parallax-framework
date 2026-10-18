@@ -152,6 +152,12 @@ def test_parser_rejects_unknown_visibility():
         build_parser().parse_args(["audit", ".", "--visibility", "whatever"])
 
 
+def test_parser_exposes_advanced_audit_switches():
+    args = build_parser().parse_args(["audit", ".", "--llm-falsifier", "--no-adaptive-scheduling"])
+    assert args.llm_falsifier is True
+    assert args.adaptive_scheduling is False
+
+
 def test_cli_dry_run_writes_report(demo_repo, tmp_path, capsys):
     out = tmp_path / "nested" / "report.md"
     code = main(["audit", str(demo_repo), "--dry-run", "--out", str(out), "--group-depth", "2"])

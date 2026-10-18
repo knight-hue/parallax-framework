@@ -13,16 +13,23 @@ from parallax.core.aggregator import AggregationRules, Aggregator
 from parallax.core.coverage import CoverageDecision, CoverageMonitor
 from parallax.core.ledger import ClaimLedger, LedgerGroup
 from parallax.core.partitioning import BlindPartitioner, Partition
-from parallax.core.reputation import InMemoryReputationStore, ReputationPolicy
+from parallax.core.reputation import (
+    InMemoryReputationStore,
+    ReputationPolicy,
+    SQLiteReputationStore,
+)
+from parallax.core.scheduling import AdaptiveFocusScheduler
 
 __all__ = [
     "AggregationRules",
     "Aggregator",
+    "AdaptiveFocusScheduler",
     "BlindPartitioner",
     "ClaimLedger",
     "CoverageDecision",
     "CoverageMonitor",
     "InMemoryReputationStore",
+    "SQLiteReputationStore",
     "LedgerGroup",
     "Partition",
     "ReputationPolicy",

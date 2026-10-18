@@ -22,6 +22,7 @@ from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel, Field
 
+from parallax.core.scheduling import AdaptiveFocusScheduler
 from parallax.domain.enums import RoundStopReason
 from parallax.domain.models import Claim, CoverageMatrix, EvidenceUnit
 from parallax.util import cell_key, split_cell_key
@@ -73,10 +74,12 @@ class CoverageMonitor:
         min_support: int = 1,
         min_evidence_fill_rate: float = 1.0,
         max_dispute_rate: float = 0.5,
+        adaptive_scheduler: AdaptiveFocusScheduler | None = None,
     ) -> None:
         self.min_support = min_support
         self.min_evidence_fill_rate = min_evidence_fill_rate
         self.max_dispute_rate = max_dispute_rate
+        self.adaptive_scheduler = adaptive_scheduler
 
     def build(
         self,
@@ -232,6 +235,16 @@ class CoverageMonitor:
         for row in trigger:
             if row not in focus:
                 focus.append(row)
+        if self.adaptive_scheduler is not None:
+            unconfirmed_rows = [row for row, _ in unconfirmed]
+            focus_set = set(focus)
+            ranked = self.adaptive_scheduler.rank(
+                focus,
+                uncovered_rows=uncovered_rows,
+                dispute_rows=dispute_rows,
+                unconfirmed_rows=unconfirmed_rows,
+            )
+            focus = [row for row in ranked if row in focus_set]
         return verdict(True, None, focus)
 
     @staticmethod

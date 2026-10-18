@@ -19,11 +19,15 @@
 
 from __future__ import annotations
 
+import json
+import sqlite3
 from collections import OrderedDict
+from pathlib import Path
 
 from parallax.core.ledger import ClaimLedger, LedgerGroup
 from parallax.domain.enums import ClaimStatus, Polarity
 from parallax.domain.models import AgentReputation
+from parallax.ports.stores import ReputationStore
 
 
 class InMemoryReputationStore:
@@ -53,12 +57,154 @@ class InMemoryReputationStore:
         """给评测用的快照：agent_id -> 声誉分。"""
         return {r.agent_id: round(r.score(), 4) for r in self._reps.values()}
 
+    def record_event(
+        self,
+        agent_id: str,
+        run_id: str,
+        claim_id: str,
+        outcome: str,
+        role: str = "reader",
+    ) -> AgentReputation:
+        reputation = self.get(agent_id, role=role)
+        reputation.record(run_id=run_id, claim_id=claim_id, outcome=outcome)
+        self.save(reputation)
+        return reputation
+
+
+class SQLiteReputationStore:
+    """跨进程持久化的声誉存储。
+
+    SQLite 适合单机或共享文件卷上的轻量部署：每次更新都在短事务中完成，
+    进程重启不会丢失历史，且不需要为核心服务额外引入 Redis/Postgres。
+    高并发多副本部署仍可把同一协议替换为平台数据库实现。
+    """
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS agent_reputation (
+                    agent_id TEXT PRIMARY KEY,
+                    role TEXT NOT NULL,
+                    claims_verified INTEGER NOT NULL DEFAULT 0,
+                    claims_refuted INTEGER NOT NULL DEFAULT 0,
+                    arbitration_wins INTEGER NOT NULL DEFAULT 0,
+                    arbitration_losses INTEGER NOT NULL DEFAULT 0,
+                    events_json TEXT NOT NULL DEFAULT '[]'
+                )
+                """
+            )
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.path, timeout=30.0)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout = 30000")
+        return conn
+
+    @staticmethod
+    def _from_row(row: sqlite3.Row) -> AgentReputation:
+        return AgentReputation(
+            agent_id=row["agent_id"],
+            role=row["role"],
+            claims_verified=row["claims_verified"],
+            claims_refuted=row["claims_refuted"],
+            arbitration_wins=row["arbitration_wins"],
+            arbitration_losses=row["arbitration_losses"],
+            events=json.loads(row["events_json"]),
+        )
+
+    def get(self, agent_id: str, role: str = "reader") -> AgentReputation:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM agent_reputation WHERE agent_id = ?", (agent_id,)
+            ).fetchone()
+            if row is None:
+                reputation = AgentReputation(agent_id=agent_id, role=role)
+                self.save(reputation)
+                return reputation
+            return self._from_row(row)
+
+    def save(self, reputation: AgentReputation) -> None:
+        events = [event.model_dump(mode="json") for event in reputation.events]
+        with self._connect() as conn:
+            self._save_connection(conn, reputation, events)
+
+    @staticmethod
+    def _save_connection(
+        conn: sqlite3.Connection,
+        reputation: AgentReputation,
+        events: list[dict],
+    ) -> None:
+        conn.execute(
+            """
+            INSERT INTO agent_reputation
+                (agent_id, role, claims_verified, claims_refuted,
+                 arbitration_wins, arbitration_losses, events_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(agent_id) DO UPDATE SET
+                role=excluded.role,
+                claims_verified=excluded.claims_verified,
+                claims_refuted=excluded.claims_refuted,
+                arbitration_wins=excluded.arbitration_wins,
+                arbitration_losses=excluded.arbitration_losses,
+                events_json=excluded.events_json
+            """,
+            (
+                reputation.agent_id,
+                reputation.role,
+                reputation.claims_verified,
+                reputation.claims_refuted,
+                reputation.arbitration_wins,
+                reputation.arbitration_losses,
+                json.dumps(events, ensure_ascii=False, sort_keys=True),
+            ),
+        )
+
+    def record_event(
+        self,
+        agent_id: str,
+        run_id: str,
+        claim_id: str,
+        outcome: str,
+        role: str = "reader",
+    ) -> AgentReputation:
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT * FROM agent_reputation WHERE agent_id = ?", (agent_id,)
+            ).fetchone()
+            reputation = (
+                self._from_row(row)
+                if row is not None
+                else AgentReputation(agent_id=agent_id, role=role)
+            )
+            reputation.record(run_id=run_id, claim_id=claim_id, outcome=outcome)
+            self._save_connection(
+                conn,
+                reputation,
+                [event.model_dump(mode="json") for event in reputation.events],
+            )
+            return reputation
+
+    def all(self) -> list[AgentReputation]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT * FROM agent_reputation ORDER BY agent_id").fetchall()
+        return [self._from_row(row) for row in rows]
+
+    def scores(self) -> dict[str, float]:
+        return {item.agent_id: round(item.score(), 4) for item in self.all()}
+
 
 class ReputationPolicy:
     """把聚合结论转成声誉变动。"""
 
-    def __init__(self, store: InMemoryReputationStore) -> None:
+    def __init__(self, store: ReputationStore) -> None:
         self.store = store
+
+    def _record(self, agent_id: str, run_id: str, claim_id: str, outcome: str) -> AgentReputation:
+        return self.store.record_event(agent_id, run_id, claim_id, outcome)
 
     def apply_cross_validation(
         self,
@@ -79,9 +225,7 @@ class ReputationPolicy:
                 claim = ledger.claim(claim_id)
                 if claim is None:
                     continue
-                rep = self.store.get(claim.extracted_by)
-                rep.record(run_id=run_id, claim_id=claim_id, outcome="verified")
-                self.store.save(rep)
+                rep = self._record(claim.extracted_by, run_id, claim_id, "verified")
                 updated[claim.extracted_by] = round(rep.score(), 4)
         return updated
 
@@ -108,8 +252,6 @@ class ReputationPolicy:
             outcome = (
                 "arbitration_win" if claim.polarity == winners_polarity else "arbitration_loss"
             )
-            rep = self.store.get(claim.extracted_by)
-            rep.record(run_id=run_id, claim_id=claim_id, outcome=outcome)
-            self.store.save(rep)
+            rep = self._record(claim.extracted_by, run_id, claim_id, outcome)
             updated[claim.extracted_by] = round(rep.score(), 4)
         return updated

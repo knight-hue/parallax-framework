@@ -225,7 +225,11 @@ def build_graph(runtime: ParallaxRuntime):
         for claim in current_claims:
             result = None
             if falsifier is not None:
-                result = falsifier.evaluate(claim, evidence)
+                async_evaluate = getattr(falsifier, "aevaluate", None)
+                if async_evaluate is not None:
+                    result = await async_evaluate(claim, evidence)
+                else:
+                    result = falsifier.evaluate(claim, evidence)
                 claim.verification_status = result.verdict
                 claim.metadata["falsifier"] = getattr(falsifier, "name", type(falsifier).__name__)
                 claim.metadata["verification_evidence_ids"] = list(result.evidence_ids)

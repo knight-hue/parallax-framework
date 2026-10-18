@@ -18,7 +18,7 @@ from parallax.core.coverage import CoverageDecision, CoverageMonitor
 from parallax.core.ledger import ClaimLedger
 from parallax.core.partitioning import BlindPartitioner, Partition
 from parallax.core.reader_pool import ReaderOutcome, ReaderPool
-from parallax.core.reputation import InMemoryReputationStore, ReputationPolicy
+from parallax.core.reputation import ReputationPolicy
 from parallax.domain.enums import RoundStopReason
 from parallax.domain.models import AuditReceipt, EvidenceUnit, RunManifest
 from parallax.ports.evidence_adapter import EvidenceAdapter
@@ -26,6 +26,7 @@ from parallax.ports.falsifier import Falsifier
 from parallax.ports.llm import Budget, UsageStats
 from parallax.ports.reader_plugin import ReaderPlugin
 from parallax.ports.reproduction import ReproductionExecutor
+from parallax.ports.stores import ReputationStore
 from parallax.util import stable_id
 
 _logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ class ParallaxRuntime:
     ledger: ClaimLedger
     aggregator: Aggregator
     monitor: CoverageMonitor
-    reputation_store: InMemoryReputationStore
+    reputation_store: ReputationStore
     reputation_policy: ReputationPolicy
     manifest: RunManifest
     fingerprints_seen: set[str] = field(default_factory=set)
