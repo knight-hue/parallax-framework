@@ -1,6 +1,10 @@
 """离线反证协议测试。"""
 
+import pytest
+
 from parallax.domain.models import Claim, EvidenceUnit, SourceRef
+from parallax.infra.falsifier_llm import LLMFalsifier
+from parallax.infra.llm_fake import FakeLLMClient
 from parallax.ports.falsifier import OfflineFalsifier
 
 
@@ -46,3 +50,26 @@ def test_offline_falsifier_ignores_unreferenced_evidence():
     result = OfflineFalsifier().evaluate(_claim(), [_evidence("empty input", "other")])
     assert result.verdict == "insufficient_evidence"
     assert result.evidence_ids == []
+
+
+@pytest.mark.asyncio
+async def test_llm_falsifier_filters_fabricated_evidence_ids():
+    client = FakeLLMClient(
+        responder=lambda _messages: {
+            "verdict": "refuted",
+            "reason": "反证条件出现",
+            "evidence_ids": ["e1", "fabricated"],
+        }
+    )
+    result = await LLMFalsifier(client).aevaluate(_claim(), [_evidence("validated upstream")])
+    assert result.verdict == "refuted"
+    assert result.evidence_ids == ["e1"]
+    assert "Claim" in client.calls[0][1].content
+
+
+@pytest.mark.asyncio
+async def test_llm_falsifier_fails_closed_on_model_error():
+    client = FakeLLMClient(responder=RuntimeError("offline"))
+    result = await LLMFalsifier(client).aevaluate(_claim(), [_evidence("anything")])
+    assert result.verdict == "insufficient_evidence"
+    assert "调用失败" in result.reason

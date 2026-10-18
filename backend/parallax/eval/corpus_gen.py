@@ -42,6 +42,7 @@ class Archetype:
     group: str
     template: str
     variants: dict[str, dict[str, str]] = field(default_factory=dict)
+    files: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -415,6 +416,29 @@ class $cls:
         return self._added
 '''
 
+CONTRACT_PRODUCER = '''\
+"""跨文件记录生产者：返回 v2 记录格式。"""
+
+from __future__ import annotations
+
+
+def build_record(name: str, size: int) -> dict[str, object]:
+    return {"name": name, "size_bytes": size, "tags": ["stable"]}
+'''
+
+CONTRACT_CONSUMER = '''\
+"""跨文件记录消费者：读取生产者返回的记录。"""
+
+from __future__ import annotations
+
+from .$producer import build_record
+
+
+def record_size(name: str, size: int) -> int:
+    record = build_record(name, size)
+    return int(record["size"])  # @@D integration 生产者返回 size_bytes，消费者读取旧字段导致跨文件静默归零
+'''
+
 
 ARCHETYPES: list[Archetype] = [
     Archetype("scheduler", "scheduling", SCHEDULER),
@@ -423,6 +447,15 @@ ARCHETYPES: list[Archetype] = [
     Archetype("codec", "wire", CODEC),
     Archetype("registry", "wiring", REGISTRY),
     Archetype("window", "analytics", WINDOW),
+    Archetype(
+        "contract",
+        "cross_file",
+        "",
+        files={
+            "contract_$suffix_producer.py": CONTRACT_PRODUCER,
+            "contract_$suffix_consumer.py": CONTRACT_CONSUMER,
+        },
+    ),
 ]
 
 # 每个原型实例化的变体：改类名与关键常量，让每个文件看起来是独立的模块
@@ -494,6 +527,38 @@ def generate_instance(
     return "\n".join(kept_lines) + "\n", found
 
 
+def generate_files(
+    archetype: Archetype,
+    variant: dict[str, str],
+) -> dict[str, tuple[str, list[tuple[int, str, str, str]]]]:
+    """渲染一个原型实例可能包含的多个相互协作的文件。"""
+    if not archetype.files:
+        source, found = generate_instance(archetype, variant)
+        return {f"{archetype.key}_{variant['suffix']}.py": (source, found)}
+    rendered: dict[str, tuple[str, list[tuple[int, str, str, str]]]] = {}
+    producer = f"contract_{variant['suffix']}_producer"
+    for filename_template, template in archetype.files.items():
+        filename = filename_template.replace("$suffix", variant["suffix"])
+        source = render(
+            template,
+            cls=class_name(archetype, variant),
+            suffix=variant["suffix"],
+            num=variant["num"],
+        ).replace("$producer", producer)
+        kept_lines: list[str] = []
+        found: list[tuple[int, str, str, str]] = []
+        for raw in source.splitlines():
+            match = MARKER_RE.search(raw)
+            if not match:
+                kept_lines.append(raw)
+                continue
+            code = MARKER_RE.sub("", raw).rstrip()
+            kept_lines.append(code)
+            found.append((len(kept_lines), match.group("cls"), match.group("title"), code.strip()))
+        rendered[filename] = ("\n".join(kept_lines) + "\n", found)
+    return rendered
+
+
 def build_corpus(
     *,
     out_dir: Path,
@@ -514,24 +579,23 @@ def build_corpus(
         group_dir = repo / archetype.group
         group_dir.mkdir(parents=True, exist_ok=True)
         for variant in variants:
-            filename = f"{archetype.key}_{variant['suffix']}.py"
-            source, found = generate_instance(archetype, variant)
-            (group_dir / filename).write_text(source, encoding="utf-8")
+            for filename, (source, found) in generate_files(archetype, variant).items():
+                (group_dir / filename).write_text(source, encoding="utf-8")
 
-            rel = f"{archetype.group}/{filename}"
-            for index, (line, defect_class, title, marker) in enumerate(found, start=1):
-                instance_tag = f"{archetype.key}-{variant['suffix']}"
-                defects.append(
-                    GeneratedDefect(
-                        id=f"{archetype.key.upper()}{index}-{variant['suffix']}",
-                        file=rel,
-                        line=line,
-                        defect_class=defect_class,
-                        title=title,
-                        marker=marker,
-                        instance=instance_tag,
+                rel = f"{archetype.group}/{filename}"
+                for index, (line, defect_class, title, marker) in enumerate(found, start=1):
+                    instance_tag = f"{archetype.key}-{variant['suffix']}"
+                    defects.append(
+                        GeneratedDefect(
+                            id=f"{archetype.key.upper()}{index}-{variant['suffix']}",
+                            file=rel,
+                            line=line,
+                            defect_class=defect_class,
+                            title=title,
+                            marker=marker,
+                            instance=instance_tag,
+                        )
                     )
-                )
 
     payload = {
         "task_id": task_id,
@@ -559,7 +623,7 @@ def build_corpus(
 
 
 DEFAULT_DESCRIPTION = (
-    "由 6 种代码形态 × 3 个变体生成，共 18 个模块、18 个植入缺陷。"
+    "由 7 种代码形态 × 3 个变体生成，共 21 个模块、21 个植入缺陷；其中包含跨文件契约缺陷。"
     "缺陷刻意避开教科书式模式，均为「读起来合理、跑起来出错」的类型。"
 )
 

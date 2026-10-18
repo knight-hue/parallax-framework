@@ -109,12 +109,18 @@ class Settings(BaseSettings):
     max_dispute_rate: float = 0.5
     coverage_min_support: int = 2
     """证据被看过几次才算「覆盖到」。默认与 support_threshold 对齐。"""
+    adaptive_scheduling: bool = False
+    """是否启用确定性的缺口优先补检排序。"""
 
     # ---- 预算护栏（0 = 不限）----
     max_llm_calls: int = 0
     max_tokens: int = 0
     enable_reproduction: bool = False
     """是否执行 Claim 提供的最小复现命令；生产环境应在隔离 worker 中显式开启。"""
+    enable_llm_falsifier: bool = False
+    """是否启用独立的真实模型反证调用；默认关闭以保持成本和离线行为可控。"""
+    falsifier_max_evidence_chars: int = 24000
+    """单条 Claim 反证提示最多携带的证据字符数。"""
 
     # ---- 运行产物 ----
     runs_dir: Path = Field(default=Path("runs"))

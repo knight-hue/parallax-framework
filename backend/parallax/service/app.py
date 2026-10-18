@@ -143,6 +143,8 @@ def create_app(
                 "visibility": resolved.reader_visibility,
                 "model": resolved.llm_model,
                 "max_evidence_per_call": resolved.max_evidence_per_call,
+                "adaptive_scheduling": resolved.adaptive_scheduling,
+                "enable_llm_falsifier": resolved.enable_llm_falsifier,
             },
             "plugins": [
                 {

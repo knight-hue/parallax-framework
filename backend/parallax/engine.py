@@ -14,6 +14,7 @@ from parallax.core.ledger import ClaimLedger, LedgerGroup
 from parallax.core.partitioning import BlindPartitioner
 from parallax.core.reader_pool import ReaderPool
 from parallax.core.reputation import InMemoryReputationStore, ReputationPolicy
+from parallax.core.scheduling import AdaptiveFocusScheduler
 from parallax.domain.enums import ClaimStatus
 from parallax.domain.models import Claim, Report, RunManifest
 from parallax.graph.build import build_graph
@@ -25,6 +26,7 @@ from parallax.ports.falsifier import Falsifier
 from parallax.ports.llm import LLMClient
 from parallax.ports.reader_plugin import ReaderPlugin
 from parallax.ports.reproduction import ReproductionExecutor
+from parallax.ports.stores import ReputationStore
 from parallax.util import stable_id
 
 logger = logging.getLogger(__name__)
@@ -58,7 +60,7 @@ class ParallaxEngine:
         arbitrator: object | None = None,
         falsifier: Falsifier | None = None,
         reproduction_executor: ReproductionExecutor | None = None,
-        reputation_store: InMemoryReputationStore | None = None,
+        reputation_store: ReputationStore | None = None,
     ) -> ParallaxEngine:
         settings = settings or load_settings()
 
@@ -70,6 +72,7 @@ class ParallaxEngine:
             min_support=settings.coverage_min_support,
             min_evidence_fill_rate=settings.min_evidence_fill_rate,
             max_dispute_rate=settings.max_dispute_rate,
+            adaptive_scheduler=AdaptiveFocusScheduler() if settings.adaptive_scheduling else None,
         )
         partitioner = BlindPartitioner(
             n_readers=settings.n_readers,

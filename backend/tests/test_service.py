@@ -174,6 +174,33 @@ async def test_runner_executes_persists_and_emits(tmp_path: Path, demo_repo, def
     assert bus.is_closed(record.run_id)
 
 
+async def test_runner_reuses_persistent_reputation_across_instances(
+    tmp_path: Path, demo_repo, defects
+):
+    """同一 runs 目录重启服务后，Reader 声誉仍可用于下一次审查。"""
+    runs = tmp_path / "runs"
+    first_store = RunStore(runs)
+    first = AuditRunner(
+        first_store,
+        RunEventBus(runs),
+        make_settings(max_rounds=1),
+        client_factory=lambda _s: FakeLLMClient(make_responder(defects)),
+    )
+    record = first.submit(repo_path=str(demo_repo), overrides={})
+    await first.shutdown()
+    first_scores = first._reputation_store.scores()  # noqa: SLF001
+    assert first_scores
+
+    second = AuditRunner(
+        RunStore(runs),
+        RunEventBus(runs),
+        make_settings(max_rounds=1),
+        client_factory=lambda _s: FakeLLMClient(make_responder(defects)),
+    )
+    assert second._reputation_store.scores() == first_scores  # noqa: SLF001
+    assert record.run_id
+
+
 async def test_runner_report_and_summary_use_the_store_run_id(tmp_path: Path, demo_repo, defects):
     """报告/结果里的 run_id 必须就是运行记录的 run_id。
 
@@ -319,6 +346,12 @@ def test_runner_settings_whitelist(tmp_path: Path):
     assert merged.llm_api_key != "HACKED"
     assert str(merged.runs_dir) != "/tmp/evil"
 
+    advanced = runner._merge_settings(  # noqa: SLF001
+        {"enable_llm_falsifier": True, "adaptive_scheduling": True}
+    )
+    assert advanced.enable_llm_falsifier is True
+    assert advanced.adaptive_scheduling is True
+
 
 # ──────────────────────────── HTTP ────────────────────────────
 
@@ -349,6 +382,8 @@ def test_meta_lists_plugins_and_defaults(client: TestClient):
     assert meta["defaults"]["readers"] >= 1
     assert meta["plugins"][0]["name"] == "code_audit"
     assert "concurrency" in meta["plugins"][0]["defect_classes"]
+    assert "adaptive_scheduling" in meta["defaults"]
+    assert "enable_llm_falsifier" in meta["defaults"]
 
 
 def test_submit_rejects_bad_path(client: TestClient, tmp_path: Path):

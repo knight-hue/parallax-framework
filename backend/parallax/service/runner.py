@@ -24,8 +24,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from parallax.config import Settings
+from parallax.core.reputation import SQLiteReputationStore
 from parallax.domain.errors import ConfigurationError
 from parallax.engine import ParallaxEngine
+from parallax.infra.falsifier_llm import LLMFalsifier
 from parallax.infra.llm_openai_compat import OpenAICompatClient
 from parallax.plugins.code_audit import CodeAuditReader, RepoAdapter
 from parallax.ports.reproduction import SubprocessReproductionExecutor
@@ -81,6 +83,9 @@ class AuditRunner:
         self.max_concurrent_runs = max_concurrent_runs
         self._client_factory = client_factory or (lambda s: OpenAICompatClient(s))
         self._callback = CompletionCallback(settings)
+        # 声誉跨运行累积，不能随每个 HTTP 任务重新创建内存字典。
+        # SQLite 保持单机/共享卷部署的持久性，替换存储实现不会影响引擎协议。
+        self._reputation_store = SQLiteReputationStore(settings.runs_dir / "reputation.sqlite3")
         self._sources = RepoSourceManager(store.root / ".sources")
         self._tasks: dict[str, asyncio.Task] = {}
         self._semaphore = asyncio.Semaphore(max_concurrent_runs)
@@ -157,6 +162,8 @@ class AuditRunner:
                 "max_files": job.max_files,
                 "repo_url": job.repo_url,
                 "commit_sha": job.commit_sha,
+                "enable_llm_falsifier": settings.enable_llm_falsifier,
+                "adaptive_scheduling": settings.adaptive_scheduling,
             },
         )
         self.store.create(record)
@@ -333,6 +340,11 @@ class AuditRunner:
                 commit_sha=source.commit_sha,
             )
             client = self._client_factory(job.settings)
+            falsifier = (
+                LLMFalsifier(client, max_evidence_chars=job.settings.falsifier_max_evidence_chars)
+                if job.settings.enable_llm_falsifier
+                else None
+            )
             engine = ParallaxEngine.build(
                 adapter=RepoAdapter(
                     source.path,
@@ -348,6 +360,8 @@ class AuditRunner:
                     if job.settings.enable_reproduction
                     else None
                 ),
+                reputation_store=self._reputation_store,
+                falsifier=falsifier,
             )
             # 把编排内部的进度事件直接接进总线（同一条事件流，前端无需区分来源）
             engine.runtime.event_sink = lambda event_type, payload: self.bus.publish(
@@ -453,6 +467,8 @@ class AuditRunner:
             "max_rounds": "max_rounds",
             "visibility": "reader_visibility",
             "reader_visibility": "reader_visibility",
+            "enable_llm_falsifier": "enable_llm_falsifier",
+            "adaptive_scheduling": "adaptive_scheduling",
         }
         for key, target in allowed.items():
             value = overrides.get(key)
@@ -475,6 +491,10 @@ class AuditRunner:
                 base[target] = snapshot[source]
         if snapshot.get("model"):
             base["llm_model"] = snapshot["model"]
+        if snapshot.get("enable_llm_falsifier") is not None:
+            base["enable_llm_falsifier"] = bool(snapshot["enable_llm_falsifier"])
+        if snapshot.get("adaptive_scheduling") is not None:
+            base["adaptive_scheduling"] = bool(snapshot["adaptive_scheduling"])
         return Settings(**base)
 
 

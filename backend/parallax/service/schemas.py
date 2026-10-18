@@ -32,6 +32,14 @@ class AuditRequest(BaseModel):
     visibility: Literal["blind", "shared"] | None = Field(
         default=None, description="blind = 框架正常模式；shared = 传统协作对照组"
     )
+    enable_llm_falsifier: bool | None = Field(
+        default=None,
+        description="是否启用独立真实模型反证；默认跟随服务配置",
+    )
+    adaptive_scheduling: bool | None = Field(
+        default=None,
+        description="是否启用缺口优先的确定性补检调度；默认跟随服务配置",
+    )
 
 
 class AuditSubmitted(BaseModel):

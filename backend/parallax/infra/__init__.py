@@ -8,7 +8,8 @@
     llm_fake           离线脚本化客户端，供单测与对照实验使用
 """
 
+from parallax.infra.falsifier_llm import LLMFalsifier
 from parallax.infra.llm_fake import FakeLLMClient, RecordingLLMClient
 from parallax.infra.llm_openai_compat import OpenAICompatClient
 
-__all__ = ["FakeLLMClient", "OpenAICompatClient", "RecordingLLMClient"]
+__all__ = ["FakeLLMClient", "LLMFalsifier", "OpenAICompatClient", "RecordingLLMClient"]
