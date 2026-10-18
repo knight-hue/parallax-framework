@@ -374,7 +374,7 @@ def test_health_and_ready_endpoints(client: TestClient):
 
     ready = client.get("/ready").json()
     assert ready["ready"] is False
-    assert any("PARALLAX_LLM_API_KEY" in r for r in ready["reasons"])
+    assert any("OPENAI_API_KEY" in r for r in ready["reasons"])
 
 
 def test_meta_lists_plugins_and_defaults(client: TestClient):

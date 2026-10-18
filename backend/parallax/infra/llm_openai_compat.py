@@ -53,7 +53,8 @@ class OpenAICompatClient:
     ) -> None:
         if not settings.llm_api_key:
             raise ConfigurationError(
-                "未配置 PARALLAX_LLM_API_KEY。若只是跑单测/对照实验，请使用 FakeLLMClient。"
+                "未配置模型 API Key（PARALLAX_LLM_API_KEY 或 OPENAI_API_KEY）。"
+                "若只是跑单测/对照实验，请使用 FakeLLMClient。"
             )
         self.settings = settings
         self.usage = usage or UsageStats()
@@ -85,15 +86,24 @@ class OpenAICompatClient:
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> BaseModel:
-        instructed = [
-            *messages,
-            ChatMessage(
-                role="system",
-                content=_JSON_INSTRUCTION.format(
-                    schema=json.dumps(schema.model_json_schema(), ensure_ascii=False, indent=2)
-                ),
-            ),
-        ]
+        instruction = _JSON_INSTRUCTION.format(
+            schema=json.dumps(schema.model_json_schema(), ensure_ascii=False, indent=2)
+        )
+        # System instructions must precede user messages.  Appending a system
+        # message after the user prompt is accepted by some compatible servers
+        # but ignored or rejected by others.
+        instructed = list(messages)
+        system_index = next(
+            (index for index, message in enumerate(instructed) if message.role == "system"),
+            None,
+        )
+        if system_index is None:
+            instructed.insert(0, ChatMessage(role="system", content=instruction))
+        else:
+            current = instructed[system_index]
+            instructed[system_index] = ChatMessage(
+                role="system", content=f"{current.content}\n\n{instruction}"
+            )
         payload = await self._post(instructed, temperature, max_tokens, json_mode=True)
         raw = self._extract_text(payload)
         try:
@@ -116,10 +126,14 @@ class OpenAICompatClient:
         body: dict[str, Any] = {
             "model": self.settings.llm_model,
             "messages": [m.model_dump() for m in messages],
-            "temperature": temperature,
         }
+        # OpenAI reasoning models (o-series and GPT-5+) reject sampling
+        # temperature and use the non-deprecated completion token field.
+        reasoning_model = self._is_reasoning_model(self.settings.llm_model)
+        if not reasoning_model:
+            body["temperature"] = temperature
         if max_tokens:
-            body["max_tokens"] = max_tokens
+            body["max_completion_tokens" if reasoning_model else "max_tokens"] = max_tokens
         if json_mode and self.settings.llm_use_json_mode:
             body["response_format"] = {"type": "json_object"}
 
@@ -165,6 +179,11 @@ class OpenAICompatClient:
                 raise LLMError(f"响应体不可解析：{exc}") from exc
 
         raise LLMError(f"模型调用重试耗尽：{last_error}")
+
+    @staticmethod
+    def _is_reasoning_model(model: str) -> bool:
+        normalized = model.casefold().strip()
+        return normalized.startswith(("o1", "o3", "o4", "gpt-5", "gpt-6"))
 
     async def _ensure_client(self) -> httpx.AsyncClient:
         if self._client is None:

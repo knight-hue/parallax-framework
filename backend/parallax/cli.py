@@ -183,9 +183,9 @@ def _make_client(settings: Settings, dry_run: bool):
         return FakeLLMClient(responder=lambda _m: {"findings": [], "notes": "dry-run"})
     if not settings.is_llm_configured():
         raise SystemExit(
-            "未配置 PARALLAX_LLM_API_KEY。\n"
+            "未配置模型 API Key（PARALLAX_LLM_API_KEY 或 OPENAI_API_KEY）。\n"
             "请在 backend/.env 中设置，或用 --dry-run 做离线自检。\n"
-            "示例：  PARALLAX_LLM_API_KEY=sk-xxx"
+            "示例：  OPENAI_API_KEY=sk-xxx"
         )
     return OpenAICompatClient(settings)
 
@@ -276,7 +276,9 @@ async def _run_experiment_cli(args: argparse.Namespace) -> int:
     overrides = _overrides(args)
     settings = load_settings(**overrides)
     if not settings.is_llm_configured():
-        raise SystemExit("未配置 PARALLAX_LLM_API_KEY（实验必须调用真实模型）")
+        raise SystemExit(
+            "未配置模型 API Key（PARALLAX_LLM_API_KEY 或 OPENAI_API_KEY，实验必须调用真实模型）"
+        )
 
     print(f"语料目录：{corpus_dir}")
     print(f"任务数量：{len(tasks)}｜实验臂：{len(arms)}｜总运行数：{len(tasks) * len(arms)}")
@@ -337,7 +339,9 @@ async def _run_real_cli(args: argparse.Namespace) -> int:
     overrides = _overrides(args)
     settings = load_settings(**overrides)
     if not settings.is_llm_configured():
-        raise SystemExit("未配置 PARALLAX_LLM_API_KEY（真实仓库实验必须调用真实模型）")
+        raise SystemExit(
+            "未配置模型 API Key（PARALLAX_LLM_API_KEY 或 OPENAI_API_KEY，真实仓库实验必须调用真实模型）"
+        )
 
     print("真实仓库对照实验（无 ground truth）")
     print(f"仓库：{len(repos)} 个｜实验臂：{len(arms)} 个｜重复：{args.repeat} 次")

@@ -126,7 +126,7 @@ def create_app(
         """
         reasons: list[str] = []
         if not resolved.is_llm_configured():
-            reasons.append("未配置 PARALLAX_LLM_API_KEY")
+            reasons.append("未配置模型 API Key（PARALLAX_LLM_API_KEY 或 OPENAI_API_KEY）")
         if not store.root.exists():
             reasons.append(f"runs 目录不可用：{store.root}")
         return ReadyResponse(ready=not reasons, reasons=reasons)
