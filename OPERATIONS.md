@@ -1,5 +1,7 @@
 # 运行与隔离验证
 
+本文描述**当前代码**的运行方式：现有 Java 网关、PostgreSQL 和单 API worker。最终目标为 Java 主导平台 + MySQL，见 [PROJECT_GOALS.md](PROJECT_GOALS.md)；新数据库、队列和调度尚未落地，不要仅替换连接串执行旧命令。迁移完成时运行档、备份与恢复步骤必须随代码一起更新。
+
 ## 配置和构建
 
 实际密钥只写 `backend/.env`，不要填写或提交 `.env.example`。支持 `PARALLAX_LLM_*` 和 `OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL`；PARALLAX 配置优先。兼容服务的模型别名不能当作官方 OpenAI 型号证明。
