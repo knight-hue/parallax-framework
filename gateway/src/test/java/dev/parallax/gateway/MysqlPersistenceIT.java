@@ -1,0 +1,129 @@
+package dev.parallax.gateway;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.sql.DriverManager;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.UUID;
+
+import dev.parallax.gateway.identity.ApiKeyService;
+import dev.parallax.gateway.identity.QuotaService;
+import dev.parallax.gateway.platform.PlatformIdentityService;
+import dev.parallax.gateway.platform.ProjectRole;
+import dev.parallax.gateway.runs.AuditRunRepository;
+import dev.parallax.gateway.runs.RunService;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DataAccessException;
+import org.flywaydb.core.Flyway;
+import dev.parallax.gateway.platform.LegacyDatabaseTransfer;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+
+@SpringBootTest
+@ActiveProfiles("mysql")
+@EnabledIfSystemProperty(named = "parallax.test.mysql", matches = "true")
+class MysqlPersistenceIT {
+    @Autowired JdbcTemplate jdbc;
+    @Autowired PlatformIdentityService identity;
+    @Autowired ApiKeyService apiKeys;
+    @Autowired QuotaService quota;
+    @Autowired RunService runs;
+    @Autowired AuditRunRepository runRepository;
+
+    @DynamicPropertySource
+    static void mysql(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", () -> System.getenv("PARALLAX_TEST_DB_URL"));
+        registry.add("spring.datasource.username", () -> "parallax_test");
+        registry.add("spring.datasource.password", () -> System.getenv("PARALLAX_TEST_DB_PASSWORD"));
+        registry.add("parallax.identity.enabled", () -> "true");
+    }
+
+    @Test
+    void usesRealMysqlInnoDBAndValidatesFlyway() {
+        assertThat(jdbc.queryForObject("SELECT VERSION()", String.class)).startsWith("8.");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'platform_project' AND engine = 'InnoDB'", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE", Integer.class)).isEqualTo(4);
+    }
+
+    @Test
+    void platformMembershipAndRealForeignKeysAreEnforced() {
+        var user = identity.provision("test", "mysql-" + UUID.randomUUID(), "test-password-123");
+        var org = identity.createOrganization(user.id(), "MySQL organization");
+        var project = identity.createProject(user.id(), org.id(), "payments");
+        assertThat(identity.project(user.id(), project.id(), ProjectRole.VIEWER)).isEqualTo(project);
+        assertThatThrownBy(() -> jdbc.update("INSERT INTO platform_membership (organization_id, user_id, role) VALUES (?, ?, 'VIEWER')", org.id(), UUID.randomUUID().toString()))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbc.update("INSERT INTO platform_membership (organization_id, user_id, role) VALUES (?, ?, 'SUPERUSER')", org.id(), user.id()))
+                .isInstanceOf(DataAccessException.class).hasMessageContaining("3819");
+    }
+
+    @Test
+    void hibernateAndIndependentJdbcRoundTripUtcAndUsage() throws Exception {
+        var key = apiKeys.issue("mysql-" + UUID.randomUUID(), "VIEWER", "default");
+        String id = key.credential().getId();
+        String submissionId = runs.registerSubmission(id, "repo-" + UUID.randomUUID(), "question");
+        String runId = "run-" + UUID.randomUUID();
+        runs.attachUpstreamRunId(submissionId, runId);
+        runs.complete(runId, id, "done", 100, 25, 1.0, "{}", "finished");
+        assertThat(quota.record(id, runId, 100, 25, "trace")).isTrue();
+        assertThat(quota.record(id, runId, 100, 25, "trace")).isFalse();
+        assertThat(quota.usageOf(id, Instant.EPOCH).tokens()).isEqualTo(125);
+        Instant precise = Instant.parse("2026-10-20T12:34:56.123456Z");
+        jdbc.update("UPDATE audit_run SET submitted_at = ? WHERE id = ?", Timestamp.from(precise), submissionId);
+        assertThat(runRepository.findById(submissionId).orElseThrow().getSubmittedAt()).isEqualTo(precise);
+        try (var connection = DriverManager.getConnection(System.getenv("PARALLAX_TEST_DB_URL"), "parallax_test", System.getenv("PARALLAX_TEST_DB_PASSWORD"));
+             var statement = connection.prepareStatement("SELECT total_tokens FROM usage_ledger WHERE run_id = ?")) {
+            statement.setString(1, runId);
+            try (var rows = statement.executeQuery()) {
+                assertThat(rows.next()).isTrue();
+                assertThat(rows.getLong(1)).isEqualTo(125);
+            }
+        }
+    }
+
+    @Test
+    void offlineTransferChecksEveryColumnAndRefusesNonemptyDestination() throws Exception {
+        String sourceUrl = "jdbc:h2:mem:transfer-" + UUID.randomUUID() + ";MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1";
+        boolean postgres = System.getenv("PARALLAX_TRANSFER_TEST_SOURCE_URL") != null;
+        if (postgres) sourceUrl = System.getenv("PARALLAX_TRANSFER_TEST_SOURCE_URL");
+        String sourceUser = postgres ? "parallax_test" : "sa";
+        String sourcePassword = postgres ? System.getenv("PARALLAX_TEST_DB_PASSWORD") : "";
+        String targetUrl = System.getenv("PARALLAX_TEST_DB_URL").replace("/parallax_test?", "/parallax_transfer?");
+        String password = System.getenv("PARALLAX_TEST_DB_PASSWORD");
+        Flyway.configure().dataSource(sourceUrl, sourceUser, sourcePassword).locations("classpath:db/migration").load().migrate();
+        Flyway.configure().dataSource(targetUrl, "parallax_test", password).locations("classpath:db/mysql").load().migrate();
+        try (var source = DriverManager.getConnection(sourceUrl, sourceUser, sourcePassword);
+             var target = DriverManager.getConnection(targetUrl, "parallax_test", password)) {
+            try (var insert = source.prepareStatement("INSERT INTO platform_user (id, username, password_hash, disabled, created_at) VALUES ('user-source', 'source-user', 'not-a-real-hash', FALSE, ?)")) {
+                insert.setTimestamp(1, Timestamp.from(Instant.parse("2026-10-20T10:00:00.123456Z")));
+                insert.executeUpdate();
+            }
+            // Exercise every transferred table and nullable/non-null fields, not only an empty schema.
+            try (var seed = source.createStatement()) {
+                seed.executeUpdate("INSERT INTO api_credential (id,name,key_hash,key_prefix,role,quota_policy_id,created_at,last_used_at) VALUES ('key-source','来源凭据','test-hash','plx_test','VIEWER',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)");
+                seed.executeUpdate("INSERT INTO usage_ledger (id,credential_id,run_id,occurred_at,prompt_tokens,completion_tokens,total_tokens,trace_id) VALUES (42,'key-source','run-source',CURRENT_TIMESTAMP,100,25,125,'trace-source')");
+                seed.executeUpdate("INSERT INTO audit_run (id,run_id,credential_id,repo_path,question,status,submitted_at,finished_at,elapsed_s,trace_id,prompt_tokens,completion_tokens,total_tokens,counts_json,stop_reason,error) VALUES ('submission-source','run-source','key-source','repo/代码','审查问题','done',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,1.25,'trace-source',100,25,125,'{}','finished',NULL)");
+                seed.executeUpdate("INSERT INTO audit_event (id,run_id,event_type,at,detail,trace_id) VALUES (42,'run-source','completed',CURRENT_TIMESTAMP,'包含中文与 emoji 😀','trace-source')");
+                seed.executeUpdate("INSERT INTO platform_organization (id,name,created_at) VALUES ('org-source','测试组织',CURRENT_TIMESTAMP)");
+                seed.executeUpdate("INSERT INTO platform_membership (organization_id,user_id,role) VALUES ('org-source','user-source','OWNER')");
+                seed.executeUpdate("INSERT INTO platform_project (id,organization_id,name,created_at) VALUES ('project-source','org-source','测试项目',CURRENT_TIMESTAMP)");
+                seed.executeUpdate("INSERT INTO platform_access_audit (id,actor,action,resource_id,at) VALUES ('access-source','user-source','CREATE_PROJECT','project-source',CURRENT_TIMESTAMP)");
+            }
+            assertThatThrownBy(() -> LegacyDatabaseTransfer.copy(source, target, false)).isInstanceOf(IllegalArgumentException.class);
+            assertThat(LegacyDatabaseTransfer.copy(source, target, true)).hasSize(10).allSatisfy(row -> assertThat(row.rows()).isPositive());
+            assertThat(LegacyDatabaseTransfer.verify(source, target)).hasSize(10);
+            assertThatThrownBy(() -> LegacyDatabaseTransfer.copy(source, target, true)).hasMessageContaining("Destination must be empty");
+            try (var change = target.createStatement()) { change.executeUpdate("UPDATE platform_user SET username = 'tampered'"); }
+            assertThatThrownBy(() -> LegacyDatabaseTransfer.verify(source, target)).hasMessageContaining("verification mismatch");
+        }
+    }
+}

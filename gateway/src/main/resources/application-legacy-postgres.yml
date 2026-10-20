@@ -1,0 +1,7 @@
+# Explicit rollback/development profile, keeping original Flyway checksums intact.
+spring:
+  datasource:
+    url: ${PARALLAX_DB_URL:jdbc:postgresql://127.0.0.1:5432/parallax}
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    locations: classpath:db/migration

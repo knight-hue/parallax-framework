@@ -29,6 +29,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -54,6 +55,7 @@ import org.testcontainers.utility.DockerImageName;
  * 没有 Docker 时整类自动跳过（`disabledWithoutDocker`），不让它成为本地开发的阻塞项。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@ActiveProfiles("legacy-postgres")
 @Testcontainers(disabledWithoutDocker = true)
 class PostgresPersistenceIT {
 

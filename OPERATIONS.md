@@ -1,6 +1,6 @@
 # 运行与隔离验证
 
-本文描述**当前代码**的运行方式：现有 Java 网关、PostgreSQL 和单 API worker。最终目标为 Java 主导平台 + MySQL，见 [PROJECT_GOALS.md](PROJECT_GOALS.md)；新数据库、队列和调度尚未落地，不要仅替换连接串执行旧命令。迁移完成时运行档、备份与恢复步骤必须随代码一起更新。
+当前 Java 默认使用 MySQL，Compose 同步切换；旧 PostgreSQL 通过 legacy-postgres 显式保留。新库运行、停写迁移和回退见 [MySQL 运维](gateway/MYSQL_OPERATIONS.md)。任务仍由单 Python API worker 管理，RabbitMQ 与 Java 调度尚未接管。最终目标见 [PROJECT_GOALS.md](PROJECT_GOALS.md)。
 
 ## 配置和构建
 
@@ -46,7 +46,7 @@ Docker 执行使用 `--pull=never`、无网络、只读源码/根文件系统、
 
 ## 备份、恢复与运行边界
 
-单机建议一个 API worker。`runs` 包含任务、事件日志、完整 Claim/manifest、修复凭证和声誉 SQLite；必须一起备份。在停止写入后备份卷，或对 SQLite 使用在线备份 API。数据库用 `pg_dump`，恢复后用 Flyway validate 和 `/ready` 验证，不使用自动 schema update。未完成任务会在服务重启时恢复；已取消任务不会重跑。
+单机建议一个 API worker。`runs` 包含任务、事件日志、完整 Claim/manifest、修复凭证和声誉 SQLite；必须一起备份。在停止写入后备份卷，或对 SQLite 使用在线备份 API。旧 PostgreSQL 用 `pg_dump`，新 MySQL 用 `mysqldump --single-transaction`（细节及恢复演练边界见 MySQL 运维），恢复后用 Flyway validate 和 `/ready` 验证，不使用自动 schema update。未完成任务会在服务重启时恢复；已取消任务不会重跑。
 
 共享文件租约只能避免一般重复领取，文件事件总线不是分布式消息日志。当前不承诺任意多副本、跨节点容灾或 exactly-once；上线按单 API worker 部署，扩容需先替换任务租约/事件总线。
 
