@@ -186,6 +186,7 @@ def run(args):
             PARALLAX_JWT_SECRET=secret,
             PARALLAX_IDENTITY_ENABLED="true",
             PARALLAX_DB_URL=f"jdbc:postgresql://127.0.0.1:{pg_port}/parallax",
+            SPRING_PROFILES_ACTIVE="legacy-postgres",
             PARALLAX_DB_USER="parallax",
             PARALLAX_DB_PASSWORD=secret,
             PARALLAX_UPSTREAM_URL=f"http://127.0.0.1:{api_port}",

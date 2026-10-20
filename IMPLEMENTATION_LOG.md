@@ -24,3 +24,16 @@
 - 真 HTTP 权限测试 5 项通过；Java 全量离线 verify 61 项通过，未运行数据库 IT。Python 全量 312 项通过。
 - API 契约及边界见 gateway/PLATFORM_API.md。当前成员权限以组织为范围，尚无单项目覆盖和管理 UI。
 - 用户已授权仅由 Maven 补齐必需依赖及传递依赖；不下载工具、数据库安装包或镜像。已获取 MySQL Connector/J 9.7.0。
+
+## MySQL 运行档与旧库离线迁移
+
+状态：已实现并通过本机真库检查；目标 MySQL 8.4 与生产恢复现场验收未完成。
+
+- 默认 mysql 运行档、独立 InnoDB/utf8mb4/UTC DATETIME(6) Flyway、显式外键；旧历史保持不变，legacy-postgres 可回归。
+- Compose 使用独立 mysql-data，保留 postgres-data；应用与 root 分离口令。没有拉取或构建镜像。
+- 停写迁移工具按白名单复制十张表，目标本地事务、源只读、逐字段数量/SHA-256 核对，拒绝非空目标与错误数据。
+- 本机现有 MySQL 8.0.19 + 缓存 PostgreSQL 16.15 完成真库迁移；所有表有数据，含中文/emoji、微秒、空值、用量和外键关联，篡改被拒绝。
+- Java 全量 61 项 + 真实 PostgreSQL/Redis 12 项通过；独立 MySQL 4 项通过（同时重跑身份/协议 14 项）。Ruff、Compose 生产合并配置和 diff 检查通过。
+- 运行与回退步骤：gateway/MYSQL_OPERATIONS.md；脱敏验收摘要：eval/java-platform/mysql-runtime.json。Python 既有全量 312 项未在本模块重复运行，仅变更旧验收脚本的显式 profile。
+
+下一模块：受控仓库登记、不可变策略版本，随后平台任务/原子预算/Outbox。

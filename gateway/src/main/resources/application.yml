@@ -2,11 +2,13 @@ server:
   port: ${PARALLAX_GATEWAY_PORT:8080}
 
 spring:
+  profiles:
+    default: mysql
   application:
     name: parallax-gateway
   datasource:
     # 平台能力（身份/配额/账本/运行记录）的存储。
-    # 默认指向本机 PostgreSQL，compose 档会把它指向 postgres 服务。
+    # Legacy fallback; the default mysql profile provides the platform datasource.
     url: ${PARALLAX_DB_URL:jdbc:postgresql://127.0.0.1:5432/parallax}
     username: ${PARALLAX_DB_USER:parallax}
     password: ${PARALLAX_DB_PASSWORD:parallax}

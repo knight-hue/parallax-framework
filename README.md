@@ -17,7 +17,7 @@
 
 最终目标是 Java 平台后端 + MySQL + Redis + RabbitMQ + Python 审查引擎 + Next.js 工作台，形成仓库接入、权限与预算、可靠审查、人工审批和隔离回归的完整闭环。保留可插拔框架、CLI、Receipt 协议和可复现实验，服务 Java 后端主力项目与开源框架工具展示。
 
-**当前代码仍使用 PostgreSQL 和 Java 平台网关，任务管理主要在 Python。目标升级尚未完成。** 秒杀与 XA/TCC/Seata 是独立实验，报告安全分享与短链后置。
+**Java 默认运行档已切换 MySQL，组织/项目权限基础已实现，任务管理仍主要在 Python。目标升级尚未完成。** 秒杀与 XA/TCC/Seata 是独立实验，报告安全分享与短链后置。
 
 | 文档 | 用途 |
 |---|---|
@@ -249,7 +249,7 @@ class MyValidator:                    # ③ 可选：入账否决权
 
 | 最终目标 | 当前差距 |
 |---|---|
-| MySQL + Java 平台业务 | 当前仍是 PostgreSQL + 网关；组织项目权限、策略和任务状态机待升级 |
+| MySQL + Java 平台业务 | MySQL 运行档、迁移工具和组织项目权限已实现；策略与任务协调待完成 |
 | 原子预算与可靠执行 | 待实现预占/结算/释放、Outbox/Inbox、RabbitMQ、attempt/fencing、心跳和跨实例事件 |
 | 研发闭环 | 补齐 Java 侧审批/产物管理、PR 集成与 Java 缺陷样例 |
 | 缓存、容量与诊断 | Redisson 缓存治理、多实例故障、JVM 排障和实际环境验收待完善 |
@@ -301,7 +301,7 @@ eval/real/                      真实开源仓库上的对照实验（urllib3 /
 
 ## 8. 运行当前实现
 
-使用已有工具、依赖与缓存镜像，按 [OPERATIONS.md](OPERATIONS.md) 配置并运行。当前链路为工作台 → Java 网关 → Python → PostgreSQL/Redis；MySQL 和 RabbitMQ 尚未替换当前运行档。
+使用已有工具、依赖与缓存镜像，按 [OPERATIONS.md](OPERATIONS.md) 配置并运行。当前默认运行档为工作台 → Java → Python + MySQL/Redis；旧本机全链路验收显式使用 legacy-postgres。MySQL 真库与迁移检查见 [MySQL 运维](gateway/MYSQL_OPERATIONS.md)，RabbitMQ 尚未接管执行。
 
 仅校验生产合并配置，不启动服务或下载镜像：
 

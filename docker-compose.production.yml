@@ -53,11 +53,12 @@ services:
     security_opt: [no-new-privileges:true]
     pids_limit: 256
     mem_limit: 1g
-  postgres:
+  mysql:
     pull_policy: never
     ports: !reset []
     environment:
-      POSTGRES_PASSWORD: ${PARALLAX_DB_PASSWORD:?Set a database password}
+      MYSQL_PASSWORD: ${PARALLAX_DB_PASSWORD:?Set a database password}
+      MYSQL_ROOT_PASSWORD: ${PARALLAX_MYSQL_ROOT_PASSWORD:?Set a separate MySQL root password}
     mem_limit: 1g
   redis:
     pull_policy: never

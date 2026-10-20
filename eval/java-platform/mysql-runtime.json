@@ -1,0 +1,21 @@
+{
+  "module": "mysql-runtime-and-offline-transfer",
+  "date": "2026-10-21",
+  "mysql_tested": "8.0.19",
+  "mysql_target": "8.4 LTS (not yet verified)",
+  "source_tested": "PostgreSQL 16.15, cached pgvector image",
+  "java": 21,
+  "checks": {
+    "java_full_tests": {"passed": 61, "failed": 0},
+    "postgres_redis_integration": {"passed": 12, "failed": 0},
+    "mysql_integration": {"passed": 4, "failed": 0},
+    "identity_protocol_rerun": {"passed": 14, "failed": 0},
+    "transfer_nonempty_tables": 10,
+    "transfer_per_column_digest": true,
+    "nonempty_destination_rejected": true,
+    "tampering_detected": true,
+    "compose_production_config": "passed"
+  },
+  "reproduce": "gateway/MYSQL_OPERATIONS.md",
+  "limitations": ["No MySQL 8.4 runtime available locally", "No production backup/restore or public deployment acceptance", "Task execution still uses the existing Python runner"]
+}

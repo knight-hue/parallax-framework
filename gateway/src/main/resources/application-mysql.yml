@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: ${PARALLAX_MYSQL_URL:jdbc:mysql://127.0.0.1:3306/parallax?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true}
+    username: ${PARALLAX_DB_USER:parallax}
+    password: ${PARALLAX_DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  flyway:
+    locations: classpath:db/mysql
+  jpa:
+    properties:
+      hibernate:
+        type:
+          preferred_instant_jdbc_type: TIMESTAMP
+        jdbc:
+          time_zone: UTC

@@ -99,7 +99,8 @@ services:
       # 身份与配额：演示档默认**打开**，因为它是网关这一层存在的理由。
       # 打开后提交审查需要 API Key（先调 POST /api/v1/auth/token 拿 JWT 再建 key）。
       PARALLAX_IDENTITY_ENABLED: ${PARALLAX_IDENTITY_ENABLED:-true}
-      PARALLAX_DB_URL: jdbc:postgresql://postgres:5432/${PARALLAX_DB_NAME:-parallax}
+      SPRING_PROFILES_ACTIVE: mysql
+      PARALLAX_MYSQL_URL: jdbc:mysql://mysql:3306/${PARALLAX_DB_NAME:-parallax}?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&allowPublicKeyRetrieval=true&sslMode=DISABLED
       PARALLAX_DB_USER: ${PARALLAX_DB_USER:-parallax}
       PARALLAX_DB_PASSWORD: ${PARALLAX_DB_PASSWORD:-parallax}
       # 限流后端。Redis 不可用时网关会自动降级回内存桶，服务不受影响。
@@ -109,7 +110,7 @@ services:
     depends_on:
       api:
         condition: service_started
-      postgres:
+      mysql:
         condition: service_healthy
     restart: unless-stopped
     init: true
@@ -117,22 +118,23 @@ services:
   # 平台能力的存储：身份、配额、用量账本、运行记录。
   # 与网关同属 gateway profile——网关没有它就起不来，把两者拆到不同 profile
   # 只会制造"起了网关但没有库"这种必然报错的组合。
-  postgres:
-    image: ${PARALLAX_POSTGRES_IMAGE:-postgres:17-alpine}
-    container_name: parallax-postgres
+  mysql:
+    image: ${PARALLAX_MYSQL_IMAGE:-mysql:8.4}
+    container_name: parallax-mysql
     profiles: ["gateway"]
     environment:
-      POSTGRES_DB: ${PARALLAX_DB_NAME:-parallax}
-      POSTGRES_USER: ${PARALLAX_DB_USER:-parallax}
-      POSTGRES_PASSWORD: ${PARALLAX_DB_PASSWORD:-parallax}
+      MYSQL_DATABASE: ${PARALLAX_DB_NAME:-parallax}
+      MYSQL_USER: ${PARALLAX_DB_USER:-parallax}
+      MYSQL_PASSWORD: ${PARALLAX_DB_PASSWORD:-parallax}
+      MYSQL_ROOT_PASSWORD: ${PARALLAX_MYSQL_ROOT_PASSWORD:-local-development-root}
     ports:
-      - "${PARALLAX_DB_PORT:-5432}:5432"
+      - "127.0.0.1:${PARALLAX_DB_PORT:-3306}:3306"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - mysql-data:/var/lib/mysql
     restart: unless-stopped
     healthcheck:
       # 网关启动就跑 Flyway 迁移；库还没就绪就开跑会直接启动失败。
-      test: ["CMD-SHELL", "pg_isready -U ${PARALLAX_DB_USER:-parallax} -d ${PARALLAX_DB_NAME:-parallax}"]
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_PASSWORD\" mysql --protocol=TCP -h 127.0.0.1 -u \"$$MYSQL_USER\" -D \"$$MYSQL_DATABASE\" -e 'SELECT 1' >/dev/null 2>&1"]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -174,3 +176,4 @@ volumes:
   redis-data:
   qdrant-data:
   postgres-data:
+  mysql-data:
