@@ -1,39 +1,26 @@
-# Parallax 网关（平台层）
+# Parallax Java 平台后端（当前实现为网关）
 
-**一句话**：把 Python 编排服务挡在身后，管住"谁在用、用了多少、跑过什么"。
+最终方向：Java 管理组织/项目权限、任务、预算、报告和审批，平台统一使用 MySQL；Python 保留证据装配与隔离执行。见 [最终目标](../PROJECT_GOALS.md) 和 [升级方案](../JAVA_BACKEND_PLAN_V2.md)。
 
-## 为什么需要它
+本文配置、端点及测试描述当前网关实现，数据库仍为 PostgreSQL。新平台能力尚未实施，不能只改 JDBC URL 当作完成迁移。
 
-`SECURITY.md` 里写了两条必须由部署方处理的风险：HTTP 服务本身**不含鉴权**，
-`POST /api/v1/audits` **接受任意服务端路径**。这两条如果直接暴露，等于把
-"用别人的机器读任意文件"这个能力送出去。
+## 当前能力与后续职责
 
-网关的职责就是把它们收口：
-
-| 能力 | 实现 | 解决什么 |
+| 能力 | 当前实现 | 后续升级 |
 |---|---|---|
-| 统一入口 | 白名单转发（`ProxyController`） | 不做白名单的"/** 全转发"会把网关变成开放代理，可用来打内网其他服务 |
-| 身份 | API Key（`X-API-Key`）+ JWT（运营人员） | 上游不认识"谁在调用"；配额也需要一个归属主体 |
-| **配额** | 三重额度：日运行数 / 日 token / 月 token | 平台的成本必须可预测；额度按**提交**计数，只统计完成的话用户能在第一次完成前并发提交上千次 |
-| **运行记录** | `audit_run` + `audit_event` | "上周那次审查花了多少"必须能查到 |
-| **限流** | Bucket4j；配了 Redis 则多实例共享配额，**Redis 不可用时自动降级** | 限流是保护手段，不该成为单点 |
-| 熔断 | Resilience4j | 上游卡住时快速失败，而不是把网关的线程池一起拖死 |
-| 可观测性 | Micrometer 业务指标 + `%X{traceId}` 日志 | "一直在降级"必须能被发现，否则配额会悄悄退化成单实例口径 |
-| 链路追踪 | `X-Trace-Id` 贯穿 Java → Python → 完成回调 | 出问题时能在两侧日志里对上同一次请求 |
+| 身份 | API Key、共享管理员口令换 JWT | 用户/组织/项目权限和逐资源授权 |
+| 配额 | 提交前检查、完成回调、唯一 run_id 账本 | 原子预算预占、结算/释放和对账 |
+| 任务 | 网关运行记录，Python 管执行与内部事件 | Java 状态机、可靠派发和权威事件 |
+| 流控 | Redis/Bucket4j、故障回退、Resilience4j | 并发隔离、资源上限及多实例故障验收 |
+| 观测 | Micrometer、traceId | 跨进程链路、线程池/预算/队列指标及 JVM 诊断 |
 
-## 约定：无编排逻辑，可有平台能力
+Python 配置内部令牌后会校验内部调用凭据，但不提供完整组织/项目权限。普通 API 不直接公开；受控工作区与代码访问需要单独限制，白名单转发不等于路径授权。
 
-原约定是"网关不依赖数据库，以免有人把业务逻辑写进来"。
-这条理由依然成立，但它把**平台能力**一起挡在了门外——身份、配额、
-记账、运行记录本来就是网关的本职。
+## 目标职责约定
 
-修订后的判据只有一条：
+Java 采用模块化单体管理平台业务生命周期，Python 负责分区、盲读、Claim 来源、反证和聚合。不再受旧“仅身份/配额/持久化/可观测性”清单限制；每项能力必须明确业务归属、状态权威和故障处理。
 
-> **新增的每个依赖都必须能回答"它服务于身份 / 配额 / 持久化 / 可观测性中的哪一项"。**
-> 答不上来就不该加。
-
-必须留在 Python 侧的东西：证据怎么装配（分区、盲读、账本、聚合、补检）。
-网关**一行都不碰**它。
+MySQL、Outbox、消息幂等和 attempt/fencing 按阶段落地。XA/TCC/Seata、秒杀为独立实验，不加入默认平台拓扑。
 
 ## 五条踩过的坑（都写进了代码注释）
 
@@ -105,10 +92,10 @@ curl -X DELETE -H "Authorization: Bearer $TOKEN" \
 
 ## 运行
 
-### 容器（推荐，一并起 PostgreSQL 与 Redis）
+### 当前容器运行档（PostgreSQL 与 Redis）
 
 ```bash
-docker compose --env-file ../backend/.env --profile gateway up -d
+docker compose --env-file ../backend/.env -f ../docker-compose.yml -f ../docker-compose.production.yml --profile gateway up -d --no-build --pull never
 ```
 
 ### 本地
@@ -170,8 +157,8 @@ export PARALLAX_CALLBACK_TOKEN=$PARALLAX_GATEWAY_INTERNAL_TOKEN
 ## 测试
 
 ```bat
-mvn test          :: 43 项：单元 + 集成（H2 + 内存桶，不需要 Docker）
-mvn -Pit verify   :: 另加 Testcontainers 集成（真实 PostgreSQL + Redis，需要 Docker）
+mvn -o test       :: 当前单元/集成；历史数量见 ../ACCEPTANCE.md
+mvn -o -Pit verify :: 需本地已有兼容测试镜像，禁拉取与覆盖配置见运行文档
 python tools/mutation_audit.py :: Java 关键策略变异门禁（临时副本，不修改工作树）
 ```
 
@@ -181,7 +168,7 @@ python tools/mutation_audit.py :: Java 关键策略变异门禁（临时副本�
 
 ### 默认档为什么用 H2，以及这样做的代价
 
-贡献者机器上不一定有 Docker（本项目的开发机就没有）。如果整套测试都要求真实 PG，
+贡献者机器上不一定有 Docker；本机已安装，仍需先检查实际路径与缓存。如果整套测试都要求真实 PG，
 本地就只能跑单元测试，集成测试会长期处于"只有 CI 知道"的状态。
 
 代价必须说清楚：**H2 不能替代真实 PostgreSQL 做验证**。它验证的是
@@ -197,6 +184,8 @@ python tools/mutation_audit.py :: Java 关键策略变异门禁（临时副本�
 > ```bat
 > set JAVA_HOME=%CD%\..\.toolchain\jdk
 > set PATH=%JAVA_HOME%\bin;%CD%\..\.toolchain\maven\bin;%PATH%
-> mvn -B test
+> mvn -o -B test
 > ```
 > 详见 [../../说明材料/本地构建.md](../../说明材料/本地构建.md)。
+
+MySQL 升级后需增加真实 MySQL 的迁移、锁和隔离测试；H2/历史 PG 结果不能代替。跳过的集成测试不得记为通过。

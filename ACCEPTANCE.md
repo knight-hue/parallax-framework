@@ -1,5 +1,7 @@
 # 2026-10-20 本机验收记录
 
+范围声明：本文记录 Java 平台升级前的既有实现与原始产物，保留 PostgreSQL 等当时环境。最终目标见 [PROJECT_GOALS.md](PROJECT_GOALS.md)。本文不证明 MySQL 迁移、Java 业务接管、分布式执行或新增原理实验已经通过验收。
+
 使用已有 .venv、Node、JDK、Maven、Docker 和缓存镜像；本轮没有下载安装依赖、工具或镜像，没有使用 DeepSeek。一级目录 .github 未改动。
 
 ## 软件门禁

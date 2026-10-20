@@ -2,9 +2,17 @@
 
 更新：2026-10-20。
 
-以 [PROJECT_STATUS.md](PROJECT_STATUS.md)、[ACCEPTANCE.md](ACCEPTANCE.md) 和 [OPERATIONS.md](OPERATIONS.md) 为当前事实来源。`../说明材料/开发交接记录-2026-10-17.md` 保留历史记录，不代表当前状态。
+最终目标以 [PROJECT_GOALS.md](PROJECT_GOALS.md) 为准，技术执行以 [JAVA_BACKEND_PLAN_V2.md](JAVA_BACKEND_PLAN_V2.md) 为准；[PROJECT_STATUS.md](PROJECT_STATUS.md)、[ACCEPTANCE.md](ACCEPTANCE.md) 和 [OPERATIONS.md](OPERATIONS.md) 分别记录当前事实、既有验收和当前运行方式。`../说明材料/开发交接记录-2026-10-17.md` 保留历史记录，不代表当前状态。
 
-本轮完成传递共同上游约束、隔离修复审批回归、Receipt 开放适配、可选 AST 风险上下文、认证前端代理和生产配置，并使用本机工具、缓存镜像和用户配置的兼容模型实测。密钥仅在忽略的 `backend/.env`，示例文件不保存密钥。
+## 当前接手方向
+
+Java 从网关升级为平台业务主体；平台统一使用 MySQL；Python 保留独立证据装配和隔离执行。秒杀与 XA/TCC/Seata 放入独立实验，报告安全分享后置。不得沿用“Java 只做薄网关”“不需要组织用户体系”的旧范围限制。
+
+当前尚未实施 MySQL 迁移和 Java 业务接管。下一阶段为 P0：冻结回归基线，明确任务/attempt/事件协议、资源归属和状态权威，落地 MySQL schema、运行档、真库测试及迁移/回退预演；随后按阶段实现核心平台、后置扩展和独立实验。
+
+本轮目标校准只修改文档；以下是先前实现及验收入口。
+
+此前已完成传递共同上游约束、隔离修复审批回归、Receipt 开放适配、可选 AST 风险上下文、认证前端代理和生产配置，并使用本机工具、缓存镜像和用户配置的兼容模型实测。密钥仅在忽略的 `backend/.env`，示例文件不保存密钥。
 
 验收入口：
 

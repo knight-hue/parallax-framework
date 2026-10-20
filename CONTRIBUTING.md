@@ -2,6 +2,8 @@
 
 感谢你有兴趣参与 Parallax。本文档说明如何搭建环境、跑测试、以及提交代码的流程。
 
+开发前先阅读 [最终目标与范围](PROJECT_GOALS.md)、[技术实施方案](JAVA_BACKEND_PLAN_V2.md) 和 [当前状态](PROJECT_STATUS.md)。Java 管理平台业务、Python 保留审查机制；MySQL 为目标平台数据库。当前构建仍按 OPERATIONS.md 的既有实现执行，新增实验隔离于默认部署。
+
 ## 1. 环境准备
 
 需要 **Python 3.11+**。

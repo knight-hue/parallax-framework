@@ -1,10 +1,10 @@
-﻿# Parallax（视差）
+# Parallax（视差）
 
 [![CI](https://github.com/knight-hue/parallax-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/knight-hue/parallax-framework/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](backend/pyproject.toml)
 
-> **面向 AI 生成代码审查的独立证据装配与可验证审计框架**
+> **面向研发团队的智能代码审查与修复协作平台，以独立证据装配为审查引擎，由 Java 主导平台业务。**
 > 单眼无法判断深度，必须靠两只眼睛从不同位置观察，才能恢复被压平的立体信息。
 > 多智能体从众的本质，就是把 N 个 Agent 压成了一只"平均眼"——视差消失，真相被拍平。
 > Parallax 做的事，就是把视差还给系统。
@@ -12,6 +12,21 @@
 > **先独立，后共识（Independence before consensus）。**
 
 ---
+
+## 项目目标与文档入口
+
+最终目标是 Java 平台后端 + MySQL + Redis + RabbitMQ + Python 审查引擎 + Next.js 工作台，形成仓库接入、权限与预算、可靠审查、人工审批和隔离回归的完整闭环。保留可插拔框架、CLI、Receipt 协议和可复现实验，服务 Java 后端主力项目与开源框架工具展示。
+
+**当前代码仍使用 PostgreSQL 和 Java 平台网关，任务管理主要在 Python。目标升级尚未完成。** 秒杀与 XA/TCC/Seata 是独立实验，报告安全分享与短链后置。
+
+| 文档 | 用途 |
+|---|---|
+| [最终目标](PROJECT_GOALS.md) | 定位、职责、范围和完成判据 |
+| [技术升级方案](JAVA_BACKEND_PLAN_V2.md) | Java 技术栈、实施阶段、原理实验与验收 |
+| [当前状态](PROJECT_STATUS.md) / [开发交接](PROJECT_HANDOFF.md) | 已实现事实、差距和下一步 |
+| [验收记录](ACCEPTANCE.md) / [运行说明](OPERATIONS.md) | 历史证据与当前代码的可执行命令 |
+
+以下核心机制属于可复用的审查引擎，不因平台升级而移除。
 
 ## 1. 要解决的问题
 
@@ -77,7 +92,7 @@ Agent 会迅速学会"不要第一个说不同意见"，于是我们在框架内
 
 ---
 
-## 3. 架构
+## 3. 审查引擎与平台架构
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -114,7 +129,7 @@ Agent 会迅速学会"不要第一个说不同意见"，于是我们在框架内
 `CoverageMatrix` / `RunManifest` / `AuditReceipt` / `IndependenceProfile` /
 `ProvenanceGraph`。
 
-### 两层分工：Python 管装配，Java 管平台
+### 当前实现：Java 平台网关与 Python 审查服务
 
 ```
 前端 / 集成方
@@ -124,7 +139,7 @@ Agent 会迅速学会"不要第一个说不同意见"，于是我们在框架内
 │  Java 网关（平台层）                          │
 │  身份与配额 · 运行记录 · 分布式限流 · 可观测性 │
 │                                               │
-│  约定：**无编排逻辑，可有平台能力**            │
+│  当前：网关入口，尚未接管完整业务              │
 └───────────────────────────────────────────────┘
      │  X-Trace-Id / X-Parallax-Credential-Id
      ▼
@@ -137,12 +152,19 @@ Agent 会迅速学会"不要第一个说不同意见"，于是我们在框架内
 └───────────────────────────────────────────────┘
 ```
 
-**为什么要拆成两层而不是都写在 Python 里**：这条边界不是为了炫技，
-而是因为两者的失效方式完全不同。编排逻辑写错了会得到错结论；
-平台能力写错了会让人**看不到**自己已经超支。后者需要的是事务、唯一约束、
-跨实例计数——这些恰是 JVM 生态最成熟的地方。
+这张图描述当前实现。Java 网关现有认证、配额、运行记录与流控能力；Python 仍负责任务管理与内部事件。当前边界不代表最终平台范围。
 
-分工的唯一判据：**能在 5 秒内说清"这段代码错了会导致什么"，就属于这一层。**
+### 目标架构：Java 管业务生命周期，Python 管审查机制
+
+```text
+前端 / CI → Java 平台后端 → MySQL（业务、任务、事件、额度、Outbox）
+                  │       → Redis（缓存、限流、通知）
+                  │       → 产物存储（快照、报告、补丁）
+                  └→ Outbox 派发 → RabbitMQ → Python 审查 Worker / 隔离执行
+                                             └→ 版本化事件和结果回报 Java
+```
+
+Java 模块化单体管理用户/组织/项目、仓库、策略、任务状态、预算、结果与审批。Python 保留独立取证、反证、聚合和补检；平台状态由 Java 统一管理，CLI/离线模式保持独立可用。跨进程协议、attempt/fencing、幂等和恢复按技术方案实施，尚未以当前服务链路验收。
 
 ---
 
@@ -151,8 +173,7 @@ Agent 会迅速学会"不要第一个说不同意见"，于是我们在框架内
 ```bat
 cd backend
 
-python -m venv .venv
-.venv\Scripts\python.exe -m pip install -e ".[dev]"
+:: 使用已有虚拟环境与依赖；先核查本地工具，不自动安装
 
 :: 跑测试（不依赖网络与 API key）
 .venv\Scripts\python.exe -m pytest
@@ -167,9 +188,7 @@ python -m venv .venv
 .venv\Scripts\python.exe -m parallax.cli audit .\parallax --out runs\report.md
 ```
 
-> **本机没有全局 node / mvn / javac 时**：仓内 `.toolchain/` 放了一份便携工具链
-> （node / JDK 21 / Maven，已 gitignore）。前端与网关的完整构建命令见
-> [../说明材料/本地构建.md](../说明材料/本地构建.md)。
+> 使用本机已有 Python、Node、JDK 21、Maven 和 Docker，先定位工具及缓存。当前完整链路与离线验证见 [OPERATIONS.md](OPERATIONS.md)；已有 `.toolchain/` 仅为本地缓存，不作为重新下载或安装的理由。
 
 ### 常用参数
 
@@ -222,116 +241,25 @@ class MyValidator:                    # ③ 可选：入账否决权
 
 ---
 
-## 6. 当前状态与边界
+## 6. 当前状态与目标差距
 
-| 模块 | 状态 |
+已实现独立证据装配引擎、Claim/Receipt 与声明血缘约束、可选反证和风险上下文、审阅后隔离修复、FastAPI/SSE、Next.js 工作台及 Java 网关的平台基础。
+
+2026-10-20 既有验收：Python 290 项，Java 47 项单元/集成与 12 项真实 PostgreSQL/Redis 检查，前端构建及 2 项 SSE 检查。本机强认证链路和独立真实模型/修复实验有原始产物；本轮文档校准没有重跑测试。
+
+| 最终目标 | 当前差距 |
 |---|---|
-| 领域模型、扩展点协议 | ✅ 完成 |
-| 盲读分区 / 账本 / 聚合器 / 覆盖率 / 声誉 | ✅ 完成 + 单测覆盖 |
-| LangGraph 编排（含补检回环） | ✅ 完成 |
-| 代码审查插件（RepoAdapter + CodeAuditReader） | ✅ 完成 |
-| 模型客户端（OpenAI / OpenAI-compatible）+ 离线假客户端 | ✅ 已实现；真实外部调用按环境连通性单独验收 |
-| LLM 仲裁器 | ✅ 完成（默认关闭） |
-| CLI + Markdown/JSON 报告 | ✅ 完成 |
-| 对照实验台（8 个实验臂） | ✅ 包含单轮分片盲读对照、生效配置与失败记录 |
-| 语料生成器（可复现，三档规模至 2712 行） | ✅ 完成 |
-| **FastAPI 服务层 + SSE** | ✅ 完成，**已端到端联调**（含断线重放） |
-| **Next.js 可视化前端** | ✅ 完成，构建与 lint 通过（明暗双色工作台） |
-| **Java 网关 · 平台层** | ✅ 完成（身份配额 / 运行记录 / 分布式限流 / 指标 / 链路追踪），**已端到端联调** |
-| Docker 部署（compose 四服务 + 可选 infra profile） | ✅ 完成，`compose config` 校验通过 |
-| 开源治理（License / 贡献指南 / 安全策略 / CI 八项门禁） | ✅ 完成 |
-| Receipt、独立性画像、可证伪 Claim、离线/真实模型反证和证据血缘 | ✅ 已实现，真实模型反证默认关闭 |
-| 自适应补检调度 | ✅ 已实现，按硬缺口/争议/孤证确定性排序，可配置关闭 |
-| 跨任务声誉持久化 | ✅ 已实现，服务层 SQLite；多副本可替换 Postgres/Redis 端口 |
-| 跨文件组合型缺陷（P0-4） | ✅ 已加入可复现语料生成器与 ground truth 校验 |
-| 测试 | ✅ Python **290 项** + Java 47 项单元/集成与 12 项真实 PostgreSQL/Redis + 前端构建及 2 项 SSE 检查 |
-| 任务领取与恢复 | ✅ 文件租约和事件恢复；当前支持单 API worker，不承诺跨节点协调 |
-| 审阅修复与隔离回归 | ✅ 补丁摘要批准、审查版本校验、Docker 原副本失败/修复副本通过，原仓库不自动写回 |
-| Receipt 开放适配与风险上下文 | ✅ JSONL/Callback 接口，可选 AST 导入/配置/权限装饰器关联 |
+| MySQL + Java 平台业务 | 当前仍是 PostgreSQL + 网关；组织项目权限、策略和任务状态机待升级 |
+| 原子预算与可靠执行 | 待实现预占/结算/释放、Outbox/Inbox、RabbitMQ、attempt/fencing、心跳和跨实例事件 |
+| 研发闭环 | 补齐 Java 侧审批/产物管理、PR 集成与 Java 缺陷样例 |
+| 缓存、容量与诊断 | Redisson 缓存治理、多实例故障、JVM 排障和实际环境验收待完善 |
+| 后置扩展与独立实验 | 安全分享后置；JVM/AQS/MySQL/Redis/Spring、XA/TCC/Seata 和秒杀实验分别验收 |
 
-### 当前升级边界与后续路线
+当前文件租约按单 API worker 使用，不承诺跨节点协调或 exactly-once。AST 上下文只是有限语法近似；声明血缘不能发现所有未知共同来源；high_confidence 不是正确性证明，指定回归通过不等于完整无缺陷。
 
-2026-10-20 已完成声明血缘的传递共同上游检测、独立支持阻断、人工审阅后的隔离修复回归、
-协议适配和认证前端代理。共享摘要/工具结果不能靠更换 Reader 身份变成独立支持。
-真实模型修复和本机完整生产构建链路均已实测，证据见 [ACCEPTANCE.md](ACCEPTANCE.md)。
-可选 AST 上下文不是完整动态语义分析；未披露的共同来源无法被证明不存在。
+真实无标注仓库不能报告 precision/recall。兼容端点 gpt-6.1-sol 的 urllib3/util 三文件子集完成 5 臂 × 3 次有效重复，不代表完整仓库或机制收益已获得统计证明。历史 DeepSeek/合成语料结果按原条件保留，不混入新验收。
 
-`K*` 是本项目采用的有效独立通道评估思想，不是 Parallax 首创。真实仓库没有 ground truth 时，
-只报告独立性、冗余、覆盖、成本和失败数，不把结果写成召回率或精确率。完整路线见
-[`PROJECT_STATUS.md`](PROJECT_STATUS.md) 和同级目录的 [`../说明材料/最终完成路线图.md`](../说明材料/最终完成路线图.md)。
-
-历史 DeepSeek 产物仅作为旧基线。本次使用用户配置的兼容端点 gpt-6.1-sol，完成 urllib3/util
-三文件子集的 5 臂 × 3 次重复，15/15 有效、Reader 失败 0。它不是完整仓库或准确率验收。
-输出 K* 与证据分区画像分开解读；零输出者不能被静默从所有 Reader 的分母中排除。
-
-> 本机已实际验证 Docker 隔离执行、PostgreSQL/Redis 及生产构建服务链路。
-> 缺少的项目 app/正式 worker 镜像没有下载或构建，公网服务器/TLS 尚未部署。
-> 生产配置、审批隔离、备份恢复和支持拓扑见 [OPERATIONS.md](OPERATIONS.md)。
-
-### Java 网关的平台能力
-
-| 能力 | 做法 | 为什么这样做 |
-|---|---|---|
-| 身份与配额 | `X-API-Key` → SHA-256 摘要查库；三重额度（日运行数 / 日 token / 月 token） | 明文 key 只在签发时返回一次，服务端不存；库被拖走也拿不到可用凭据 |
-| 配额执行时机 | 在**转发之前**校验，超限 429 并带 `used`/`limit`/`resetsAt`/`Retry-After` | 事后扣减看起来一样能"记账"，但用户会在额度已满时继续烧掉真实模型费用 |
-| 运行次数计数 | 按**提交**计数，不按完成计数 | 只统计完成的话，用户能在第一次完成之前并发提交上千次 |
-| 记账 | 完成回调写账本，按 `run_id` 唯一约束**幂等** | 回调可能被重投，没有约束就会重复计费 |
-| 运行历史 | `audit_run` + `audit_event`，按状态/凭据/时间过滤与分页 | 事件只记网关自己观察到的生命周期；编排内部事件留在上游总线，不复制第二份事实 |
-| 分布式限流 | bucket4j-redis + Lettuce，多实例共享同一份配额 | 单实例内存桶在多副本下等于没有配额 |
-| **限流降级** | Redis 不可用时**自动回退内存桶**并进入冷却期 | 限流是保护手段，不该成为单点；冷却避免每个请求都白等一次超时 |
-| 可观测性 | Micrometer 三个业务指标 + `%X{traceId}` 日志格式 | "一直在降级"必须能被发现，否则配额会悄悄退化成单实例口径 |
-| 链路追踪 | `X-Trace-Id` 贯穿网关 → 编排 → 完成回调，并写入 run meta | 没有它，"183 次模型调用"和"网关那边的 429"只能靠时间戳猜关系 |
-
-### 已实测的行为
-
-**机制层面**（[tests/test_engine_e2e.py](backend/tests/test_engine_e2e.py)）：
-
-- 盲读 + `redundancy=2`：一轮内完成交叉验证并收敛
-- **严格分区（`redundancy=1`）+ 覆盖率补检：交叉验证跨轮涌现**——第一轮全是孤证，
-  监控发现独立证据覆盖不足后派出**全新 Reader**，第二轮把孤证升为高置信，随后因"无新增主体"收敛
-- 反证：关掉补检后，严格分区只能得到孤证
-- 对照组可测出从众损失（风格化从众模拟器）
-
-**真实模型层面**（[../说明材料/P0-验证结果.md](../说明材料/P0-验证结果.md)，2712 行 / 48 缺陷 / 6 Reader）：
-
-| 实验臂 | 轮次 | Agent 数 | 召回 | **K\\*** | **独立通道占比** | 冗余率 | 调用 |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| `baseline_shared`（全部证据 + 共享结论） | 1 | 6 | 48/48 | **1.02** | **17.1%** | 82% | 48 |
-| `sharded_shared`（同分片 + 共享结论） | 1 | 6 | 48/48 | 2.34 | 39.1% | 63% | 26 |
-| `no_peers_all_evidence`（全部证据，不共享） | 1 | 6 | 48/48 | 1.40 | 23.4% | 75% | 48 |
-| `blind_no_coverage`（严格分区） | 1 | 6 | 48/48 | **3.56** | **59.3%** | **1%** | **11** |
-| `blind_full`（本框架完整机制） | 3 | **18** | 48/48 | 5.04 | 28.0% | 73% | 72 |
-
-> ⚠️ **不要直接比较裸 K\\*。** 每一轮补检都会生成**全新 Reader 身份**（这是"补检不破坏盲读"的前提），
-> 所以 `blind_full` 的 3 轮意味着 **18 个 Agent**，它的 K\\* 上限是 18 而不是 6。
-> `1.02 → 5.04` 是「6 Agent vs 18 Agent」的比法，**不是同口径**。
->
-> **同口径比较**（都是 1 轮 / 6 Agent）应看独立通道占比：
-> `baseline_shared` **17.1%** → `blind_no_coverage` **59.3%**，
-> 固定预算组 `budget_shared` **16.7%** → `budget_blind` **62.5%**。
-> 即：**同样的 Agent 数，传统协作只发挥出约 17% 的独立性，分区方案发挥出约 60%。**
->
-> 这个口径错误是在[真实仓库验证](../说明材料/B1-真实仓库验证.md)阶段发现的，已修正。
-
-**核心结论：无论固定哪个约束，信息分区都占优。**
-
-| 约束 | 对照 | 本框架 |
-|---|---|---|
-| **固定预算**（同样 48 次文件读取、11–12 次调用） | 覆盖 8/48 文件 → **召回 17%** | 覆盖 48/48 → **召回 100%** |
-| **固定召回**（都是 48/48） | 48 次调用、冗余率 82% | **11 次调用（−77%）、冗余率 1%** |
-
-四条可测收益：
-
-- **固定预算下召回率 17% → 100%**（`budget_shared` 8/48 vs `budget_blind` 48/48，花费相同）
-- **同口径独立通道占比 17% → 59%**：传统协作下 **6 个 Agent 的信息量约等于 1 个**（重叠矩阵趋于秩 1）
-- **同等召回率下调用量减少 77%**（48 → 11）
-- **冗余率从 82% 降到 1%**（对应"重复发现/噪音"痛点）
-
-**关于"不限预算"的重要说明**：此前测出"所有臂召回率都触顶"，但那是**不限预算**的结果——
-控制组让 6 个 Reader 各自通读全部 48 个文件，总阅读量是盲读的 **6 倍**。
-在这种前提下"所有人都读全部"必然是分区的超集，召回率**不可能**偏向分区。
-**"不限预算"不是公平比较，因为它把约束偷偷送给了对照组。**
-把预算约束显式建模后（上表第一行），差异立刻显现。
+详见 [当前状态](PROJECT_STATUS.md)、[历史验收](ACCEPTANCE.md)、[最终目标](PROJECT_GOALS.md) 与 [实施方案](JAVA_BACKEND_PLAN_V2.md)。公网部署、正式执行镜像和现场运维验收仍未完成。
 
 ---
 
@@ -354,7 +282,7 @@ backend/                        Python 编排核心（唯一包含机制的部�
 └─ tests/           290 项（以 pytest 实际收集数为准）
 
 frontend/                       Next.js 工作台（提交 / 实时事件流 / 账本 / 覆盖率矩阵）
-gateway/                        Java 网关：平台层（身份配额 / 运行记录 / 限流 / 指标）
+gateway/                        当前 Java 平台网关，后续扩展为平台业务后端
 ├─ src/main/resources/db/migration/   Flyway 迁移（PG 与 H2 都可执行）
 ├─ src/test/java/.../support/         测试用的上游 HTTP 服务桩
 └─ README.md                          网关自身的说明与取舍
@@ -364,48 +292,24 @@ eval/results/                   合成语料上的对照实验原始产物
 eval/real/                      真实开源仓库上的对照实验（urllib3 / anyio）与重复实验
 ```
 
-> **详细文档与参赛材料不在本仓库内。** 它们位于本项目**同级目录**的 `说明材料/` 下：
-> 实验结论与缺陷复盘、项目计划书、本地构建说明，以及参赛材料。
+> 最终目标、技术方案、当前状态、验收与运行文档均在本仓库内。工作区同级 `说明材料/` 额外保留计划摘要、历史复盘及参赛材料。
 >
 > 这也意味着 README 里指向 `../说明材料/` 的链接**在 GitHub 上是打不开的**（那不在仓库里），
 > 但在本地开发环境中可达。
 
 ---
 
-## 8. 跑起完整系统
+## 8. 运行当前实现
 
-三块可以独立运行，也可以串成一条链路。**推荐按下面顺序**：
+使用已有工具、依赖与缓存镜像，按 [OPERATIONS.md](OPERATIONS.md) 配置并运行。当前链路为工作台 → Java 网关 → Python → PostgreSQL/Redis；MySQL 和 RabbitMQ 尚未替换当前运行档。
 
-```bat
-:: ① 编排服务（必需）
-cd backend
-.venv\Scripts\python.exe -m parallax.service.app
-::   http://localhost:8000/docs 是自动生成的接口文档
+仅校验生产合并配置，不启动服务或下载镜像：
 
-:: ② 工作台（可选，但演示效果好得多）
-cd frontend
-npm install
-npm run dev
-::   http://localhost:3000
-
-:: ③ 网关（可选；需要平台能力——配额、运行历史、多实例限流——时才起）
-::    需要 PostgreSQL。切到 gateway profile 会连 postgres 与 redis 一起起来。
-docker compose --env-file backend/.env --profile gateway up -d
-::   http://localhost:8080/swagger-ui.html 是自动生成的接口文档
-
-::    本地直接跑（不用容器）时需要先备好 PostgreSQL：
-::    set PARALLAX_IDENTITY_ENABLED=true
-::    set PARALLAX_DB_URL=jdbc:postgresql://127.0.0.1:5432/parallax
-::    cd gateway
-::    mvn spring-boot:run
+```powershell
+docker compose --env-file backend/.env -f docker-compose.yml -f docker-compose.production.yml --profile gateway config --quiet
 ```
 
-或一把起全部：
-
-```bat
-docker compose --env-file backend/.env up -d                    :: api + web
-docker compose --env-file backend/.env --profile gateway up -d  :: 再加 网关 + PostgreSQL + Redis
-```
+实际启动要求本地已经具备对应镜像，使用运行文档中的 `--no-build --pull never`。Python CLI 可独立使用；目标平台业务以 Java 为必需入口。
 
 ### Git/PR 来源与复现验证
 
@@ -418,12 +322,11 @@ Claim 的 `reproduction_plan.command` 是显式 argv 列表。设置 `PARALLAX_E
 服务使用禁止拉取镜像、无网络、非 root、只读源码/根文件系统、资源受限的 Docker 执行器。
 应部署在专用 worker；普通 API 保持执行关闭。Subprocess 执行器只供可信夹具，不是安全沙箱。
 
-### 三条平台的取舍（写在这里，免得被当成遗漏）
+### 平台升级边界
 
-- **不引入用户注册体系**：单租户部署，API Key 足够。引入用户库会让网关变成第二个业务后端。
-- **任务领取与恢复**：文件租约用于单 API worker；过期接管有竞态，多副本扩容前应替换协调与事件存储。
-- **不把编排事件再存一份到网关**：上游已有可重放的事件总线，复制只会造出
-  两个可能不一致的事实来源。运行详情直接给出上游的事件流地址。
+- 用户、组织与项目资源权限属于核心目标，当前单租户共享管理员入口只是基线。
+- 当前任务租约与内部事件在 Python；升级后 Java/MySQL 维护平台权威状态，通过版本化协议连接 Worker。
+- 秒杀与分布式事务组件只在独立实验中启动；安全分享后置，默认平台依赖与实验依赖分别管理。
 
 ---
 
