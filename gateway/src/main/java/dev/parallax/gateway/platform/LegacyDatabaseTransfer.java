@@ -33,9 +33,10 @@ public final class LegacyDatabaseTransfer {
             new Table("platform_repository", "id", "id,project_id,name,clone_url,created_by,created_at"),
             new Table("platform_policy_version", "id", "id,project_id,version_number,config_json,config_sha256,created_by,created_at"),
             new Table("platform_budget_account", "organization_id", "organization_id,token_limit,reserved_tokens,used_tokens,updated_at"),
-            new Table("platform_task", "id", "id,organization_id,project_id,repository_id,policy_version,created_by,request_key,request_sha256,commit_sha,token_budget,deadline,state,attempt,fencing_token,last_sequence,prompt_tokens,completion_tokens,settled,lease_until,result_sha256,created_at,updated_at"),
+            new Table("platform_task", "id", "id,organization_id,project_id,repository_id,policy_version,created_by,request_key,request_sha256,commit_sha,token_budget,deadline,state,attempt,fencing_token,last_sequence,prompt_tokens,completion_tokens,settled,lease_until,result_sha256,created_at,updated_at,recovery_reason"),
             new Table("platform_budget_ledger", "id", "id,organization_id,task_id,kind,tokens,at"),
-            new Table("platform_outbox", "id", "id,task_id,attempt,kind,payload,status,available_at,claim_token,claim_until,publish_attempts,created_at,published_at"));
+            new Table("platform_outbox", "id", "id,task_id,attempt,kind,payload,status,available_at,claim_token,claim_until,publish_attempts,created_at,published_at"),
+            new Table("platform_task_event", "id", "id,event_id,task_id,attempt,fencing_token,sequence_number,kind,payload,payload_sha256,received_at"));
 
     public record Verification(String table, long rows, String sha256) { }
     private static Calendar utc() { return Calendar.getInstance(TimeZone.getTimeZone("UTC")); }

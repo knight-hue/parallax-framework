@@ -89,9 +89,45 @@ Under `/api/v1/platform/projects/{projectId}/tasks`:
   associations independently of Java checks.
 - GET collection uses seek pagination; GET `/{id}` requires VIEWER. POST `/{id}/cancel`
   allows the submitting REVIEWER or a MAINTAINER. Queued cancellation settles at zero,
-  refunds once and supersedes pending dispatch messages. Dispatched cancellation is
-  connected in the worker-coordinator module.
+  refunds once and supersedes pending dispatch messages. Dispatched/running cancellation
+  records CANCEL_REQUESTED and a cancel Outbox; a result racing cancellation may win.
 
-This module durably queues work; it does not yet publish to RabbitMQ or invoke the
-Python engine. The legacy audit entry point remains independent until worker integration
+This module durably queues work; broker publication and Python execution integration are
+separate steps. The legacy audit entry point remains independent until worker integration
 and the workbench are switched. Budget invariants are enforced in MySQL, not Redis.
+
+## Worker coordination and durable event replay
+
+`POST /api/v1/internal/platform/events` accepts the strict shared v1 WorkerEvent contract
+with `X-Internal-Token`. Missing configuration returns 503; missing/wrong token returns
+401. This ingress must stay on a private network. A tenant JWT does not authorize it.
+
+- The platform grants execution only after accepting STARTED for a currently dispatched,
+  leased attempt. Workers must wait for this acknowledgement before spending/model I/O.
+- Event ID duplicates with identical canonical content are acknowledged without changes.
+  ID reuse with different content, stale attempts/fences, gaps, terminal reopen and late
+  heartbeats are rejected. Usage is cumulative and monotonic within the token reservation.
+- Inbox/event insert, state update and final budget settlement are one transaction.
+  Task/account locks serialize related work; READ COMMITTED for ingress avoids absent-key
+  gap locking between unrelated tenants. All hard limits remain enforced by the database.
+- STARTED/PROGRESS renew a server-clock lease (default 120 seconds, bounded by deadline).
+  CANCEL_REQUESTED heartbeats do not extend that cancellation lease. A successful final
+  result may race cancellation; whichever terminal transition commits is authoritative.
+- Coordinator recovery retries only DISPATCHED work with no accepted STARTED, increasing
+  attempt/fence (default maximum 3). Exhausted unclaimed work refunds; QUEUED deadlines
+  cancel/refund. Running workers lost after a grant charge the full reservation
+  conservatively with `WORKER_LOST_USAGE_UNCERTAIN`; reported token counters remain the
+  last observation. This is an uncertainty charge, not a measured provider invoice. No
+  automatic restart spends a fresh full budget while the old worker may still be alive.
+- Recovery currently has a transactional service entry point. The reliable dispatch module
+  must wire bounded background scans and operational metrics before claiming automatic
+  recovery or multi-instance production execution.
+
+`GET /api/v1/platform/projects/{projectId}/tasks/{taskId}/events?after=0&limit=50`
+checks live project membership and returns `{items,nextCursor}`. Cursor is the database
+event ID (not worker sequence); events include system transitions and accepted worker
+receipts, survive restart and remain ordered across attempt changes. Use the last returned
+ID for future polling; a null nextCursor only means the current page reaches today's end.
+No process-local queue is the source of platform progress. SSE/workbench integration is
+still pending. A success digest is a contract receipt; artifact retrieval/verification is
+implemented in the artifact integration stage.
