@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "task_id": "task-example",
+  "attempt": 2,
+  "fencing_token": 7,
+  "organization_id": "org-example",
+  "project_id": "project-example",
+  "repository_id": "repository-example",
+  "commit_sha": "0123456789abcdef0123456789abcdef01234567",
+  "policy_version": "policy-v1",
+  "token_budget": 10000,
+  "deadline": "2030-01-01T00:00:00Z",
+  "trace_id": "trace-example"
+}
