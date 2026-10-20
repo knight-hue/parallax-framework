@@ -13,3 +13,14 @@
 当前资源核查：本机有 MySQL 8.0.19、Java 21、Maven、Node、Docker；未找到 MySQL Connector/J、Flyway MySQL、Redisson、RabbitMQ Java 客户端的已有 jar。目标 MySQL 8.4 尚未在本机发现。未下载资源，不能以现有 PostgreSQL/H2 证明 MySQL 完成。
 
 下一步：平台用户/组织/项目权限与 MySQL 运行档。最终全项目完成情况见 PROJECT_STATUS.md，单模块完成不代表最终目标完成。
+
+## 用户、组织与项目权限基础
+
+状态：已实现，当前 PostgreSQL/H2 迁移基线；尚未管理旧审查任务的项目归属。
+
+- 管理员创建/停用用户、BCrypt 密码、用户 JWT 与当前有效状态检查。
+- 组织 OWNER/MAINTAINER/REVIEWER/VIEWER，项目资源授权、成员撤销即时生效、保护唯一所有者及事务内操作审计。
+- 用户 JWT 暂时禁止访问没有项目归属的旧接口；旧管理员/API Key 兼容，不能冒充平台用户。
+- 真 HTTP 权限测试 5 项通过；Java 全量离线 verify 61 项通过，未运行数据库 IT。Python 全量 312 项通过。
+- API 契约及边界见 gateway/PLATFORM_API.md。当前成员权限以组织为范围，尚无单项目覆盖和管理 UI。
+- 用户已授权仅由 Maven 补齐必需依赖及传递依赖；不下载工具、数据库安装包或镜像。已获取 MySQL Connector/J 9.7.0。

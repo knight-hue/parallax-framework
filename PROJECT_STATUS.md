@@ -8,7 +8,7 @@
 
 ## 新目标待完成范围
 
-实施已开始：P0.1 版本化任务/事件契约及生命周期已通过 Java 9 项、Python 22 项和 Ruff；尚未接管当前 runner。各模块记录见 [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md)。
+实施已开始：任务协议/生命周期及用户、组织、项目权限基础已落地；用户 JWT 禁止访问未关联项目的旧接口。Java 离线 verify 61 项、Python 312 项通过，尚未接管当前 runner、迁移 MySQL 或完成新数据库 IT。各模块记录见 [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md)。
 
 | 范围 | 当前差距 |
 |---|---|

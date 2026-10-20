@@ -51,6 +51,14 @@ public class JwtService {
     }
 
     public String issueAccessToken(String subject, String role) {
+        return issue(subject, role, null);
+    }
+
+    public String issueUserToken(String userId, String username) {
+        return issue(username, AuthPrincipal.ROLE_VIEWER, userId);
+    }
+
+    private String issue(String subject, String role, String userId) {
         if (key == null) {
             throw new IllegalStateException("未配置 PARALLAX_JWT_SECRET，无法签发令牌");
         }
@@ -59,6 +67,7 @@ public class JwtService {
                 .subject(subject)
                 .claim(CLAIM_TYPE, TYPE_ACCESS)
                 .claim("role", role)
+                .claim("user_id", userId)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusMillis(accessTtlMs)))
                 .signWith(key)
