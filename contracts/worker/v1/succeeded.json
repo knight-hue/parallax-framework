@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "event_id": "event-example",
+  "task_id": "task-example",
+  "attempt": 2,
+  "fencing_token": 7,
+  "sequence": 3,
+  "kind": "SUCCEEDED",
+  "occurred_at": "2026-10-20T00:00:00Z",
+  "result_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "prompt_tokens": 100,
+  "completion_tokens": 20
+}
