@@ -95,6 +95,15 @@ def test_render_marks_failed_arms_as_excluded():
     assert "quota exhausted" not in text
 
 
+def test_pairing_uses_same_repetition_after_different_failures():
+    reps = repetitions([1.0, 1.1, 1.2], [2.0, 2.1, 2.2])
+    reps[0][0].errors = ["provider timeout"]
+    reps[1][1].errors = ["provider timeout"]
+    text = render_variance(reps)
+    assert "两臂同时有效的 1 次" in text
+    assert "判定：稳定" not in text
+
+
 # ---- 稳定性判定 ----
 
 

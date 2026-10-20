@@ -1,0 +1,95 @@
+[
+  {
+    "claim_id": "2e04639a6b5a",
+    "fingerprint": "proxy.py#logic@20",
+    "statement": "[logic] proxy.py:35-40 HTTPS 代理的转发例外受到代理协议和显式配置约束，不构成隧道判断缺陷（确认并非缺陷）",
+    "claim_type": "logic",
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "proxy.py:35-40",
+    "rationale": "该分支只有在代理使用 HTTPS、提供了代理配置且显式启用 use_forwarding_for_https 时才返回 False。HTTP 目标已由前面的分支处理；对于 HTTPS 目标，通过 HTTPS 代理转发是这里明确支持的行为。未提供代理配置时，短路求值会避免访问其属性，并最终返回 True。因此，不能将此分支判定为遗漏 CONNECT 或对 None 的属性访问。",
+    "title": "HTTPS 代理的转发例外受到代理协议和显式配置约束，不构成隧道判断缺陷",
+    "line_start": 35,
+    "line_end": 40,
+    "verification_status": "unverified",
+    "independent_support": 0,
+    "source_refs": [
+      {
+        "evidence_id": "fe70863714b5",
+        "adapter": "repo",
+        "locator": "proxy.py:35-40",
+        "quote": "    if (\n        proxy_url.scheme == \"https\"\n        and proxy_config\n        and proxy_config.use_forwarding_for_https\n    ):\n        return False"
+      }
+    ]
+  },
+  {
+    "claim_id": "9cf3a9e1d4a9",
+    "fingerprint": "connection.py#logic@0",
+    "statement": "[logic] connection.py:11-15 仅在 TYPE_CHECKING 下导入 BaseHTTPConnection 不会导致函数定义失败（确认并非缺陷）",
+    "claim_type": "logic",
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "connection.py:11-15",
+    "rationale": "虽然运行时不会执行 TYPE_CHECKING 分支，但文件首行启用了 from __future__ import annotations，函数定义时不会求值 BaseHTTPConnection，因此正常导入和调用 is_connection_dropped 不会因此触发 NameError。若外部使用 typing.get_type_hints 求值该注解，则需要补充相应命名空间；给出的文件中没有这种调用，不能据此确认缺陷。",
+    "title": "仅在 TYPE_CHECKING 下导入 BaseHTTPConnection 不会导致函数定义失败",
+    "line_start": 11,
+    "line_end": 15,
+    "verification_status": "unverified",
+    "independent_support": 0,
+    "source_refs": [
+      {
+        "evidence_id": "41265d08c4bb",
+        "adapter": "repo",
+        "locator": "connection.py:11-15",
+        "quote": "if typing.TYPE_CHECKING:\n    from .._base_connection import BaseHTTPConnection\n\n\ndef is_connection_dropped(conn: BaseHTTPConnection) -> bool:  # Platform-specific"
+      }
+    ]
+  },
+  {
+    "claim_id": "27c7ce05efd7",
+    "fingerprint": "connection.py#resource_leak@60",
+    "statement": "[resource_leak] connection.py:78-81 连接尝试发生 OSError 时会关闭当前套接字并继续尝试后续地址（确认并非缺陷）",
+    "claim_type": "resource_leak",
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "connection.py:78-81",
+    "rationale": "套接字创建、选项设置、超时设置、绑定和连接均处于同一个 try 内。发生 OSError 时，已经成功创建的套接字会被关闭，随后循环尝试下一个解析地址；如果所有地址均失败，循环后的逻辑会重新抛出最后一次错误。因此，常见的连接拒绝、连接超时或绑定失败路径不会因为重试而遗留套接字。此结论只覆盖 OSError 路径。",
+    "title": "连接尝试发生 OSError 时会关闭当前套接字并继续尝试后续地址",
+    "line_start": 78,
+    "line_end": 81,
+    "verification_status": "unverified",
+    "independent_support": 0,
+    "source_refs": [
+      {
+        "evidence_id": "41265d08c4bb",
+        "adapter": "repo",
+        "locator": "connection.py:78-81",
+        "quote": "        except OSError as _:\n            err = _\n            if sock is not None:\n                sock.close()"
+      }
+    ]
+  }
+]

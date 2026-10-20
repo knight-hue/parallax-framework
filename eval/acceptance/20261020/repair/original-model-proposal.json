@@ -1,0 +1,95 @@
+{
+  "repair_id": "d8c2d5946f394ffdb6265c844a71f8da",
+  "run_id": "8b974f31722f",
+  "claim": {
+    "claim_id": "037cf2bd3651",
+    "fingerprint": "calc.py#logic@0",
+    "statement": "[logic] calc.py:6-7 除数为零时未按契约返回 None（确认存在缺陷）",
+    "polarity": 1,
+    "claim_type": "logic",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "source_refs": [
+      {
+        "evidence_id": "82411b9d7af0",
+        "adapter": "repo",
+        "locator": "calc.py:6-7",
+        "quote": "def divide(a, b):\n    return a / b"
+      }
+    ],
+    "reputation_at_extraction": 0.5,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "trigger_conditions": [
+      "调用 divide(a, 0)，其中 a 为任意值"
+    ],
+    "counter_conditions": [
+      "b 不为零时不会触发该缺陷",
+      "如果调用方明确期望 ZeroDivisionError 而非契约中声明的 None，则不适用"
+    ],
+    "reproduction_plan": {
+      "python": "/usr/bin/python3",
+      "code": "from calc import divide\nassert divide(1, 0) is None"
+    },
+    "verification_status": "confirmed",
+    "metadata": {
+      "severity": "medium",
+      "rationale": "函数契约明确要求 b 为零时返回 None，但当前实现直接执行 a / b。只要 b == 0，Python 就会抛出 ZeroDivisionError，而不是返回 None，导致调用方无法按约定处理零除数。",
+      "title": "除数为零时未按契约返回 None",
+      "line_start": 6,
+      "line_end": 7,
+      "stance": "defect",
+      "line_bucket": 20,
+      "falsifier": "llm-falsifier",
+      "verification_evidence_ids": [
+        "82411b9d7af0"
+      ],
+      "verification_reason": "契约明确要求 b 为零时返回 None，但实现直接执行 a / b，调用 divide(a, 0) 将触发除零错误而非返回 None。",
+      "independent_support": 1,
+      "support_components": [
+        "reader-r0-0"
+      ]
+    }
+  },
+  "source_hashes": {
+    "calc.py": "f681f9464604b85df5059e30893bb35b45a8db24120a77897fb2d1ef480c5b81"
+  },
+  "baseline_hashes": {
+    "calc.py": "f681f9464604b85df5059e30893bb35b45a8db24120a77897fb2d1ef480c5b81",
+    "tests/test_calc.py": "ebea4079e2eb4f0324dc95ba688b7b45325da530cde09fdfd0044bda973839fe"
+  },
+  "plan": {
+    "explanation": "在 divide 中先处理 b == 0，按函数契约返回 None；非零除数仍保持原有除法行为。回归测试捕获原实现的 ZeroDivisionError，并将其转换为可重复的断言失败，从而在原代码失败、修复后通过。",
+    "edits": [
+      {
+        "path": "calc.py",
+        "before": "\"\"\"Payment allocation contract: divide(a, b) returns None when b is zero.\nFor nonzero b return a / b. Standard library only, Python 3.6 compatible.\nRegression runtime: /usr/bin/python3 in an offline Linux container.\n\"\"\"\ndef divide(a, b):\n    return a / b\n",
+        "after": "\"\"\"Payment allocation contract: divide(a, b) returns None when b is zero.\nFor nonzero b return a / b. Standard library only, Python 3.6 compatible.\nRegression runtime: /usr/bin/python3 in an offline Linux container.\n\"\"\"\ndef divide(a, b):\n    if b == 0:\n        return None\n    return a / b\n"
+      }
+    ],
+    "tests": [
+      {
+        "path": "tests/test_calc.py",
+        "before": "",
+        "after": "from calc import divide\n\n\ndef test_divide_by_zero_returns_none():\n    try:\n        result = divide(1, 0)\n    except ZeroDivisionError:\n        result = object()\n    assert result is None, \"divide(a, 0) must return None\"\n\n\nif __name__ == \"__main__\":\n    test_divide_by_zero_returns_none()\n"
+      }
+    ],
+    "regression_command": [
+      "/usr/bin/python3",
+      "tests/test_calc.py"
+    ],
+    "baseline_exit_code": 1,
+    "baseline_failure_contains": "AssertionError: divide(a, 0) must return None"
+  },
+  "patch": "--- /dev/null\n+++ b/tests/test_calc.py\n@@ -0,0 +1,13 @@\n+from calc import divide\n+\n+\n+def test_divide_by_zero_returns_none():\n+    try:\n+        result = divide(1, 0)\n+    except ZeroDivisionError:\n+        result = object()\n+    assert result is None, \"divide(a, 0) must return None\"\n+\n+\n+if __name__ == \"__main__\":\n+    test_divide_by_zero_returns_none()\n--- a/calc.py\n+++ b/calc.py\n@@ -3,4 +3,6 @@\n Regression runtime: /usr/bin/python3 in an offline Linux container.\n \"\"\"\n def divide(a, b):\n+    if b == 0:\n+        return None\n     return a / b\n",
+  "status": "awaiting_approval",
+  "created_at": "2026-10-20T11:10:45.994734+00:00",
+  "events": [
+    "proposal_created"
+  ],
+  "approval_digest": "9fad18b32c857b6a4dd479b26728481643b863756c492aa60ae3ac03a8dfe917"
+}

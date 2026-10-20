@@ -36,8 +36,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import subprocess
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -87,6 +89,13 @@ ARMS: list[Arm] = [
         name="sharded_shared",
         description="公平对照：分片大小与实验组完全相同，但可见彼此结论（隔离出「共享」单独的效果）",
         visibility="shared",
+        redundancy_factor="half",
+        max_rounds=1,
+    ),
+    Arm(
+        name="sharded_blind",
+        description="分片与 sharded_shared 相同且均为单轮，只隔离同伴输出可见性",
+        visibility="blind",
         redundancy_factor="half",
         max_rounds=1,
     ),
@@ -155,6 +164,7 @@ def config_snapshot(settings: Settings, **extra: object) -> dict:
     """
     snapshot: dict[str, object] = {
         "model": settings.llm_model,
+        "reasoning_effort": settings.llm_reasoning_effort,
         "readers": settings.n_readers,
         "redundancy": settings.redundancy,
         "support_threshold": settings.support_threshold,
@@ -164,7 +174,31 @@ def config_snapshot(settings: Settings, **extra: object) -> dict:
         "max_evidence_per_call": settings.max_evidence_per_call,
         "max_batch_chars": settings.llm_max_batch_chars,
         "max_output_tokens": settings.llm_max_output_tokens,
+        "max_llm_calls": settings.max_llm_calls,
+        "max_tokens": settings.max_tokens,
+        "min_independent_support": settings.effective_min_independent_support(),
+        "max_evidence_overlap_rate": settings.max_evidence_overlap_rate,
+        "adaptive_scheduling": settings.adaptive_scheduling,
+        "llm_falsifier": settings.enable_llm_falsifier,
+        "semantic_partitioning": settings.semantic_partitioning,
     }
+    try:
+        repo = Path(__file__).resolve().parents[3]
+        snapshot["git_revision"] = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5,
+        ).stdout.strip()
+        digest = hashlib.sha256()
+        for source in sorted((repo / "backend" / "parallax").rglob("*.py")):
+            digest.update(source.relative_to(repo).as_posix().encode())
+            digest.update(source.read_bytes())
+        snapshot["implementation_sha256"] = digest.hexdigest()
+    except (OSError, subprocess.SubprocessError):
+        snapshot["git_revision"] = "unavailable"
     snapshot.update({k: v for k, v in extra.items() if v not in (None, "")})
     return snapshot
 
@@ -239,6 +273,8 @@ async def run_arm(
 
     from parallax.reporting import render_markdown
 
+    if engine.runtime.pool.failed_readers:
+        errors.append(f"Reader failures: {len(engine.runtime.pool.failed_readers)}")
     if hasattr(client, "aclose"):
         await client.aclose()  # type: ignore[attr-defined]
 
@@ -386,6 +422,8 @@ async def run_repo_arm(
 
     from parallax.reporting import render_markdown
 
+    if engine.runtime.pool.failed_readers:
+        errors.append(f"Reader failures: {len(engine.runtime.pool.failed_readers)}")
     if hasattr(client, "aclose"):
         await client.aclose()  # type: ignore[attr-defined]
 
@@ -440,7 +478,7 @@ def render_summary(results: list[ArmResult], arms: list[Arm] | None = None) -> s
     lines.append("## 主指标对照")
     lines.append("")
     lines.append(
-        "| 实验臂 | 召回率 | 精确率 | 冗余率 | 有效独立通道 K* / Agent 数 | 独立通道占比 | 覆盖率 | 轮次 | 调用 | Reader 失败 |"
+        "| 实验臂 | 召回率 | 精确率 | 冗余率 | 输出 K* / 产出者数 | 产出者归一化占比 | 矩阵填充 | 轮次 | 调用 | Reader 失败 |"
     )
     lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
     for result in results:
@@ -456,8 +494,8 @@ def render_summary(results: list[ArmResult], arms: list[Arm] | None = None) -> s
     if any(m.metrics.recall is None for m in results):
         lines.append(
             "> **召回率与精确率为 `N/A` 说明该任务没有 ground truth。** "
-            "这不会削弱 K\\* 的价值——它由 Agent 之间的**重叠矩阵**算出，"
-            "不需要知道哪条结论是对的，因此是这类无标注任务上唯一仍可测的核心指标。"
+            "输出 K\\* 描述指纹重叠结构，不能证明事实正确或取证独立；"
+            "它与报告中按证据分区计算的独立性画像是两种指标。"
         )
         lines.append("")
 
@@ -465,9 +503,8 @@ def render_summary(results: list[ArmResult], arms: list[Arm] | None = None) -> s
     if len(agent_counts) > 1:
         lines.append(
             "> ⚠️ **本表各臂的 Agent 数不同，请勿直接比较裸 K\\*。** "
-            "每一轮都会生成全新 Reader 身份（这是补检不破坏盲读的前提），"
-            "所以 3 轮 × 6 Reader 的臂实际有 18 个 Agent，它的 K\\* 上限是 18 而不是 6。"
-            "跨臂比较应看 **K\\*/N 占比**，或只比较 Agent 数相同的臂。"
+            "表中 N 只计产出者，排除了零产出的 Reader；同时报告非空分区 Reader 数、"
+            "分区、轮数和 tokens。归一化本身不能消除预算或选择偏差。"
         )
         lines.append("")
 
@@ -515,6 +552,10 @@ def render_summary(results: list[ArmResult], arms: list[Arm] | None = None) -> s
             f"｜Reader 失败 {m.readers_failed}"
         )
         lines.append(f"- 停止原因 `{m.stop_reason}`｜轮次 {m.rounds}")
+        if m.assigned_reader_count is not None:
+            lines.append(
+                f"- 非空分区 Reader {m.assigned_reader_count}｜产出 Claim 的 Reader {m.agent_count}｜输出 K*/已分配 Reader {m.assigned_channels_ratio:.1%}"
+            )
         distinct = (
             str(m.distinct_fingerprints)
             if m.distinct_fingerprints is not None
@@ -556,6 +597,7 @@ def save_results(results: list[ArmResult], out_dir: Path) -> Path:
                 "elapsed_s": r.elapsed_s,
                 "errors": r.errors,
                 "config": r.config,
+                "valid": not r.errors and r.metrics.readers_failed == 0,
             }
             for r in results
         ],
@@ -568,7 +610,7 @@ def save_results(results: list[ArmResult], out_dir: Path) -> Path:
         if result.report_markdown:
             name = f"{result.metrics.task_id}__{result.metrics.arm}.md"
             (out_dir / name).write_text(result.report_markdown, encoding="utf-8")
-        if result.claims:
+        if result.claims is not None:
             # 完整 claim 清单：抽查与后续分析的事实来源，不受报告的 40 条展示上限影响
             payload = [
                 {
@@ -576,6 +618,7 @@ def save_results(results: list[ArmResult], out_dir: Path) -> Path:
                     "fingerprint": c.fingerprint,
                     "statement": c.statement,
                     "claim_type": c.claim_type,
+                    "polarity": c.polarity.value,
                     "severity": c.metadata.get("severity"),
                     "stance": c.metadata.get("stance"),
                     "extracted_by": c.extracted_by,
@@ -589,6 +632,9 @@ def save_results(results: list[ArmResult], out_dir: Path) -> Path:
                     "title": c.metadata.get("title"),
                     "line_start": c.metadata.get("line_start"),
                     "line_end": c.metadata.get("line_end"),
+                    "verification_status": c.verification_status,
+                    "independent_support": c.metadata.get("independent_support"),
+                    "source_refs": [ref.model_dump(mode="json") for ref in c.source_refs],
                 }
                 for c in result.claims
             ]

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Radio, WifiOff } from 'lucide-react';
-import { api } from '@/lib/api';
+import { ApiError } from '@/lib/api';
+import { consumeEvents } from '@/lib/sse';
 import type { ParallaxEvent } from '@/lib/types';
 import { Badge, EmptyState, type BadgeTone } from '@/components/ui/primitives';
 import { formatClock } from '@/lib/utils';
@@ -21,6 +22,8 @@ const EVENT_STYLE: Record<string, { label: string; tone: BadgeTone }> = {
   finalize: { label: '收敛', tone: 'ok' },
   done: { label: '完成', tone: 'ok' },
   failed: { label: '失败', tone: 'danger' },
+  canceled: { label: '已取消', tone: 'neutral' },
+  verification: { label: '反证与复现', tone: 'purple' },
 };
 
 function renderDetail(event: ParallaxEvent): string {
@@ -90,59 +93,34 @@ export function EventStream({
   useEffect(() => {
     if (!runId) return;
 
-    /* EventSource 会在断线时自动重连，并自动带上 Last-Event-ID。
-       后端据此补发缺口事件，所以这里的重连不需要任何额外处理——
-       这正是服务端维护"带序号的事件历史"的价值。 */
-    const source = new EventSource(api.eventsUrl(runId));
-
-    source.onopen = () => {
-      setConnected(true);
-      setError(null);
-    };
-    /* EventSource 只有在收到非 2xx 响应或响应体解析失败时才会彻底放弃；
-       其余情况它自己会重连（并带上 Last-Event-ID）。所以只在 CLOSED 时报错，
-       否则重连中的短暂中断会刷出一堆假告警。 */
-    source.onerror = () => {
-      setConnected(false);
-      if (source.readyState === EventSource.CLOSED) {
-        setError('事件流已关闭，请刷新页面或重新提交任务');
-      }
-    };
-
-    function attach(type: string) {
-      source.addEventListener(type, (raw) => {
-        const message = raw as MessageEvent<string>;
-        const seq = Number(message.lastEventId || 0);
-        setEvents((prev) => [
-          ...prev,
-          { seq, type, at: new Date().toISOString(), payload: safeParse(message.data) },
-        ]);
-        if (type === 'done' || type === 'failed') {
-          setConnected(false);
-          source.close();
-          onFinishedRef.current(runId as string);
+    const controller = new AbortController();
+    let after = 0;
+    let terminal = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    async function connect() {
+      try {
+        await consumeEvents(runId as string, after, controller.signal, (event) => {
+          if (event.seq <= after) return;
+          after = event.seq;
+          setEvents((previous) => [...previous.slice(-1999), event]);
+          if (['done', 'failed', 'canceled'].includes(event.type)) {
+            terminal = true;
+            controller.abort();
+            onFinishedRef.current(runId as string);
+          }
+        }, () => { setConnected(true); setError(null); });
+      } catch (err) {
+        if (!controller.signal.aborted && err instanceof ApiError && err.status < 500) {
+          terminal = true;
+          setError(err.message);
         }
-      });
+      } finally {
+        setConnected(false);
+        if (!terminal && !controller.signal.aborted) timer = setTimeout(() => void connect(), 1500);
+      }
     }
-
-    for (const type of Object.keys(EVENT_STYLE)) attach(type);
-    // 未知类型也要能显示，否则后端加事件时前端会静默丢消息
-    source.onmessage = (raw) => {
-      setEvents((prev) => [
-        ...prev,
-        {
-          seq: Number(raw.lastEventId || 0),
-          type: 'message',
-          at: new Date().toISOString(),
-          payload: safeParse(raw.data),
-        },
-      ]);
-    };
-
-    return () => {
-      source.close();
-      setConnected(false);
-    };
+    void connect();
+    return () => { controller.abort(); if (timer) clearTimeout(timer); };
   }, [runId]);
 
   useEffect(() => {
@@ -208,12 +186,4 @@ export function EventStream({
       ) : null}
     </div>
   );
-}
-
-function safeParse(data: string): Record<string, unknown> {
-  try {
-    return JSON.parse(data) as Record<string, unknown>;
-  } catch {
-    return { raw: data };
-  }
 }

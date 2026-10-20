@@ -95,7 +95,7 @@ def collect(repetitions: list[list[ArmResult]]) -> dict[str, dict[str, Stat]]:
         for result in rep:
             # run_arm/run_repo_arm 会保留失败臂的错误与占位 metrics，方便报告定位。
             # 这些 metrics 不能进入方差，否则一次 API 故障会伪装成机制退化。
-            if result.errors:
+            if result.errors or result.metrics.readers_failed:
                 continue
             by_metric = raw.setdefault(result.metrics.arm, {})
             for name in TRACKED:
@@ -215,8 +215,14 @@ def render_variance(
         lines.extend(drift)
         lines.append("")
 
-    n_ok = sum(1 for rep in repetitions if rep and all(not result.errors for result in rep))
-    failed_arms = sum(1 for rep in repetitions for result in rep if result.errors)
+    n_ok = sum(
+        1
+        for rep in repetitions
+        if rep and all(not result.errors and not result.metrics.readers_failed for result in rep)
+    )
+    failed_arms = sum(
+        1 for rep in repetitions for result in rep if result.errors or result.metrics.readers_failed
+    )
     lines.append(
         f"完整完成的重复：{n_ok}/{len(repetitions)}。"
         "统计口径为**样本标准差（ddof=1）**；单次失败的臂不参与该臂统计（当 0 处理会拉低均值）。"
@@ -240,7 +246,18 @@ def render_variance(
 
     lines.append("## 优势是否稳定")
     lines.append("")
-    for line in pairwise_verdict(stats, control, treatment):
+    paired = [
+        [result for result in rep if result.metrics.arm in {control, treatment}]
+        for rep in repetitions
+    ]
+    paired = [
+        rep
+        for rep in paired
+        if {result.metrics.arm for result in rep} == {control, treatment}
+        and all(not result.errors and not result.metrics.readers_failed for result in rep)
+    ]
+    lines.append(f"逐次比较仅使用两臂同时有效的 {len(paired)} 次重复。")
+    for line in pairwise_verdict(collect(paired), control, treatment):
         lines.append(f"- {line}")
     lines.append("")
     lines.append(

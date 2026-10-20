@@ -1,0 +1,33 @@
+[
+  {
+    "claim_id": "cc8d46b2ad86",
+    "fingerprint": "proxy.py#api_misuse@0",
+    "statement": "[api_misuse] proxy.py:9-10 TYPE_CHECKING 分支使用了越级相对导入，导致类型检查失败（确认存在缺陷）",
+    "claim_type": "api_misuse",
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "proxy.py:9-10",
+    "rationale": "proxy.py 与 connection.py 位于同一个包目录（可由同目录 __init__.py 中的相对导入结构判断），因此应使用单点相对导入。`..connection` 会尝试从当前包的父包导入 connection；当类型检查器解析该分支时，会报告超出顶层包的相对导入错误。运行时通常不会触发，因为 TYPE_CHECKING 为 False，但会破坏静态类型检查。",
+    "title": "TYPE_CHECKING 分支使用了越级相对导入，导致类型检查失败",
+    "line_start": 9,
+    "line_end": 10,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "fe70863714b5",
+        "adapter": "repo",
+        "locator": "proxy.py:9-10",
+        "quote": "if typing.TYPE_CHECKING:\n    from ..connection import ProxyConfig"
+      }
+    ]
+  }
+]

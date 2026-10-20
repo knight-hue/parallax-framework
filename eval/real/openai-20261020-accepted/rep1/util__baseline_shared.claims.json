@@ -1,0 +1,97 @@
+[
+  {
+    "claim_id": "c66c5f356cf1",
+    "fingerprint": "connection.py#resource_leak@40",
+    "statement": "[resource_leak] connection.py:55-64 非 OSError 的 socket 配置异常会导致已创建套接字未显式关闭（确认存在缺陷）",
+    "claim_type": "resource_leak",
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "connection.py:55-64",
+    "rationale": "套接字在 try 块中创建，但异常处理只捕获 OSError。传入负 timeout 时，socket.settimeout(timeout) 会抛出 ValueError，该异常会直接向上传播而不会执行 sock.close()。在支持延迟垃圾回收的 Python 实现中，或异常 traceback 持有当前栈帧时，已创建的套接字可能长期占用文件描述符。类似的非 OSError 参数错误也可能触发同样问题。",
+    "title": "非 OSError 的 socket 配置异常会导致已创建套接字未显式关闭",
+    "line_start": 55,
+    "line_end": 64,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "41265d08c4bb",
+        "adapter": "repo",
+        "locator": "connection.py:55-64",
+        "quote": "        try:\n            sock = socket.socket(af, socktype, proto)\n\n            # If provided, set socket level options before connecting.\n            _set_socket_options(sock, socket_options)\n\n            if timeout is not _DEFAULT_TIMEOUT:\n                sock.settimeout(timeout)\n            if source_address:\n                sock.bind(source_address)"
+      }
+    ]
+  },
+  {
+    "claim_id": "762e278a3f6c",
+    "fingerprint": "connection.py#resource_leak@60",
+    "statement": "[resource_leak] connection.py:60-63 非 OSError 的 socket 配置异常会泄漏已创建的套接字（确认存在缺陷）",
+    "claim_type": "resource_leak",
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "connection.py:60-63",
+    "rationale": "套接字创建后，_set_socket_options、settimeout 或 bind 可能抛出非 OSError 异常；当前 except 只捕获 OSError，因此异常直接向上抛出且不会执行 sock.close()，导致已创建的套接字泄漏。",
+    "title": "非 OSError 的 socket 配置异常会泄漏已创建的套接字",
+    "line_start": 60,
+    "line_end": 63,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "41265d08c4bb",
+        "adapter": "repo",
+        "locator": "connection.py:60-63",
+        "quote": "            sock = socket.socket(af, socktype, proto)\n\n            # If provided, set socket level options before connecting.\n            _set_socket_options(sock, socket_options)"
+      }
+    ]
+  },
+  {
+    "claim_id": "7c4695fe4d83",
+    "fingerprint": "connection.py#resource_leak@60",
+    "statement": "[resource_leak] connection.py:63-70 非 OSError 的套接字配置异常会泄漏已创建的套接字（确认存在缺陷）",
+    "claim_type": "resource_leak",
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "connection.py:63-70",
+    "rationale": "套接字创建成功后，_set_socket_options、settimeout、bind 或 connect 可能抛出非 OSError 异常（例如 ValueError、TypeError 或 OverflowError）。当前仅捕获 OSError，因此这些异常会直接向上传播，而已创建的 sock 不会执行 close，导致文件描述符泄漏。",
+    "title": "非 OSError 的套接字配置异常会泄漏已创建的套接字",
+    "line_start": 63,
+    "line_end": 70,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "41265d08c4bb",
+        "adapter": "repo",
+        "locator": "connection.py:63-70",
+        "quote": "        try:\n            sock = socket.socket(af, socktype, proto)\n\n            # If provided, set socket level options before connecting.\n            _set_socket_options(sock, socket_options)\n\n            if timeout is not _DEFAULT_TIMEOUT:\n                sock.settimeout(timeout)"
+      }
+    ]
+  }
+]

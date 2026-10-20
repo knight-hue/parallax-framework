@@ -218,6 +218,10 @@ jobs:
         working-directory: frontend
         run: npm run typecheck
 
+      - name: 认证 SSE 与分块解析
+        working-directory: frontend
+        run: npm run test:sse
+
       - name: 构建
         working-directory: frontend
         run: npm run build

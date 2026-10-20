@@ -38,8 +38,8 @@ from collections.abc import Mapping
 
 from langgraph.graph import END, START, StateGraph
 
-from parallax.core.independence import evidence_overlap_rate
-from parallax.domain.enums import ClaimStatus, RoundStopReason
+from parallax.core.independence import analyze_dependencies, evidence_overlap_rate
+from parallax.domain.enums import ClaimStatus, Polarity, RoundStopReason
 from parallax.domain.models import EvidenceUnit, RoundRecord
 from parallax.graph.state import ParallaxRuntime, ParallaxState
 
@@ -55,6 +55,10 @@ def build_graph(runtime: ParallaxRuntime):
         """加载证据并铺满覆盖率矩阵的行列维度。"""
         question = state["question"]
         evidence = runtime.adapter.load(question)
+        if runtime.settings.semantic_partitioning:
+            from parallax.plugins.code_audit.risk_graph import annotate_risk_dependencies
+
+            evidence = annotate_risk_dependencies(evidence)
         rows = runtime.adapter.dimension_rows(evidence)
         cols = runtime.plugin.claim_types()
         if not rows:
@@ -283,8 +287,7 @@ def build_graph(runtime: ParallaxRuntime):
             "min_independent_support": float(runtime.settings.effective_min_independent_support()),
         }
         groups = runtime.aggregator.sweep()
-        if runtime.correlation_budget_violated:
-            _downgrade_budget_violations(runtime, groups)
+        _downgrade_budget_violations(runtime, groups)
         runtime.reputation_policy.apply_cross_validation(
             groups, runtime.ledger, runtime.manifest.run_id
         )
@@ -293,8 +296,7 @@ def build_graph(runtime: ParallaxRuntime):
             await _arbitrate_disputes(runtime, groups)
             # 仲裁会改写状态与声誉，因此重算一次，避免把陈旧结论写进本轮记录
             groups = runtime.aggregator.sweep()
-            if runtime.correlation_budget_violated:
-                _downgrade_budget_violations(runtime, groups)
+            _downgrade_budget_violations(runtime, groups)
 
         current_fingerprints = {g.fingerprint for g in groups}
         runtime.new_fingerprints_last_round = len(current_fingerprints - runtime.fingerprints_seen)
@@ -389,8 +391,7 @@ def build_graph(runtime: ParallaxRuntime):
 
         runtime.aggregator.sweep()
         groups = runtime.ledger.groups()
-        if runtime.correlation_budget_violated:
-            _downgrade_budget_violations(runtime, groups)
+        _downgrade_budget_violations(runtime, groups)
         high = sum(1 for g in groups if g.status.value == "high_confidence")
         pending = sum(1 for g in groups if g.status.value == "pending")
         disputed = sum(1 for g in groups if g.status.value == "disputed")
@@ -468,12 +469,30 @@ def _resolve_stop_reason(
 
 
 def _downgrade_budget_violations(runtime: ParallaxRuntime, groups: list) -> None:
-    """相关性预算超限时，禁止自动把重复意见标成高置信。"""
+    """每次聚合都校验支持通道，不能靠重复摘要或更多 Reader 身份达标。"""
     threshold = runtime.settings.effective_min_independent_support()
+    dependencies = analyze_dependencies(runtime.manifest.all_assignments(), runtime.evidence)
     for group in groups:
-        if group.status != ClaimStatus.HIGH_CONFIDENCE:
-            continue
-        if group.cross_validation_count < threshold:
+        support = dependencies.support(group.asserting_agents)
+        for cid in group.claim_ids:
+            claim = runtime.ledger.claim(cid)
+            if claim is not None:
+                supporters = (
+                    group.asserting_agents
+                    if claim.polarity == Polarity.ASSERT
+                    else group.denying_agents
+                )
+                claim.metadata["independent_support"] = dependencies.support(supporters)
+                claim.metadata["support_components"] = sorted(
+                    {
+                        dependencies.components[r]
+                        for r in supporters
+                        if r in dependencies.components and r not in dependencies.uncertain_readers
+                    }
+                )
+        if group.status != ClaimStatus.HIGH_CONFIDENCE or (
+            support >= threshold and not runtime.correlation_budget_violated
+        ):
             continue
         group.status = ClaimStatus.PENDING
         for claim_id in group.claim_ids:
@@ -509,10 +528,11 @@ async def _arbitrate_disputes(runtime: ParallaxRuntime, groups: list) -> None:
             group,
             [c for c in (runtime.ledger.claim(cid) for cid in group.claim_ids) if c is not None],
         )
-        runtime.aggregator.apply_arbitration(group, verdict)
-        runtime.reputation_policy.apply_arbitration(
-            group, runtime.ledger, runtime.manifest.run_id, verdict
-        )
+        if verdict != ClaimStatus.DISPUTED:
+            runtime.aggregator.apply_arbitration(group, verdict)
+            runtime.reputation_policy.apply_arbitration(
+                group, runtime.ledger, runtime.manifest.run_id, verdict
+            )
         runtime.record_receipt(
             "arbitration",
             claim_ids=list(group.claim_ids),

@@ -1,0 +1,59 @@
+{
+  "generated_at": "2026-10-20T10:56:00+00:00",
+  "arms": [
+    {
+      "arm": "baseline_shared",
+      "task_id": "util",
+      "reader_count": 3,
+      "recall": null,
+      "precision": null,
+      "redundancy": 0.0,
+      "effective_channels": 0.0,
+      "agent_count": 0,
+      "coverage_fill_rate": 0.0,
+      "rounds": 1,
+      "total_claims": 0,
+      "distinct_fingerprints": 0,
+      "hits": 0,
+      "planted": 0,
+      "duplicates": 0,
+      "unmatched": 0,
+      "llm_calls": 3,
+      "llm_failures": 3,
+      "schema_retries": 0,
+      "readers_failed": 3,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "stop_reason": "max_rounds_reached",
+      "defects": [],
+      "elapsed_s": 270.39,
+      "errors": [
+        "Reader failures: 3"
+      ],
+      "config": {
+        "model": "gpt-6.1-sol",
+        "readers": 3,
+        "redundancy": 3,
+        "support_threshold": 2,
+        "max_rounds": 1,
+        "visibility": "shared",
+        "seed": 0,
+        "max_evidence_per_call": 6,
+        "max_batch_chars": 24000,
+        "max_output_tokens": 10000,
+        "max_llm_calls": 24,
+        "max_tokens": 0,
+        "min_independent_support": 2,
+        "max_evidence_overlap_rate": 1.0,
+        "adaptive_scheduling": false,
+        "llm_falsifier": false,
+        "git_revision": "de7410b66340b3b5b123c2b0bd72a1a0b7e85ae0",
+        "implementation_sha256": "f0fa93a989a77709ff439012bdeeb3ef57ab2d2293f302d405ec5cc6955a1e3b",
+        "repo": "util",
+        "group_depth": 2,
+        "max_files": 3
+      },
+      "valid": false
+    }
+  ]
+}

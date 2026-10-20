@@ -1,0 +1,515 @@
+{
+  "postprocessing": "offline; original metrics unchanged",
+  "raw_writer_omitted_empty_claim_arrays": [
+    "rep1/util__blind_no_coverage.claims.json",
+    "rep2/util__baseline_shared.claims.json",
+    "rep3/util__baseline_shared.claims.json"
+  ],
+  "rows": [
+    {
+      "repeat": 1,
+      "arm": "baseline_shared",
+      "valid": true,
+      "reader_failures": 0,
+      "calls": 3,
+      "prompt_tokens": 11187,
+      "completion_tokens": 3778,
+      "claims": 3,
+      "not_a_defect_observations": 0,
+      "output_effective_channels": 1.8,
+      "output_producing_readers": 3,
+      "assigned_readers_from_report": 3,
+      "output_channels_per_assigned_reader": 0.6,
+      "matrix_fill_rate": 0.125,
+      "rounds": 1
+    },
+    {
+      "repeat": 1,
+      "arm": "sharded_shared",
+      "valid": true,
+      "reader_failures": 0,
+      "calls": 3,
+      "prompt_tokens": 13493,
+      "completion_tokens": 1219,
+      "claims": 2,
+      "not_a_defect_observations": 2,
+      "output_effective_channels": 1.0,
+      "output_producing_readers": 1,
+      "assigned_readers_from_report": 3,
+      "output_channels_per_assigned_reader": 0.3333333333333333,
+      "matrix_fill_rate": 0.25,
+      "rounds": 1
+    },
+    {
+      "repeat": 1,
+      "arm": "sharded_blind",
+      "valid": true,
+      "reader_failures": 0,
+      "calls": 3,
+      "prompt_tokens": 17705,
+      "completion_tokens": 1843,
+      "claims": 4,
+      "not_a_defect_observations": 4,
+      "output_effective_channels": 2.0,
+      "output_producing_readers": 2,
+      "assigned_readers_from_report": 3,
+      "output_channels_per_assigned_reader": 0.6666666666666666,
+      "matrix_fill_rate": 0.25,
+      "rounds": 1
+    },
+    {
+      "repeat": 1,
+      "arm": "blind_no_coverage",
+      "valid": true,
+      "reader_failures": 0,
+      "calls": 3,
+      "prompt_tokens": 7717,
+      "completion_tokens": 786,
+      "claims": 0,
+      "not_a_defect_observations": 0,
+      "output_effective_channels": 0.0,
+      "output_producing_readers": 0,
+      "assigned_readers_from_report": 3,
+      "output_channels_per_assigned_reader": 0.0,
+      "matrix_fill_rate": 0.0,
+      "rounds": 1
+    },
+    {
+      "repeat": 1,
+      "arm": "blind_full",
+      "valid": true,
+      "reader_failures": 0,
+      "calls": 3,
+      "prompt_tokens": 17705,
+      "completion_tokens": 2182,
+      "claims": 4,
+      "not_a_defect_observations": 4,
+      "output_effective_channels": 2.0,
+      "output_producing_readers": 2,
+      "assigned_readers_from_report": 3,
+      "output_channels_per_assigned_reader": 0.6666666666666666,
+      "matrix_fill_rate": 0.375,
+      "rounds": 1
+    },
+    {
+      "repeat": 2,
+      "arm": "baseline_shared",
+      "valid": true,
+      "reader_failures": 0,
+      "calls": 3,
+      "prompt_tokens": 10845,
+      "completion_tokens": 1041,
+      "claims": 0,
+      "not_a_defect_observations": 0,
+      "output_effective_channels": 0.0,
+      "output_producing_readers": 0,
+      "assigned_readers_from_report": 3,
+      "output_channels_per_assigned_reader": 0.0,
+      "matrix_fill_rate": 0.0,
+      "rounds": 1
+    },
+    {
+      "repeat": 2,
+      "arm": "sharded_shared",
+      "valid": true,
+      "reader_failures": 0,
+      "calls": 3,
+      "prompt_tokens": 12859,
+      "completion_tokens": 2934,
+      "claims": 3,
+      "not_a_defect_observations": 1,
+      "output_effective_channels": 1.8,
+      "output_producing_readers": 3,
+      "assigned_readers_from_report": 3,
+      "output_channels_per_assigned_reader": 0.6,
+      "matrix_fill_rate": 0.25,
+      "rounds": 1
+    },
+    {
+      "repeat": 2,
+      "arm": "sharded_blind",
+      "valid": true,
+      "reader_failures": 0,
+      "calls": 3,
+      "prompt_tokens": 17705,
+      "completion_tokens": 2850,
+      "claims": 4,
+      "not_a_defect_observations": 4,
+      "output_effective_channels": 2.0,
+      "output_producing_readers": 2,
+      "assigned_readers_from_report": 3,
+      "output_channels_per_assigned_reader": 0.6666666666666666,
+      "matrix_fill_rate": 0.375,
+      "rounds": 1
+    },
+    {
+      "repeat": 2,
+      "arm": "blind_no_coverage",
+      "valid": true,
+      "reader_failures": 0,
+      "calls": 3,
+      "prompt_tokens": 7717,
+      "completion_tokens": 1825,
+      "claims": 1,
+      "not_a_defect_observations": 0,
+      "output_effective_channels": 1.0,
+      "output_producing_readers": 1,
+      "assigned_readers_from_report": 3,
+      "output_channels_per_assigned_reader": 0.3333333333333333,
+      "matrix_fill_rate": 0.125,
+      "rounds": 1
+    },
+    {
+      "repeat": 2,
+      "arm": "blind_full",
+      "valid": true,
+      "reader_failures": 0,
+      "calls": 3,
+      "prompt_tokens": 17705,
+      "completion_tokens": 2084,
+      "claims": 4,
+      "not_a_defect_observations": 3,
+      "output_effective_channels": 2.0,
+      "output_producing_readers": 2,
+      "assigned_readers_from_report": 3,
+      "output_channels_per_assigned_reader": 0.6666666666666666,
+      "matrix_fill_rate": 0.25,
+      "rounds": 1
+    },
+    {
+      "repeat": 3,
+      "arm": "baseline_shared",
+      "valid": true,
+      "reader_failures": 0,
+      "calls": 3,
+      "prompt_tokens": 10845,
+      "completion_tokens": 1186,
+      "claims": 0,
+      "not_a_defect_observations": 0,
+      "output_effective_channels": 0.0,
+      "output_producing_readers": 0,
+      "assigned_readers_from_report": 3,
+      "output_channels_per_assigned_reader": 0.0,
+      "matrix_fill_rate": 0.0,
+      "rounds": 1
+    },
+    {
+      "repeat": 3,
+      "arm": "sharded_shared",
+      "valid": true,
+      "reader_failures": 0,
+      "calls": 3,
+      "prompt_tokens": 12502,
+      "completion_tokens": 2050,
+      "claims": 3,
+      "not_a_defect_observations": 2,
+      "output_effective_channels": 1.8,
+      "output_producing_readers": 2,
+      "assigned_readers_from_report": 3,
+      "output_channels_per_assigned_reader": 0.6,
+      "matrix_fill_rate": 0.25,
+      "rounds": 1
+    },
+    {
+      "repeat": 3,
+      "arm": "sharded_blind",
+      "valid": true,
+      "reader_failures": 0,
+      "calls": 3,
+      "prompt_tokens": 17705,
+      "completion_tokens": 1877,
+      "claims": 3,
+      "not_a_defect_observations": 3,
+      "output_effective_channels": 1.8,
+      "output_producing_readers": 2,
+      "assigned_readers_from_report": 3,
+      "output_channels_per_assigned_reader": 0.6,
+      "matrix_fill_rate": 0.25,
+      "rounds": 1
+    },
+    {
+      "repeat": 3,
+      "arm": "blind_no_coverage",
+      "valid": true,
+      "reader_failures": 0,
+      "calls": 3,
+      "prompt_tokens": 7717,
+      "completion_tokens": 1714,
+      "claims": 1,
+      "not_a_defect_observations": 0,
+      "output_effective_channels": 1.0,
+      "output_producing_readers": 1,
+      "assigned_readers_from_report": 3,
+      "output_channels_per_assigned_reader": 0.3333333333333333,
+      "matrix_fill_rate": 0.125,
+      "rounds": 1
+    },
+    {
+      "repeat": 3,
+      "arm": "blind_full",
+      "valid": true,
+      "reader_failures": 0,
+      "calls": 3,
+      "prompt_tokens": 17705,
+      "completion_tokens": 1861,
+      "claims": 3,
+      "not_a_defect_observations": 3,
+      "output_effective_channels": 1.8,
+      "output_producing_readers": 2,
+      "assigned_readers_from_report": 3,
+      "output_channels_per_assigned_reader": 0.6,
+      "matrix_fill_rate": 0.25,
+      "rounds": 1
+    }
+  ],
+  "summary": {
+    "baseline_shared": {
+      "valid_repetitions": 3,
+      "output_effective_channels": {
+        "values": [
+          1.8,
+          0.0,
+          0.0
+        ],
+        "mean": 0.6,
+        "sample_std": 1.0392304845413265
+      },
+      "output_channels_per_assigned_reader": {
+        "values": [
+          0.6,
+          0.0,
+          0.0
+        ],
+        "mean": 0.19999999999999998,
+        "sample_std": 0.34641016151377546
+      },
+      "prompt_tokens": {
+        "values": [
+          11187,
+          10845,
+          10845
+        ],
+        "mean": 10959.0,
+        "sample_std": 197.45379206285202
+      },
+      "completion_tokens": {
+        "values": [
+          3778,
+          1041,
+          1186
+        ],
+        "mean": 2001.6666666666667,
+        "sample_std": 1540.0572500181067
+      },
+      "matrix_fill_rate": {
+        "values": [
+          0.125,
+          0.0,
+          0.0
+        ],
+        "mean": 0.041666666666666664,
+        "sample_std": 0.07216878364870322
+      }
+    },
+    "blind_full": {
+      "valid_repetitions": 3,
+      "output_effective_channels": {
+        "values": [
+          2.0,
+          2.0,
+          1.8
+        ],
+        "mean": 1.9333333333333333,
+        "sample_std": 0.11547005383792512
+      },
+      "output_channels_per_assigned_reader": {
+        "values": [
+          0.6666666666666666,
+          0.6666666666666666,
+          0.6
+        ],
+        "mean": 0.6444444444444444,
+        "sample_std": 0.03849001794597504
+      },
+      "prompt_tokens": {
+        "values": [
+          17705,
+          17705,
+          17705
+        ],
+        "mean": 17705.0,
+        "sample_std": 0.0
+      },
+      "completion_tokens": {
+        "values": [
+          2182,
+          2084,
+          1861
+        ],
+        "mean": 2042.3333333333333,
+        "sample_std": 164.50633219828754
+      },
+      "matrix_fill_rate": {
+        "values": [
+          0.375,
+          0.25,
+          0.25
+        ],
+        "mean": 0.2916666666666667,
+        "sample_std": 0.07216878364870322
+      }
+    },
+    "blind_no_coverage": {
+      "valid_repetitions": 3,
+      "output_effective_channels": {
+        "values": [
+          0.0,
+          1.0,
+          1.0
+        ],
+        "mean": 0.6666666666666666,
+        "sample_std": 0.5773502691896257
+      },
+      "output_channels_per_assigned_reader": {
+        "values": [
+          0.0,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "mean": 0.2222222222222222,
+        "sample_std": 0.19245008972987523
+      },
+      "prompt_tokens": {
+        "values": [
+          7717,
+          7717,
+          7717
+        ],
+        "mean": 7717.0,
+        "sample_std": 0.0
+      },
+      "completion_tokens": {
+        "values": [
+          786,
+          1825,
+          1714
+        ],
+        "mean": 1441.6666666666667,
+        "sample_std": 570.5298706757898
+      },
+      "matrix_fill_rate": {
+        "values": [
+          0.0,
+          0.125,
+          0.125
+        ],
+        "mean": 0.08333333333333333,
+        "sample_std": 0.07216878364870322
+      }
+    },
+    "sharded_blind": {
+      "valid_repetitions": 3,
+      "output_effective_channels": {
+        "values": [
+          2.0,
+          2.0,
+          1.8
+        ],
+        "mean": 1.9333333333333333,
+        "sample_std": 0.11547005383792512
+      },
+      "output_channels_per_assigned_reader": {
+        "values": [
+          0.6666666666666666,
+          0.6666666666666666,
+          0.6
+        ],
+        "mean": 0.6444444444444444,
+        "sample_std": 0.03849001794597504
+      },
+      "prompt_tokens": {
+        "values": [
+          17705,
+          17705,
+          17705
+        ],
+        "mean": 17705.0,
+        "sample_std": 0.0
+      },
+      "completion_tokens": {
+        "values": [
+          1843,
+          2850,
+          1877
+        ],
+        "mean": 2190.0,
+        "sample_std": 571.8295200494637
+      },
+      "matrix_fill_rate": {
+        "values": [
+          0.25,
+          0.375,
+          0.25
+        ],
+        "mean": 0.2916666666666667,
+        "sample_std": 0.07216878364870322
+      }
+    },
+    "sharded_shared": {
+      "valid_repetitions": 3,
+      "output_effective_channels": {
+        "values": [
+          1.0,
+          1.8,
+          1.8
+        ],
+        "mean": 1.5333333333333332,
+        "sample_std": 0.46188021535170065
+      },
+      "output_channels_per_assigned_reader": {
+        "values": [
+          0.3333333333333333,
+          0.6,
+          0.6
+        ],
+        "mean": 0.5111111111111111,
+        "sample_std": 0.1539600717839002
+      },
+      "prompt_tokens": {
+        "values": [
+          13493,
+          12859,
+          12502
+        ],
+        "mean": 12951.333333333334,
+        "sample_std": 501.91068262523896
+      },
+      "completion_tokens": {
+        "values": [
+          1219,
+          2934,
+          2050
+        ],
+        "mean": 2067.6666666666665,
+        "sample_std": 857.6364808783109
+      },
+      "matrix_fill_rate": {
+        "values": [
+          0.25,
+          0.25,
+          0.25
+        ],
+        "mean": 0.25,
+        "sample_std": 0.0
+      }
+    }
+  },
+  "limitations": [
+    "No ground truth; output channels are not correctness or causal independence",
+    "Claim total includes not_a_defect observations",
+    "Raw agent_count counts output-producing readers, not all assigned readers",
+    "All accepted arms happened to stop at one round; no measured multiround gain",
+    "Same assignments/calls do not imply same token cost; shared context depends on previous outputs",
+    "Snapshot reports predate later support metadata and gateway fixes; see implementation.zip"
+  ]
+}

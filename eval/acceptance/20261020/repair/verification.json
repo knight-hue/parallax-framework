@@ -1,0 +1,119 @@
+{
+  "repair_id": "e4231e8b9c464ed88b85981dbb473208",
+  "run_id": "8b974f31722f",
+  "claim": {
+    "claim_id": "037cf2bd3651",
+    "fingerprint": "calc.py#logic@0",
+    "statement": "[logic] calc.py:6-7 除数为零时未按契约返回 None（确认存在缺陷）",
+    "polarity": 1,
+    "claim_type": "logic",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "source_refs": [
+      {
+        "evidence_id": "82411b9d7af0",
+        "adapter": "repo",
+        "locator": "calc.py:6-7",
+        "quote": "def divide(a, b):\n    return a / b"
+      }
+    ],
+    "reputation_at_extraction": 0.5,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "trigger_conditions": [
+      "调用 divide(a, 0)，其中 a 为任意值"
+    ],
+    "counter_conditions": [
+      "b 不为零时不会触发该缺陷",
+      "如果调用方明确期望 ZeroDivisionError 而非契约中声明的 None，则不适用"
+    ],
+    "reproduction_plan": {
+      "python": "/usr/bin/python3",
+      "code": "from calc import divide\nassert divide(1, 0) is None"
+    },
+    "verification_status": "regression_passed",
+    "metadata": {
+      "severity": "medium",
+      "rationale": "函数契约明确要求 b 为零时返回 None，但当前实现直接执行 a / b。只要 b == 0，Python 就会抛出 ZeroDivisionError，而不是返回 None，导致调用方无法按约定处理零除数。",
+      "title": "除数为零时未按契约返回 None",
+      "line_start": 6,
+      "line_end": 7,
+      "stance": "defect",
+      "line_bucket": 20,
+      "falsifier": "llm-falsifier",
+      "verification_evidence_ids": [
+        "82411b9d7af0"
+      ],
+      "verification_reason": "契约明确要求 b 为零时返回 None，但实现直接执行 a / b，调用 divide(a, 0) 将触发除零错误而非返回 None。",
+      "independent_support": 1,
+      "support_components": [
+        "reader-r0-0"
+      ]
+    }
+  },
+  "source_hashes": {
+    "calc.py": "f681f9464604b85df5059e30893bb35b45a8db24120a77897fb2d1ef480c5b81"
+  },
+  "baseline_hashes": {
+    "calc.py": "f681f9464604b85df5059e30893bb35b45a8db24120a77897fb2d1ef480c5b81",
+    "tests/test_calc.py": "4687b436a91d1b0584d7a11e1a27a1ed4e275a0bde0a110f7ec67afa67285395"
+  },
+  "plan": {
+    "explanation": "Review revision of the model proposal: preserve the zero divisor fix, test nonzero divisors as well, and run the test through runpy so the project root remains importable.",
+    "edits": [
+      {
+        "path": "calc.py",
+        "before": "def divide(a, b):\n    return a / b\n",
+        "after": "def divide(a, b):\n    if b == 0:\n        return None\n    return a / b\n"
+      }
+    ],
+    "tests": [
+      {
+        "path": "tests/test_calc.py",
+        "before": "",
+        "after": "from calc import divide\n\ndef test_divide():\n    assert divide(4, 2) == 2\n    assert divide(-3, 2) == -1.5\n    try:\n        result = divide(1, 0)\n    except ZeroDivisionError:\n        result = object()\n    assert result is None, 'divide(a, 0) must return None'\n\nif __name__ == '__main__':\n    test_divide()\n"
+      }
+    ],
+    "regression_command": [
+      "/usr/bin/python3",
+      "-c",
+      "import runpy; runpy.run_path('tests/test_calc.py', run_name='__main__')"
+    ],
+    "baseline_exit_code": 1,
+    "baseline_failure_contains": "AssertionError: divide(a, 0) must return None"
+  },
+  "patch": "--- /dev/null\n+++ b/tests/test_calc.py\n@@ -0,0 +1,13 @@\n+from calc import divide\n+\n+def test_divide():\n+    assert divide(4, 2) == 2\n+    assert divide(-3, 2) == -1.5\n+    try:\n+        result = divide(1, 0)\n+    except ZeroDivisionError:\n+        result = object()\n+    assert result is None, 'divide(a, 0) must return None'\n+\n+if __name__ == '__main__':\n+    test_divide()\n--- a/calc.py\n+++ b/calc.py\n@@ -3,4 +3,6 @@\n Regression runtime: /usr/bin/python3 in an offline Linux container.\n \"\"\"\n def divide(a, b):\n+    if b == 0:\n+        return None\n     return a / b\n",
+  "status": "regression_passed",
+  "created_at": "2026-10-20T11:18:56.241803+00:00",
+  "events": [
+    "proposal_created",
+    "approved",
+    "reproduced",
+    "fixed_in_copy",
+    "regression_passed"
+  ],
+  "approval_digest": "092bf870e22a71586c3e9667ddafcdc020559d6a8f80393db7ddea969a4bbbc8",
+  "approved_by": "local-reviewer",
+  "approved_at": "2026-10-20T11:19:16.292905+00:00",
+  "baseline_result": {
+    "claim_id": "037cf2bd3651",
+    "status": "not_reproduced",
+    "reason": "隔离执行已完成",
+    "exit_code": 1,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/usr/lib64/python3.6/runpy.py\", line 263, in run_path\n    pkg_name=pkg_name, script_name=fname)\n  File \"/usr/lib64/python3.6/runpy.py\", line 96, in _run_module_code\n    mod_name, mod_spec, pkg_name, script_name)\n  File \"/usr/lib64/python3.6/runpy.py\", line 85, in _run_code\n    exec(code, run_globals)\n  File \"tests/test_calc.py\", line 13, in <module>\n    test_divide()\n  File \"tests/test_calc.py\", line 10, in test_divide\n    assert result is None, 'divide(a, 0) must return None'\nAssertionError: divide(a, 0) must return None\n"
+  },
+  "regression_result": {
+    "claim_id": "037cf2bd3651",
+    "status": "reproduced",
+    "reason": "隔离执行已完成",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "finished_at": "2026-10-20T11:19:17.563678+00:00"
+}

@@ -10,6 +10,24 @@ from parallax.plugins.code_audit import DEFECT_CLASSES, CodeAuditReader, RepoAda
 # ---- 适配器 ----
 
 
+@pytest.mark.parametrize("relative", ["../outside.py", "../source/../../outside.py", ".env.py"])
+def test_adapter_rejects_explicit_files_outside_scope(tmp_path, relative):
+    (tmp_path / "source").mkdir()
+    (tmp_path / "outside.py").write_text("secret = 1", encoding="utf-8")
+    with pytest.raises(AdapterError):
+        RepoAdapter(tmp_path / "source", include_files=(relative,)).load("q")
+
+
+def test_adapter_preserves_exact_source_digest(tmp_path):
+    import hashlib
+
+    raw = b"value = 1\r\n"
+    (tmp_path / "main.py").write_bytes(raw)
+    unit = RepoAdapter(tmp_path).load("q")[0]
+    assert unit.metadata["sha256"] == hashlib.sha256(raw).hexdigest()
+    assert unit.content == "value = 1\n"
+
+
 def test_adapter_reads_and_groups_by_module(demo_repo):
     adapter = RepoAdapter(demo_repo, group_depth=2)
     units = adapter.load("审查")

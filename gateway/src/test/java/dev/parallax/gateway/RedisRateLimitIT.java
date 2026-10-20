@@ -43,7 +43,9 @@ class RedisRateLimitIT {
     @SuppressWarnings("resource") // 生命周期由 @Container（Testcontainers JUnit 扩展）托管，IDE 的"资源未关闭"是误报
     @Container
     static final GenericContainer<?> REDIS =
-            new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(REDIS_PORT);
+            new GenericContainer<>(DockerImageName.parse(
+                    System.getProperty("parallax.test.redis-image", "redis:7-alpine")))
+                    .withImagePullPolicy(image -> false).withExposedPorts(REDIS_PORT);
 
     private static String redisUrl() {
         return "redis://" + REDIS.getHost() + ":" + REDIS.getMappedPort(REDIS_PORT);

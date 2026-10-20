@@ -1,0 +1,33 @@
+[
+  {
+    "claim_id": "762e278a3f6c",
+    "fingerprint": "connection.py#resource_leak@60",
+    "statement": "[resource_leak] connection.py:64-71 非 OSError 的套接字初始化异常不会显式关闭已创建的 socket（确认存在缺陷）",
+    "claim_type": "resource_leak",
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "connection.py:64-71",
+    "rationale": "socket 已创建后，_set_socket_options() 或 settimeout() 可能抛出 TypeError、ValueError 等非 OSError 异常；当前 except 只捕获 OSError，因此异常会直接传播而不会执行 sock.close()。在非引用计数垃圾回收环境中，或异常对象/局部引用延长 socket 生命周期时，这会导致文件描述符泄漏。一个可直接触发的情况是传入负 timeout，socket.settimeout() 会抛出 ValueError。",
+    "title": "非 OSError 的套接字初始化异常不会显式关闭已创建的 socket",
+    "line_start": 64,
+    "line_end": 71,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "41265d08c4bb",
+        "adapter": "repo",
+        "locator": "connection.py:64-71",
+        "quote": "        try:\n            sock = socket.socket(af, socktype, proto)\n\n            # If provided, set socket level options before connecting.\n            _set_socket_options(sock, socket_options)\n\n            if timeout is not _DEFAULT_TIMEOUT:\n                sock.settimeout(timeout)"
+      }
+    ]
+  }
+]

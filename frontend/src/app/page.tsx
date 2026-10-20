@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Download, RefreshCw, RotateCcw } from 'lucide-react';
-import { api, API_BASE, ApiError } from '@/lib/api';
+import { api, API_BASE, ApiError, setAccessToken } from '@/lib/api';
 import type { ClaimRow, ProvenanceGraph, RunRecord, RunResult } from '@/lib/types';
 import { AuditForm } from '@/components/audit-form';
 import { ClaimLedger } from '@/components/claim-ledger';
 import { CoverageHeatmap } from '@/components/coverage-heatmap';
 import { EventStream } from '@/components/event-stream';
+import { RepairPanel } from '@/components/repair-panel';
 import { RunHistory, RunSummary } from '@/components/run-history';
 import { Badge, Button, Card, CardBody, CardHeader, EmptyState } from '@/components/ui/primitives';
 import { formatPercent } from '@/lib/utils';
@@ -21,6 +22,7 @@ interface Health {
 
 export default function Page() {
   const [health, setHealth] = useState<Health | null>(null);
+  const [token, setToken] = useState('');
   const [healthError, setHealthError] = useState<string | null>(null);
 
   const [runs, setRuns] = useState<RunRecord[]>([]);
@@ -156,6 +158,9 @@ export default function Page() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-xs">
+          <input type="password" aria-label="访问令牌或 API Key" placeholder="访问令牌 / API Key（仅存于当前页面）"
+            value={token} onChange={(event) => { setToken(event.target.value); setAccessToken(event.target.value); }}
+            className="w-64 rounded border border-[var(--color-border)] bg-[var(--color-canvas)] p-2" />
           {offline ? (
             <Badge tone="danger">
               <AlertTriangle size={10} className="mr-1" />
@@ -207,12 +212,10 @@ export default function Page() {
               hint="盲读分区 → 入账本 → 规则聚合 → 覆盖率补检"
               right={
                 result ? (
-                  <a href={api.reportUrl(result.run_id)} target="_blank" rel="noreferrer">
-                    <Button variant="ghost">
+                    <Button variant="ghost" onClick={() => void api.downloadReport(result.run_id).catch((err) => setResultError(err instanceof Error ? err.message : String(err)))}>
                       <Download size={12} />
                       Markdown 报告
                     </Button>
-                  </a>
                 ) : null
               }
             />
@@ -349,7 +352,7 @@ export default function Page() {
           )}
 
           {selectedClaim ? (
-            <ClaimDetail claim={selectedClaim} provenance={result?.provenance} />
+            <ClaimDetail key={`${viewRunId}-${selectedClaim.claim_id}`} claim={selectedClaim} provenance={result?.provenance} runId={viewRunId} />
           ) : null}
         </div>
       </div>
@@ -378,6 +381,9 @@ function IndependencePanel({ result }: { result: RunResult }) {
         <Field label="Receipt" value={String(result.manifest.receipts)} />
         <Field label="血缘节点" value={String(result.provenance.nodes.length)} />
         <Field label="血缘关系" value={String(result.provenance.edges.length)} />
+        <Field label="去共同上游后的通道" value={String(profile.dependency_channel_count ?? '—')} />
+        <Field label="共同推理上游" value={String(profile.common_upstreams?.length ?? 0)} />
+        <Field label="未解析血缘" value={String(profile.unresolved_lineage?.length ?? 0)} />
       </CardBody>
     </Card>
   );
@@ -395,9 +401,11 @@ function AuditRow({ label, value, mono }: { label: string; value: string; mono?:
 function ClaimDetail({
   claim,
   provenance,
+  runId,
 }: {
   claim: ClaimRow;
   provenance?: ProvenanceGraph;
+  runId: string | null;
 }) {
   const claimNodeId = `claim:${claim.claim_id}`;
   const lineageEdges = provenance?.edges.filter(
@@ -427,7 +435,7 @@ function ClaimDetail({
         <div className="grid grid-cols-2 gap-2">
           <Field label="定位" value={claim.locator ?? '—'} mono />
           <Field label="置信度" value={formatPercent(claim.confidence, 1)} />
-          <Field label="独立来源" value={`${claim.verified_by.length} 个`} />
+          <Field label="独立通道" value={`${claim.independent_support ?? claim.verified_by.length} 个`} />
           <Field label="争议对手" value={`${claim.disputed_with.length} 条`} />
           <Field label="反证状态" value={claim.verification_status} />
         </div>
@@ -475,6 +483,7 @@ function ClaimDetail({
             </div>
           </div>
         ) : null}
+        {runId ? <RepairPanel runId={runId} claimId={claim.claim_id} /> : null}
       </CardBody>
     </Card>
   );

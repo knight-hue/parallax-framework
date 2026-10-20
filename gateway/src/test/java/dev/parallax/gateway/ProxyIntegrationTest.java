@@ -147,6 +147,22 @@ class ProxyIntegrationTest {
     }
 
     @Test
+    void forwardsRepairProposalAndApprovalWithoutRetryingOrCreatingAnAudit() {
+        String root = "/api/v1/audits/abc/repairs";
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        ResponseEntity<String> proposal = rest.exchange(url(root), HttpMethod.POST,
+                new HttpEntity<>("{\"claim_id\":\"c1\"}", headers), String.class);
+        assertThat(proposal.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        assertThat(proposal.getBody()).contains("claim_id");
+        String approve = root + "/0123456789abcdef0123456789abcdef/approve";
+        ResponseEntity<String> result = rest.exchange(url(approve), HttpMethod.POST,
+                new HttpEntity<>("{\"approval_digest\":\"digest\"}", headers), String.class);
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        assertThat(receivedPaths.stream().filter(approve::equals).count()).isEqualTo(1);
+    }
+
+    @Test
     void forwardsQueryString() {
         ResponseEntity<String> response = rest.getForEntity(url("/api/v1/audits?limit=7"), String.class);
 

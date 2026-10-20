@@ -56,6 +56,10 @@ class EvidenceUnit(BaseModel):
     因为让一个 Reader 读到半个文件的片段而不给上下文，会制造假缺陷。"""
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    kind: Literal["raw", "summary", "tool_output"] = "raw"
+    derived_from: list[str] = Field(default_factory=list)
+    """上游证据 ID。共享原始源码不等于共享推理；摘要/工具输出需声明血缘。"""
+
 
 class AuditReceipt(BaseModel):
     """一次可审计动作的不可变凭证。
@@ -65,7 +69,7 @@ class AuditReceipt(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    protocol_version: str = "parallax.receipt/v1"
+    protocol_version: Literal["parallax.receipt/v1"] = "parallax.receipt/v1"
     receipt_id: str
     kind: Literal[
         "ingest",
@@ -177,6 +181,12 @@ class AgentReputation(BaseModel):
         return alpha / (alpha + beta)
 
     def record(self, run_id: str, claim_id: str, outcome: str) -> None:
+        # 补检、重试、进程恢复不能重复结算同一事实。
+        if any(
+            (event.run_id, event.claim_id, event.outcome) == (run_id, claim_id, outcome)
+            for event in self.events
+        ):
+            return
         mapping = {
             "verified": "claims_verified",
             "refuted": "claims_refuted",
@@ -323,6 +333,10 @@ class IndependenceProfile(BaseModel):
     """是否超过本次运行声明的证据相关性预算。"""
     correlation_budget: dict[str, float] = Field(default_factory=dict)
     """运行时采用的相关性预算快照，便于复现与审计。"""
+    dependency_components: dict[str, str] = Field(default_factory=dict)
+    common_upstreams: list[str] = Field(default_factory=list)
+    unresolved_lineage: list[str] = Field(default_factory=list)
+    dependency_channel_count: int = 0
 
     @property
     def normalized_channel_ratio(self) -> float:

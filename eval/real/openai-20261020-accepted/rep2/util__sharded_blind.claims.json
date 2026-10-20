@@ -1,0 +1,126 @@
+[
+  {
+    "claim_id": "3fbd9aa1bb6c",
+    "fingerprint": "proxy.py#logic@0",
+    "statement": "[logic] proxy.py:7-14 仅在类型检查时导入 ProxyConfig 不会导致函数定义时报 NameError（确认并非缺陷）",
+    "claim_type": "logic",
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "proxy.py:7-14",
+    "rationale": "文件首行启用了 from __future__ import annotations，因此函数注解不会在定义时求值。尽管运行时不会执行 TYPE_CHECKING 分支，ProxyConfig 在函数签名中出现仍然是安全的，函数体也没有使用该类型名称。不能据此报告模块导入或正常函数调用失败。",
+    "title": "仅在类型检查时导入 ProxyConfig 不会导致函数定义时报 NameError",
+    "line_start": 7,
+    "line_end": 14,
+    "verification_status": "unverified",
+    "independent_support": 0,
+    "source_refs": [
+      {
+        "evidence_id": "fe70863714b5",
+        "adapter": "repo",
+        "locator": "proxy.py:7-14",
+        "quote": "if typing.TYPE_CHECKING:\n    from ..connection import ProxyConfig\n\n\ndef connection_requires_http_tunnel(\n    proxy_url: Url | None = None,\n    proxy_config: ProxyConfig | None = None,\n    destination_scheme: str | None = None,\n"
+      }
+    ]
+  },
+  {
+    "claim_id": "e18a95da6d58",
+    "fingerprint": "proxy.py#boundary@20",
+    "statement": "[boundary] proxy.py:35-40 HTTPS 代理转发分支对空代理配置的访问具有短路保护（确认并非缺陷）",
+    "claim_type": "boundary",
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "proxy.py:35-40",
+    "rationale": "and 表达式从左到右短路求值。proxy_config 为 None 时不会读取 use_forwarding_for_https，因此默认配置不会触发 AttributeError。对于 HTTPS 目的地，未明确启用转发时函数继续返回 True，符合默认使用 CONNECT 隧道的逻辑。",
+    "title": "HTTPS 代理转发分支对空代理配置的访问具有短路保护",
+    "line_start": 35,
+    "line_end": 40,
+    "verification_status": "unverified",
+    "independent_support": 0,
+    "source_refs": [
+      {
+        "evidence_id": "fe70863714b5",
+        "adapter": "repo",
+        "locator": "proxy.py:35-40",
+        "quote": "    if (\n        proxy_url.scheme == \"https\"\n        and proxy_config\n        and proxy_config.use_forwarding_for_https\n    ):\n        return False"
+      }
+    ]
+  },
+  {
+    "claim_id": "9cf3a9e1d4a9",
+    "fingerprint": "connection.py#logic@0",
+    "statement": "[logic] connection.py:11-15 仅在类型检查时导入 BaseHTTPConnection 不会导致函数定义失败（确认并非缺陷）",
+    "claim_type": "logic",
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "connection.py:11-15",
+    "rationale": "虽然 BaseHTTPConnection 在正常运行时没有被导入，但文件首行启用了 from __future__ import annotations，函数注解不会在定义时求值。因此，模块导入和正常调用 is_connection_dropped 不会因该类型名未定义而抛出 NameError。提供的代码也没有对该注解执行运行时求值。",
+    "title": "仅在类型检查时导入 BaseHTTPConnection 不会导致函数定义失败",
+    "line_start": 11,
+    "line_end": 15,
+    "verification_status": "unverified",
+    "independent_support": 0,
+    "source_refs": [
+      {
+        "evidence_id": "41265d08c4bb",
+        "adapter": "repo",
+        "locator": "connection.py:11-15",
+        "quote": "if typing.TYPE_CHECKING:\n    from .._base_connection import BaseHTTPConnection\n\n\ndef is_connection_dropped(conn: BaseHTTPConnection) -> bool:  # Platform-specific"
+      }
+    ]
+  },
+  {
+    "claim_id": "27c7ce05efd7",
+    "fingerprint": "connection.py#resource_leak@60",
+    "statement": "[resource_leak] connection.py:78-81 连接尝试发生 OSError 时会关闭当前套接字（确认并非缺陷）",
+    "claim_type": "resource_leak",
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "connection.py:78-81",
+    "rationale": "套接字创建、选项设置、绑定和连接均位于同一 try 块内。这些操作抛出 OSError 时，代码会关闭已创建的套接字，再尝试下一个解析地址；如果创建套接字本身失败，sock 为 None，无需关闭。因此，通常的连接拒绝、连接超时或绑定失败不会在此路径遗留套接字。",
+    "title": "连接尝试发生 OSError 时会关闭当前套接字",
+    "line_start": 78,
+    "line_end": 81,
+    "verification_status": "unverified",
+    "independent_support": 0,
+    "source_refs": [
+      {
+        "evidence_id": "41265d08c4bb",
+        "adapter": "repo",
+        "locator": "connection.py:78-81",
+        "quote": "        except OSError as _:\n            err = _\n            if sock is not None:\n                sock.close()"
+      }
+    ]
+  }
+]

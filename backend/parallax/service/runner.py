@@ -30,7 +30,7 @@ from parallax.engine import ParallaxEngine
 from parallax.infra.falsifier_llm import LLMFalsifier
 from parallax.infra.llm_openai_compat import OpenAICompatClient
 from parallax.plugins.code_audit import CodeAuditReader, RepoAdapter
-from parallax.ports.reproduction import SubprocessReproductionExecutor
+from parallax.ports.reproduction import DockerReproductionExecutor
 from parallax.reporting import render_markdown, summarise
 from parallax.service.callback import CompletionCallback
 from parallax.service.events import RunEventBus
@@ -85,7 +85,7 @@ class AuditRunner:
         self._callback = CompletionCallback(settings)
         # 声誉跨运行累积，不能随每个 HTTP 任务重新创建内存字典。
         # SQLite 保持单机/共享卷部署的持久性，替换存储实现不会影响引擎协议。
-        self._reputation_store = SQLiteReputationStore(settings.runs_dir / "reputation.sqlite3")
+        self._reputation_store = SQLiteReputationStore(store.root / "reputation.sqlite3")
         self._sources = RepoSourceManager(store.root / ".sources")
         self._tasks: dict[str, asyncio.Task] = {}
         self._semaphore = asyncio.Semaphore(max_concurrent_runs)
@@ -164,6 +164,9 @@ class AuditRunner:
                 "commit_sha": job.commit_sha,
                 "enable_llm_falsifier": settings.enable_llm_falsifier,
                 "adaptive_scheduling": settings.adaptive_scheduling,
+                "semantic_partitioning": settings.semantic_partitioning,
+                "min_independent_support": settings.min_independent_support,
+                "max_evidence_overlap_rate": settings.max_evidence_overlap_rate,
             },
         )
         self.store.create(record)
@@ -356,7 +359,11 @@ class AuditRunner:
                 client=client,  # type: ignore[arg-type]
                 settings=job.settings,
                 reproduction_executor=(
-                    SubprocessReproductionExecutor(source.path)
+                    DockerReproductionExecutor(
+                        source.path,
+                        image=job.settings.reproduction_image,
+                        timeout_s=job.settings.reproduction_timeout_s,
+                    )
                     if job.settings.enable_reproduction
                     else None
                 ),
@@ -401,6 +408,16 @@ class AuditRunner:
             run_id, render_markdown(report, max_items=job.settings.report_max_items)
         )
         self.store.save_summary(run_id, _summary_payload(report, engine))
+        self.store.save_claims(run_id, engine.runtime.ledger.claims)
+        self.store.save_manifest(run_id, report.manifest)
+        self.store.save_source_hashes(
+            run_id,
+            {
+                u.locator: u.metadata["sha256"]
+                for u in engine.runtime.evidence
+                if "sha256" in u.metadata
+            },
+        )
         self.store.update(
             run_id,
             status="done",
@@ -469,6 +486,9 @@ class AuditRunner:
             "reader_visibility": "reader_visibility",
             "enable_llm_falsifier": "enable_llm_falsifier",
             "adaptive_scheduling": "adaptive_scheduling",
+            "semantic_partitioning": "semantic_partitioning",
+            "min_independent_support": "min_independent_support",
+            "max_evidence_overlap_rate": "max_evidence_overlap_rate",
         }
         for key, target in allowed.items():
             value = overrides.get(key)
@@ -495,6 +515,13 @@ class AuditRunner:
             base["enable_llm_falsifier"] = bool(snapshot["enable_llm_falsifier"])
         if snapshot.get("adaptive_scheduling") is not None:
             base["adaptive_scheduling"] = bool(snapshot["adaptive_scheduling"])
+        for key in (
+            "semantic_partitioning",
+            "min_independent_support",
+            "max_evidence_overlap_rate",
+        ):
+            if snapshot.get(key) is not None:
+                base[key] = snapshot[key]
         return Settings(**base)
 
 
@@ -555,6 +582,8 @@ def _summary_payload(report, engine) -> dict:
                 "rationale": c.metadata.get("rationale"),
                 "verification_status": c.verification_status,
                 "verification_reason": c.metadata.get("verification_reason"),
+                "independent_support": c.metadata.get("independent_support", 0),
+                "support_components": c.metadata.get("support_components", []),
             }
             for bucket, claims in (
                 ("high_confidence", report.high_confidence),

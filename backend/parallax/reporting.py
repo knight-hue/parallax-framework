@@ -23,9 +23,9 @@ def render_markdown(report: Report, *, max_items: int = 40) -> str:
     lines.append("| 结论 | 条数 | 含义 |")
     lines.append("| --- | ---: | --- |")
     lines.append(
-        f"| 高置信 | {counts['high_confidence']} | >= {report.manifest.support_threshold} 个独立 Agent 交叉验证 |"
+        f"| 高置信 | {counts['high_confidence']} | 独立支持通道满足运行阈值（事实仍需验证） |"
     )
-    lines.append(f"| 待验证 | {counts['pending']} | 单一来源孤证 |")
+    lines.append(f"| 待验证 | {counts['pending']} | 支持不足、相关性超限或尚待验证 |")
     lines.append(f"| 争议 | {counts['disputed']} | 存在极性相反的主张，需外部裁决 |")
     lines.append("")
 
@@ -52,6 +52,11 @@ def render_markdown(report: Report, *, max_items: int = 40) -> str:
     )
     lines.append(
         f"- 证据血缘：{len(report.provenance.nodes)} 个节点 / {len(report.provenance.edges)} 条边"
+    )
+    lines.append(
+        f"- 去共同上游后的通道：{independence.dependency_channel_count}；"
+        f"共同推理上游：{len(independence.common_upstreams)}；"
+        f"未解析血缘：{len(independence.unresolved_lineage)}"
     )
     lines.append("")
     if m.rounds:
@@ -92,7 +97,7 @@ def _render_claims(title: str, claims: list[Claim], max_items: int) -> list[str]
         severity = claim.metadata.get("severity", "?")
         lines.append(f"- **[{claim.claim_type}/{severity}]** {claim.statement}")
         lines.append(
-            f"  - 独立来源 {len(claim.verified_by)} 个：{', '.join(claim.verified_by) or '—'}"
+            f"  - 独立来源 {claim.metadata.get('independent_support', len(claim.verified_by))} 个：{', '.join(claim.verified_by) or '—'}"
             f"｜置信度 {claim.confidence}"
         )
         lines.append(f"  - 反证状态：`{claim.verification_status}`")
@@ -106,8 +111,8 @@ def _render_claims(title: str, claims: list[Claim], max_items: int) -> list[str]
             lines.append(f"  - 依据：{rationale}")
         if claim.disputed_with:
             lines.append(f"  - 争议对手：{', '.join(claim.disputed_with)}")
-    if len(claims) > max_items:
-        lines.append(f"- …另有 {len(claims) - max_items} 条未列出")
+    if len(claims) > limit:
+        lines.append(f"- …另有 {len(claims) - limit} 条未列出")
     lines.append("")
     return lines
 

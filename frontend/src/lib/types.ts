@@ -1,12 +1,14 @@
 /** 与后端 `parallax/service/` 的契约一一对应。改后端 schema 时这里必须同步。 */
 
-export type RunStatus = 'queued' | 'running' | 'done' | 'failed';
+export type RunStatus = 'queued' | 'running' | 'done' | 'failed' | 'canceled';
 
 export interface RunRecord {
   run_id: string;
   status: RunStatus;
   question: string;
   repo_path: string;
+  repo_url?: string | null;
+  commit_sha?: string | null;
   plugin: string;
   created_at: string;
   started_at: string | null;
@@ -50,6 +52,8 @@ export interface ClaimRow {
   rationale: string | null;
   verification_status: string;
   verification_reason: string | null;
+  independent_support?: number;
+  support_components?: string[];
 }
 
 export interface RoundRow {
@@ -101,6 +105,32 @@ export interface IndependenceProfile {
   coverage_fill_rate: number;
   correlation_budget_violated: boolean;
   correlation_budget: Record<string, number>;
+  dependency_components?: Record<string, string>;
+  common_upstreams?: string[];
+  unresolved_lineage?: string[];
+  dependency_channel_count?: number;
+}
+
+export interface RepairExecution {
+  status: string;
+  reason: string;
+  exit_code: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+export interface RepairProposal {
+  repair_id: string;
+  run_id: string;
+  status: string;
+  approval_digest: string;
+  patch: string;
+  plan: { explanation: string; regression_command: string[]; baseline_failure_contains: string };
+  claim: { verification_status: string };
+  baseline_result?: RepairExecution;
+  regression_result?: RepairExecution;
+  events: string[];
+  reason?: string;
 }
 
 export interface ProvenanceNode {

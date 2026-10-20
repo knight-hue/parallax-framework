@@ -132,6 +132,8 @@ class OpenAICompatClient:
         reasoning_model = self._is_reasoning_model(self.settings.llm_model)
         if not reasoning_model:
             body["temperature"] = temperature
+        if self.settings.llm_reasoning_effort is not None:
+            body["reasoning_effort"] = self.settings.llm_reasoning_effort
         if max_tokens:
             body["max_completion_tokens" if reasoning_model else "max_tokens"] = max_tokens
         if json_mode and self.settings.llm_use_json_mode:
@@ -148,7 +150,10 @@ class OpenAICompatClient:
         for attempt in range(self.settings.llm_max_retries + 1):
             try:
                 client = await self._ensure_client()
-                response = await client.post(url, json=body, headers=headers)
+                response = await asyncio.wait_for(
+                    client.post(url, json=body, headers=headers),
+                    timeout=self.settings.llm_timeout_s,
+                )
                 if response.status_code == 429 or response.status_code >= 500:
                     raise httpx.HTTPStatusError(
                         f"retryable status {response.status_code}",
@@ -165,7 +170,12 @@ class OpenAICompatClient:
                 return data
             except LLMError:
                 raise
-            except (httpx.HTTPStatusError, httpx.TransportError, httpx.TimeoutException) as exc:
+            except (
+                httpx.HTTPStatusError,
+                httpx.TransportError,
+                httpx.TimeoutException,
+                TimeoutError,
+            ) as exc:
                 last_error = exc
                 self.usage.failures += 1
                 if attempt >= self.settings.llm_max_retries:

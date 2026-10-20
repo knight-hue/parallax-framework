@@ -7,8 +7,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,12 +32,21 @@ class Settings(BaseSettings):
     llm_api_key: str = Field(
         default="",
         validation_alias=AliasChoices("PARALLAX_LLM_API_KEY", "OPENAI_API_KEY"),
+        repr=False,
     )
     llm_model: str = Field(
         default="gpt-4o-mini",
         validation_alias=AliasChoices("PARALLAX_LLM_MODEL", "OPENAI_MODEL"),
     )
     llm_temperature: float = 0.0
+    llm_reasoning_effort: Literal["low", "medium", "high"] | None = None
+    """只在显式配置时发送；需由兼容端点实际验收支持程度。"""
+
+    @field_validator("llm_reasoning_effort", mode="before")
+    @classmethod
+    def empty_reasoning_effort(cls, value):
+        return None if value == "" else value
+
     llm_timeout_s: float = 90.0
     llm_max_retries: int = 3
     llm_use_json_mode: bool = True
@@ -64,6 +74,9 @@ class Settings(BaseSettings):
     """多少个独立 Agent 报出同一主体才算高置信。"""
     max_rounds: int = 3
     seed: int = 0
+    semantic_partitioning: bool = False
+    semantic_closure_hops: int = Field(default=1, ge=1, le=4)
+    semantic_max_context_units: int = Field(default=8, ge=1, le=64)
     max_concurrency: int = 4
     worker_lease_seconds: float = 300.0
     """跨进程任务租约时长；失联 worker 超时后可被其他副本接管。"""
@@ -127,6 +140,10 @@ class Settings(BaseSettings):
     max_tokens: int = 0
     enable_reproduction: bool = False
     """是否执行 Claim 提供的最小复现命令；生产环境应在隔离 worker 中显式开启。"""
+    reproduction_image: str = "parallax-repro:local"
+    reproduction_timeout_s: float = Field(default=20.0, gt=0, le=300)
+    enable_repair: bool = False
+    """允许人工审阅后在隔离副本应用补丁与运行回归；永不直接写回原始仓库。"""
     enable_llm_falsifier: bool = False
     """是否启用独立的真实模型反证调用；默认关闭以保持成本和离线行为可控。"""
     falsifier_max_evidence_chars: int = 24000
@@ -143,6 +160,7 @@ class Settings(BaseSettings):
     防止 HTTP 调用方借 ``repo_path`` 读取服务进程上的任意目录。
     路径会先 resolve，再做祖先关系检查以阻断符号链接逃逸。
     """
+    cors_origins: list[str] = Field(default_factory=lambda: ["*"])
 
     # ---- 完成回调（Java 网关的平台能力）----
     callback_url: str = ""
@@ -155,6 +173,7 @@ class Settings(BaseSettings):
     记账是平台层的事，不该反过来影响编排层的成败。
     """
     callback_token: str = ""
+    gateway_internal_token: str = Field(default="", repr=False)
     """回调时携带的 `X-Internal-Token`，与网关的 `PARALLAX_GATEWAY_INTERNAL_TOKEN` 一致。"""
     callback_timeout_s: float = 5.0
     """回调超时。放得很短：回调是尽力而为，不能拖住运行收尾。"""

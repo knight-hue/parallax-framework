@@ -54,6 +54,9 @@ def build_parser() -> argparse.ArgumentParser:
     audit.add_argument("--redundancy", type=int, default=None, help="每条证据被几个 Reader 看到")
     audit.add_argument("--support", type=int, default=None, help="判定高置信所需的独立来源数")
     audit.add_argument("--max-rounds", type=int, default=None)
+    audit.add_argument(
+        "--semantic-partitioning", action=argparse.BooleanOptionalAction, default=None
+    )
     audit.add_argument("--max-llm-calls", type=int, default=None, help="调用次数上限，0 表示不限")
     audit.add_argument(
         "--visibility",
@@ -155,6 +158,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="各档抽样条数，形如 high_confidence=15,pending=15,disputed=10",
     )
+    receipt = sub.add_parser("receipts", help="导入并审计外部编排器的 Receipt bundle JSON")
+    receipt.add_argument("bundle", type=Path)
+    receipt.add_argument("--out", type=Path)
     return parser
 
 
@@ -173,6 +179,7 @@ def _overrides(args: argparse.Namespace) -> dict:
         "reader_visibility": getattr(args, "visibility", None),
         "enable_llm_falsifier": getattr(args, "llm_falsifier", None),
         "adaptive_scheduling": getattr(args, "adaptive_scheduling", None),
+        "semantic_partitioning": getattr(args, "semantic_partitioning", None),
     }
     return {k: v for k, v in pairs.items() if v is not None}
 
@@ -451,6 +458,19 @@ def _run_spotcheck_cli(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.command == "receipts":
+        from parallax.ports.receipts import ReceiptBundle
+
+        if args.bundle.stat().st_size > 50_000_000:
+            raise SystemExit("Receipt bundle 超过 50 MB")
+        bundle = ReceiptBundle.model_validate_json(args.bundle.read_text(encoding="utf-8"))
+        text = json.dumps(bundle.audit(), ensure_ascii=False, indent=2)
+        if args.out:
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            args.out.write_text(text, encoding="utf-8")
+        else:
+            print(text)
+        return 0
     if args.command == "audit":
         try:
             return asyncio.run(_run_audit(args))

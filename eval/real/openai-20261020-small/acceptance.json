@@ -1,0 +1,27 @@
+{
+  "model": "gpt-6.1-sol",
+  "repeats": 3,
+  "readers": 3,
+  "max_files": 3,
+  "ground_truth": false,
+  "corpus": [
+    {
+      "locator": "__init__.py",
+      "sha256": "faa792d1071e8af6b3bc110a0cd142008fba00271d0ce1384ccbe8ed22cd9404"
+    },
+    {
+      "locator": "connection.py",
+      "sha256": "2633bbdb69731e5ccb5cf4e4afd65605d86c7979cc5633126f50c92d5ad74a74"
+    },
+    {
+      "locator": "proxy.py",
+      "sha256": "b1e3fcf90e41e9b07474cb703e3f98719650df4bc7b8ba91bbeb48d096767f3b"
+    }
+  ],
+  "comparison_limits": [
+    "sharded_shared vs sharded_blind isolates output visibility at equal assignments/rounds",
+    "blind_full adds retrieval; compare measured tokens/calls, not equal total cost",
+    "no ground truth: precision and recall remain unknown",
+    "same seed repeats measure provider variability, not independent dataset sampling"
+  ]
+}

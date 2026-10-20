@@ -1,0 +1,25 @@
+--- /dev/null
++++ b/tests/test_calc.py
+@@ -0,0 +1,13 @@
++from calc import divide
++
++def test_divide():
++    assert divide(4, 2) == 2
++    assert divide(-3, 2) == -1.5
++    try:
++        result = divide(1, 0)
++    except ZeroDivisionError:
++        result = object()
++    assert result is None, 'divide(a, 0) must return None'
++
++if __name__ == '__main__':
++    test_divide()
+--- a/calc.py
++++ b/calc.py
+@@ -3,4 +3,6 @@
+ Regression runtime: /usr/bin/python3 in an offline Linux container.
+ """
+ def divide(a, b):
++    if b == 0:
++        return None
+     return a / b

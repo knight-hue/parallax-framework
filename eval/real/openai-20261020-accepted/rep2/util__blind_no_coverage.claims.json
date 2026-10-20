@@ -1,0 +1,33 @@
+[
+  {
+    "claim_id": "762e278a3f6c",
+    "fingerprint": "connection.py#resource_leak@60",
+    "statement": "[resource_leak] connection.py:62-76 无效超时或套接字选项异常时未显式关闭已创建的套接字（确认存在缺陷）",
+    "claim_type": "resource_leak",
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "connection.py:62-76",
+    "rationale": "套接字在设置选项和超时之前已经创建，但 try 块只捕获 OSError。传入负数超时时，socket.settimeout() 会抛出 ValueError；某些无效套接字选项也可能抛出 ValueError。此类异常会直接离开函数，不执行 sock.close()，导致套接字依赖垃圾回收释放；在非引用计数实现或高频触发时可能造成文件描述符耗尽。",
+    "title": "无效超时或套接字选项异常时未显式关闭已创建的套接字",
+    "line_start": 62,
+    "line_end": 76,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "41265d08c4bb",
+        "adapter": "repo",
+        "locator": "connection.py:62-76",
+        "quote": "            # If provided, set socket level options before connecting.\n            _set_socket_options(sock, socket_options)\n\n            if timeout is not _DEFAULT_TIMEOUT:\n                sock.settimeout(timeout)\n            if source_address:\n                sock.bind(source_address)\n            sock.connect(sa)\n            # Break explicitly a reference cycle\n            err = None\n            return sock\n\n        except OSError as _:\n            err = _\n            if sock is not None:\n                sock.close()"
+      }
+    ]
+  }
+]

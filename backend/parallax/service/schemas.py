@@ -40,6 +40,9 @@ class AuditRequest(BaseModel):
         default=None,
         description="是否启用缺口优先的确定性补检调度；默认跟随服务配置",
     )
+    semantic_partitioning: bool | None = None
+    min_independent_support: int | None = Field(default=None, ge=1, le=64)
+    max_evidence_overlap_rate: float | None = Field(default=None, ge=0, le=1)
 
 
 class AuditSubmitted(BaseModel):

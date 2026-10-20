@@ -16,6 +16,25 @@ class _Reply(BaseModel):
     ok: bool
 
 
+async def test_request_has_total_deadline_even_when_transport_never_finishes():
+    import asyncio
+
+    async def handler(request):
+        await asyncio.sleep(10)
+        return httpx.Response(200, json={})
+
+    transport = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = OpenAICompatClient(
+        Settings(llm_api_key="test", llm_timeout_s=0.05, llm_max_retries=0), client=transport
+    )
+    try:
+        with pytest.raises(LLMError):
+            await asyncio.wait_for(client.complete([ChatMessage(role="user", content="test")]), 1)
+        assert client.usage.failures == 1
+    finally:
+        await transport.aclose()
+
+
 def test_openai_environment_aliases(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
     monkeypatch.delenv("PARALLAX_LLM_API_KEY", raising=False)
@@ -96,3 +115,9 @@ async def test_payment_required_is_not_retried():
         await client.complete([ChatMessage(role="user", content="ping")])
     assert calls == 1
     await client.aclose()
+
+
+def test_empty_optional_reasoning_setting_is_omitted():
+    from parallax.config import Settings
+
+    assert Settings(_env_file=None, llm_reasoning_effort="").llm_reasoning_effort is None

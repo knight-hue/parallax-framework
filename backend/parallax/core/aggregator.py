@@ -83,7 +83,11 @@ class Aggregator:
                 if claim is None:  # pragma: no cover - 防御性
                     continue
                 claim.status = group.status
-                claim.verified_by = list(group.asserting_agents)
+                claim.verified_by = list(
+                    group.asserting_agents
+                    if claim.polarity == Polarity.ASSERT
+                    else group.denying_agents
+                )
                 claim.disputed_with = disputed_peers.get(claim_id, [])
                 claim.confidence = confidence
         return groups

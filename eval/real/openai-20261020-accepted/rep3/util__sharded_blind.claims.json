@@ -1,0 +1,95 @@
+[
+  {
+    "claim_id": "2e04639a6b5a",
+    "fingerprint": "proxy.py#logic@20",
+    "statement": "[logic] proxy.py:35-40 HTTPS 代理的转发配置不会使 HTTP 代理错误地跳过隧道（确认并非缺陷）",
+    "claim_type": "logic",
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "proxy.py:35-40",
+    "rationale": "该分支同时要求代理协议为 https、存在代理配置且启用了 use_forwarding_for_https。对于 HTTPS 目标，即使 HTTP 代理的配置启用了该标志，也不会进入此分支，而是返回 True 使用 CONNECT。HTTPS 代理明确启用转发时返回 False，与该配置的用途一致。此前的分支已经处理无代理和 HTTP 目标的情况，因此没有发现此处存在隧道判断错误。",
+    "title": "HTTPS 代理的转发配置不会使 HTTP 代理错误地跳过隧道",
+    "line_start": 35,
+    "line_end": 40,
+    "verification_status": "unverified",
+    "independent_support": 0,
+    "source_refs": [
+      {
+        "evidence_id": "fe70863714b5",
+        "adapter": "repo",
+        "locator": "proxy.py:35-40",
+        "quote": "    if (\n        proxy_url.scheme == \"https\"\n        and proxy_config\n        and proxy_config.use_forwarding_for_https\n    ):\n        return False"
+      }
+    ]
+  },
+  {
+    "claim_id": "27c7ce05efd7",
+    "fingerprint": "connection.py#resource_leak@60",
+    "statement": "[resource_leak] connection.py:78-81 连接尝试发生 OSError 时会关闭当前套接字，不构成该异常路径上的资源泄漏（确认并非缺陷）",
+    "claim_type": "resource_leak",
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "connection.py:78-81",
+    "rationale": "套接字创建、选项设置、绑定和连接都位于同一个 try 块内。上述操作抛出 OSError 时，代码会保存异常，并在套接字已创建的情况下关闭它，然后尝试下一个解析地址。如果所有地址都失败，循环后的代码会重新抛出保存的异常。因此，常见的连接拒绝、连接超时和绑定失败不会使当前套接字遗留未关闭。此结论仅覆盖 OSError 路径。",
+    "title": "连接尝试发生 OSError 时会关闭当前套接字，不构成该异常路径上的资源泄漏",
+    "line_start": 78,
+    "line_end": 81,
+    "verification_status": "unverified",
+    "independent_support": 0,
+    "source_refs": [
+      {
+        "evidence_id": "41265d08c4bb",
+        "adapter": "repo",
+        "locator": "connection.py:78-81",
+        "quote": "        except OSError as _:\n            err = _\n            if sock is not None:\n                sock.close()"
+      }
+    ]
+  },
+  {
+    "claim_id": "9cf3a9e1d4a9",
+    "fingerprint": "connection.py#logic@0",
+    "statement": "[logic] connection.py:11-15 仅在 TYPE_CHECKING 下导入 BaseHTTPConnection 不会导致函数定义或正常调用失败（确认并非缺陷）",
+    "claim_type": "logic",
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "connection.py:11-15",
+    "rationale": "文件首行启用了 from __future__ import annotations，因此函数定义时不会求值 BaseHTTPConnection 注解。运行时不执行 TYPE_CHECKING 分支不会导致模块导入失败；函数体只读取传入对象的 is_connected 属性，也不依赖 BaseHTTPConnection 名称。给出的代码没有执行需要解析该注解的运行时反射操作。",
+    "title": "仅在 TYPE_CHECKING 下导入 BaseHTTPConnection 不会导致函数定义或正常调用失败",
+    "line_start": 11,
+    "line_end": 15,
+    "verification_status": "unverified",
+    "independent_support": 0,
+    "source_refs": [
+      {
+        "evidence_id": "41265d08c4bb",
+        "adapter": "repo",
+        "locator": "connection.py:11-15",
+        "quote": "if typing.TYPE_CHECKING:\n    from .._base_connection import BaseHTTPConnection\n\n\ndef is_connection_dropped(conn: BaseHTTPConnection) -> bool:  # Platform-specific"
+      }
+    ]
+  }
+]

@@ -1,0 +1,33 @@
+[
+  {
+    "claim_id": "762e278a3f6c",
+    "fingerprint": "connection.py#resource_leak@60",
+    "statement": "[resource_leak] connection.py:60-67 非 OSError 的套接字初始化异常会泄漏已创建的 socket（确认存在缺陷）",
+    "claim_type": "resource_leak",
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "connection.py:60-67",
+    "rationale": "socket 已经创建后，后续初始化操作位于只捕获 OSError 的异常处理块中。传入负数 timeout 时，socket.settimeout(timeout) 会抛出 ValueError；该异常不会进入 except 分支，因此已创建的 socket 不会被关闭。类似地，格式错误的 socket_options 可能抛出 TypeError 或 ValueError，也会导致相同泄漏。",
+    "title": "非 OSError 的套接字初始化异常会泄漏已创建的 socket",
+    "line_start": 60,
+    "line_end": 67,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "41265d08c4bb",
+        "adapter": "repo",
+        "locator": "connection.py:60-67",
+        "quote": "        try:\n            sock = socket.socket(af, socktype, proto)\n\n            # If provided, set socket level options before connecting.\n            _set_socket_options(sock, socket_options)\n\n            if timeout is not _DEFAULT_TIMEOUT:\n                sock.settimeout(timeout)"
+      }
+    ]
+  }
+]

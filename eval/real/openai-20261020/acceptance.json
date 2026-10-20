@@ -1,0 +1,47 @@
+{
+  "model": "gpt-6.1-sol",
+  "repeats": 3,
+  "readers": 3,
+  "max_files": 8,
+  "ground_truth": false,
+  "corpus": [
+    {
+      "locator": "__init__.py",
+      "sha256": "f9060d2204dcb14b5d7abfe1423c75bb9394fe863550cebf2cb4b6449504df9d"
+    },
+    {
+      "locator": "__main__.py",
+      "sha256": "6ca78f5cb74ee12b1548ceabf525682e2724243711d9cd1c4cec5944aab6e984"
+    },
+    {
+      "locator": "_compat/__init__.py",
+      "sha256": "3d8391fbcbc9e6f6b842397cd7415c42625baa6a72c9e40ca19f51f3a09e1365"
+    },
+    {
+      "locator": "_compat/shared.py",
+      "sha256": "96fd33958e524adf20c7e4c3a472fd34d1b2f507f5e910442b7f8e5dceff2ce4"
+    },
+    {
+      "locator": "_compat/v2.py",
+      "sha256": "b031b28b588a4855bd2ee27b9f807ad7ed72ad0235347452c2c15144bb8527c9"
+    },
+    {
+      "locator": "applications.py",
+      "sha256": "e16035df3fbc35d8f2e457c8e4e8a90f058c2e620fd4cee5ee6aa96288b4bab1"
+    },
+    {
+      "locator": "background.py",
+      "sha256": "bbe04cc9ed1fe7c8b378241eeffbc6b63a318eeea2c4bec7b36b0c85e12696a9"
+    },
+    {
+      "locator": "cli.py",
+      "sha256": "72c378b14c969a4771d67acb15e28fdbf22f752db192e0e2c3c076b9babd6f0d"
+    }
+  ],
+  "comparison_limits": [
+    "sharded_shared vs sharded_blind isolates output visibility at equal assignments/rounds",
+    "blind_full adds retrieval; compare measured tokens/calls, not equal total cost",
+    "no ground truth: precision and recall remain unknown",
+    "same seed repeats measure provider variability, not independent dataset sampling"
+  ]
+}

@@ -47,7 +47,8 @@ public class ProxyController {
     private static final Pattern ALLOWED = Pattern.compile(
             "^/(health|ready)$"
                     + "|^/api/v1/meta$"
-                    + "|^/api/v1/audits(/[A-Za-z0-9_-]{1,64})?(/(events|result|report))?$");
+                    + "|^/api/v1/audits(/[A-Za-z0-9_-]{1,64})?(/(events|result|report|receipts))?$"
+                    + "|^/api/v1/audits/[A-Za-z0-9_-]{1,64}/repairs(/[a-f0-9]{32}(/approve)?)?$");
 
     /** 提交审查的响应体上限。正常只有几十字节；超过它说明上游返回了意料之外的东西。 */
     private static final int MAX_CAPTURE_BYTES = 64 * 1024;
@@ -82,6 +83,12 @@ public class ProxyController {
         return forward(request, false, null);
     }
 
+    @PostMapping({"/api/v1/audits/{runId}/repairs", "/api/v1/audits/{runId}/repairs/{repairId}/approve"})
+    public ResponseEntity<StreamingResponseBody> forwardRepair(
+            HttpServletRequest request, @RequestBody byte[] body) {
+        return forward(request, true, body);
+    }
+
     private ResponseEntity<StreamingResponseBody> forward(
             HttpServletRequest request, boolean nonIdempotent, byte[] body) {
         String path = request.getRequestURI();
@@ -92,6 +99,10 @@ public class ProxyController {
         Map<String, String> headers = new HashMap<>();
         headers.put(TraceFilter.TRACE_HEADER, TraceFilter.currentTraceId());
         AuthPrincipal principal = currentPrincipal();
+        if (principal != null) {
+            headers.put("X-Parallax-Operator", java.net.URLEncoder.encode(
+                    principal.subject(), java.nio.charset.StandardCharsets.UTF_8));
+        }
         if (principal != null && principal.hasCredential()) {
             headers.put(CredentialHeaders.CREDENTIAL_ID, principal.credentialId());
         }
@@ -101,7 +112,7 @@ public class ProxyController {
         }
 
         // 提交审查时先落一条 queued：额度按"提交"计数，而不是按"完成"计数
-        String submissionId = registerSubmission(nonIdempotent, body);
+        String submissionId = registerSubmission(nonIdempotent && "/api/v1/audits".equals(path), body);
 
         try {
             UpstreamResponse response = nonIdempotent

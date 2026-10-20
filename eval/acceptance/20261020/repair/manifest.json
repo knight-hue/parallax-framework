@@ -1,0 +1,166 @@
+{
+  "run_id": "8b974f31722f",
+  "question": "找出这个代码仓库中真实存在的缺陷，并说明触发条件。",
+  "plugin": "code_audit",
+  "seed": 0,
+  "max_rounds": 1,
+  "support_threshold": 1,
+  "started_at": "2026-10-20T11:09:27.839718Z",
+  "finished_at": "2026-10-20T11:10:11.082580Z",
+  "rounds": [
+    {
+      "round_index": 0,
+      "assignments": {
+        "reader-r0-0": [
+          "82411b9d7af0"
+        ]
+      },
+      "claims_extracted": 1,
+      "new_fingerprints": 1,
+      "coverage_fill_rate": 0.125,
+      "evidence_fill_rate": 1.0,
+      "sparse_cell_count": 7
+    }
+  ],
+  "stop_reason": "max_rounds_reached",
+  "total_claims": 1,
+  "reader_ids": [
+    "reader-r0-0"
+  ],
+  "receipts": [
+    {
+      "protocol_version": "parallax.receipt/v1",
+      "receipt_id": "dca9fbd8eedc",
+      "kind": "ingest",
+      "run_id": "8b974f31722f",
+      "round_index": 0,
+      "actor_id": null,
+      "evidence_ids": [
+        "82411b9d7af0"
+      ],
+      "claim_ids": [],
+      "payload": {
+        "question": "找出这个代码仓库中真实存在的缺陷，并说明触发条件。",
+        "rows": [
+          "root"
+        ],
+        "cols": [
+          "logic",
+          "concurrency",
+          "boundary",
+          "error_handling",
+          "resource_leak",
+          "security",
+          "performance",
+          "api_misuse"
+        ]
+      },
+      "at": "2026-10-20T11:09:27.893644Z"
+    },
+    {
+      "protocol_version": "parallax.receipt/v1",
+      "receipt_id": "82cff354ab08",
+      "kind": "partition",
+      "run_id": "8b974f31722f",
+      "round_index": 0,
+      "actor_id": null,
+      "evidence_ids": [
+        "82411b9d7af0"
+      ],
+      "claim_ids": [],
+      "payload": {
+        "readers": [
+          "reader-r0-0"
+        ],
+        "focus": []
+      },
+      "at": "2026-10-20T11:09:27.897403Z"
+    },
+    {
+      "protocol_version": "parallax.receipt/v1",
+      "receipt_id": "907d8a4cad6b",
+      "kind": "reader",
+      "run_id": "8b974f31722f",
+      "round_index": 0,
+      "actor_id": "reader-r0-0",
+      "evidence_ids": [
+        "82411b9d7af0"
+      ],
+      "claim_ids": [
+        "037cf2bd3651"
+      ],
+      "payload": {
+        "ok": true,
+        "error": null
+      },
+      "at": "2026-10-20T11:09:53.134461Z"
+    },
+    {
+      "protocol_version": "parallax.receipt/v1",
+      "receipt_id": "4a2db305212b",
+      "kind": "claim",
+      "run_id": "8b974f31722f",
+      "round_index": 0,
+      "actor_id": null,
+      "evidence_ids": [],
+      "claim_ids": [
+        "037cf2bd3651"
+      ],
+      "payload": {
+        "admitted": 1,
+        "rejected": 0
+      },
+      "at": "2026-10-20T11:09:53.141003Z"
+    },
+    {
+      "protocol_version": "parallax.receipt/v1",
+      "receipt_id": "fae316c658c7",
+      "kind": "verification",
+      "run_id": "8b974f31722f",
+      "round_index": 0,
+      "actor_id": null,
+      "evidence_ids": [
+        "82411b9d7af0"
+      ],
+      "claim_ids": [
+        "037cf2bd3651"
+      ],
+      "payload": {
+        "falsifier": "llm-falsifier",
+        "reproduction_executor": null,
+        "results": [
+          {
+            "claim_id": "037cf2bd3651",
+            "verdict": "confirmed",
+            "evidence_ids": [
+              "82411b9d7af0"
+            ],
+            "reason": "契约明确要求 b 为零时返回 None，但实现直接执行 a / b，调用 divide(a, 0) 将触发除零错误而非返回 None。"
+          }
+        ]
+      },
+      "at": "2026-10-20T11:10:11.065226Z"
+    },
+    {
+      "protocol_version": "parallax.receipt/v1",
+      "receipt_id": "d917ded9fec5",
+      "kind": "coverage",
+      "run_id": "8b974f31722f",
+      "round_index": 0,
+      "actor_id": null,
+      "evidence_ids": [],
+      "claim_ids": [],
+      "payload": {
+        "should_retrieve": false,
+        "evidence_fill_rate": 1.0,
+        "claim_cell_fill_rate": 0.125,
+        "stop_reason": "max_rounds_reached"
+      },
+      "at": "2026-10-20T11:10:11.078777Z"
+    }
+  ],
+  "correlation_budget": {
+    "max_evidence_overlap_rate": 1.0,
+    "min_independent_support": 1.0
+  }
+}

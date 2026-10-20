@@ -18,9 +18,13 @@ services:
     image: parallax-api:0.1.0
     container_name: parallax-api
     environment:
-      PARALLAX_LLM_API_KEY: ${PARALLAX_LLM_API_KEY:-}
-      PARALLAX_LLM_BASE_URL: ${PARALLAX_LLM_BASE_URL:-https://api.openai.com/v1}
-      PARALLAX_LLM_MODEL: ${PARALLAX_LLM_MODEL:-gpt-4o-mini}
+      PARALLAX_LLM_API_KEY: ${PARALLAX_LLM_API_KEY:-${OPENAI_API_KEY:-}}
+      PARALLAX_LLM_BASE_URL: ${PARALLAX_LLM_BASE_URL:-${OPENAI_BASE_URL:-https://api.openai.com/v1}}
+      PARALLAX_LLM_MODEL: ${PARALLAX_LLM_MODEL:-${OPENAI_MODEL:-gpt-4o-mini}}
+      PARALLAX_LLM_REASONING_EFFORT: ${PARALLAX_LLM_REASONING_EFFORT:-}
+      PARALLAX_LLM_TIMEOUT_S: ${PARALLAX_LLM_TIMEOUT_S:-90}
+      PARALLAX_LLM_MAX_RETRIES: ${PARALLAX_LLM_MAX_RETRIES:-3}
+      PARALLAX_LLM_MAX_OUTPUT_TOKENS: ${PARALLAX_LLM_MAX_OUTPUT_TOKENS:-16000}
       PARALLAX_N_READERS: ${PARALLAX_N_READERS:-3}
       PARALLAX_REDUNDANCY: ${PARALLAX_REDUNDANCY:-2}
       PARALLAX_SUPPORT_THRESHOLD: ${PARALLAX_SUPPORT_THRESHOLD:-2}
@@ -31,6 +35,15 @@ services:
       PARALLAX_AUDIT_ROOT: /workspace
       PARALLAX_WORKER_LEASE_SECONDS: ${PARALLAX_WORKER_LEASE_SECONDS:-300}
       PARALLAX_ENABLE_REPRODUCTION: ${PARALLAX_ENABLE_REPRODUCTION:-false}
+      PARALLAX_ENABLE_REPAIR: ${PARALLAX_ENABLE_REPAIR:-false}
+      PARALLAX_REPRODUCTION_IMAGE: ${PARALLAX_REPRODUCTION_IMAGE:-parallax-repro:local}
+      PARALLAX_REPRODUCTION_TIMEOUT_S: ${PARALLAX_REPRODUCTION_TIMEOUT_S:-20}
+      PARALLAX_ENABLE_LLM_FALSIFIER: ${PARALLAX_ENABLE_LLM_FALSIFIER:-false}
+      PARALLAX_ADAPTIVE_SCHEDULING: ${PARALLAX_ADAPTIVE_SCHEDULING:-false}
+      PARALLAX_SEMANTIC_PARTITIONING: ${PARALLAX_SEMANTIC_PARTITIONING:-false}
+      PARALLAX_MAX_EVIDENCE_OVERLAP_RATE: ${PARALLAX_MAX_EVIDENCE_OVERLAP_RATE:-1}
+      PARALLAX_MIN_INDEPENDENT_SUPPORT: ${PARALLAX_MIN_INDEPENDENT_SUPPORT:-0}
+      PARALLAX_GATEWAY_INTERNAL_TOKEN: ${PARALLAX_GATEWAY_INTERNAL_TOKEN:-}
       PARALLAX_WEBHOOK_SECRET: ${PARALLAX_WEBHOOK_SECRET:-}
       # 完成回调：一次审查结束后把 token 用量回报给网关。
       # **默认留空 = 不回调**——脱离网关单独跑 api 时那个地址根本不存在。
@@ -50,15 +63,16 @@ services:
     restart: unless-stopped
     init: true
 
-  # 控制台。默认用宿主机的 8000 端口直连 api——浏览器的 localhost 就是宿主机，
-  # 所以不需要额外的反向代理。若改成经 Java 网关暴露，用 build arg 指定网关地址即可。
+  # 控制台默认通过 /backend 同源代理；服务器端运行时选择 api 或 gateway。
   web:
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_PARALLAX_API: ${PARALLAX_PUBLIC_API:-http://localhost:8000}
+        NEXT_PUBLIC_PARALLAX_API: ${PARALLAX_PUBLIC_API:-/backend}
     image: parallax-web:0.1.0
     container_name: parallax-web
+    environment:
+      PARALLAX_SERVER_API: ${PARALLAX_SERVER_API:-http://api:8000}
     depends_on:
       api:
         condition: service_started
@@ -104,7 +118,7 @@ services:
   # 与网关同属 gateway profile——网关没有它就起不来，把两者拆到不同 profile
   # 只会制造"起了网关但没有库"这种必然报错的组合。
   postgres:
-    image: postgres:17-alpine
+    image: ${PARALLAX_POSTGRES_IMAGE:-postgres:17-alpine}
     container_name: parallax-postgres
     profiles: ["gateway"]
     environment:
@@ -127,7 +141,7 @@ services:
   # 因为"网关多实例共享同一配额"正是 Redis 在这里的唯一职责。
   # Redis 挂掉时网关会自动降级回内存桶，服务不受影响。
   redis:
-    image: redis:7-alpine
+    image: ${PARALLAX_REDIS_IMAGE:-redis:7-alpine}
     container_name: parallax-redis
     profiles: ["infra", "gateway"]
     command: ["redis-server", "--appendonly", "yes", "--save", ""]

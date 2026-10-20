@@ -1,0 +1,97 @@
+[
+  {
+    "claim_id": "2e04639a6b5a",
+    "fingerprint": "proxy.py#logic@20",
+    "statement": "[logic] proxy.py:35-40 HTTPS 代理的转发分支受显式配置约束，不会默认绕过 CONNECT（确认并非缺陷）",
+    "claim_type": "logic",
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "proxy.py:35-40",
+    "rationale": "该分支只有在代理协议为 https、proxy_config 存在且 use_forwarding_for_https 为真时才返回 False。对于 HTTPS 目标，普通 HTTP 代理或未启用转发的 HTTPS 代理都会继续执行末尾的 return True，使用 CONNECT。proxy_config 为 None 时，and 的短路求值也会避免访问其属性。因此，这里没有默认禁用 HTTPS 隧道或空对象属性访问的问题。",
+    "title": "HTTPS 代理的转发分支受显式配置约束，不会默认绕过 CONNECT",
+    "line_start": 35,
+    "line_end": 40,
+    "verification_status": "unverified",
+    "independent_support": 0,
+    "source_refs": [
+      {
+        "evidence_id": "fe70863714b5",
+        "adapter": "repo",
+        "locator": "proxy.py:35-40",
+        "quote": "    if (\n        proxy_url.scheme == \"https\"\n        and proxy_config\n        and proxy_config.use_forwarding_for_https\n    ):\n        return False"
+      }
+    ]
+  },
+  {
+    "claim_id": "762e278a3f6c",
+    "fingerprint": "connection.py#resource_leak@60",
+    "statement": "[resource_leak] connection.py:61-68 无效超时时间导致已创建的 socket 未显式关闭（确认存在缺陷）",
+    "claim_type": "resource_leak",
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "connection.py:61-68",
+    "rationale": "socket 创建后，负数或其他非法 timeout 会使 sock.settimeout(timeout) 抛出 ValueError/TypeError，而后续异常处理只捕获 OSError，因此不会执行 sock.close()。在非引用计数垃圾回收环境中，这会使底层 socket 保持打开直到垃圾回收，导致资源延迟释放。",
+    "title": "无效超时时间导致已创建的 socket 未显式关闭",
+    "line_start": 61,
+    "line_end": 68,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "41265d08c4bb",
+        "adapter": "repo",
+        "locator": "connection.py:61-68",
+        "quote": "            if timeout is not _DEFAULT_TIMEOUT:\n                sock.settimeout(timeout)\n            if source_address:\n                sock.bind(source_address)\n            sock.connect(sa)\n            # Break explicitly a reference cycle\n            err = None\n            return sock"
+      }
+    ]
+  },
+  {
+    "claim_id": "7c4695fe4d83",
+    "fingerprint": "connection.py#resource_leak@60",
+    "statement": "[resource_leak] connection.py:69-70 设置无效超时时抛出的 ValueError 绕过 socket 清理（确认存在缺陷）",
+    "claim_type": "resource_leak",
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "connection.py:69-70",
+    "rationale": "执行到这里时 socket 已在第 64 行创建。传入负数超时（例如 timeout=-1）会使 settimeout() 抛出 ValueError，但本函数的异常清理仅捕获 OSError，因此不会执行 sock.close()。如果调用方保存异常或其 traceback，traceback 中的函数栈帧会继续引用这个未关闭的 socket，导致文件描述符持续占用；重复调用并保存异常可以积累这些描述符。这不是永久无法回收的泄漏，但资源释放依赖异常及栈帧被回收，而非在失败路径中及时完成。",
+    "title": "设置无效超时时抛出的 ValueError 绕过 socket 清理",
+    "line_start": 69,
+    "line_end": 70,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "41265d08c4bb",
+        "adapter": "repo",
+        "locator": "connection.py:69-70",
+        "quote": "            if timeout is not _DEFAULT_TIMEOUT:\n                sock.settimeout(timeout)"
+      }
+    ]
+  }
+]

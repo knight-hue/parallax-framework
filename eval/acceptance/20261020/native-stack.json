@@ -1,0 +1,15 @@
+{
+  "passed": true,
+  "checks": [
+    "built_web_gateway_python_started",
+    "anonymous_and_direct_api_denied",
+    "authenticated_submission_sse_and_replay_through_web",
+    "results_receipts_and_repair_authorization",
+    "postgres_flyway_identity_and_completion_callback",
+    "authenticated_metrics_with_redis_configured"
+  ],
+  "model_mode": "deterministic_fake_no_model_network",
+  "public_deployment": false,
+  "postgres_image": "pgvector/pgvector:pg16",
+  "redis_image": "redis:latest"
+}

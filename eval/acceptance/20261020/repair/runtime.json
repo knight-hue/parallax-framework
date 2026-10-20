@@ -1,0 +1,9 @@
+{
+  "image": "ibmcom/db2:latest",
+  "python": "3.6.8",
+  "purpose": "cached-image isolation demonstration only; not a recommended production runtime",
+  "network": "none",
+  "pull": "never",
+  "original_source_changed": false,
+  "review_revision": "model command import path corrected and nonzero-input assertions added before approval"
+}
