@@ -40,6 +40,41 @@ class MysqlPersistenceIT {
     @Autowired AuditRunRepository runRepository;
     @Autowired dev.parallax.gateway.platform.PlatformCatalogService catalog;
     @Autowired dev.parallax.gateway.platform.PlatformTaskService tasks;
+    @Autowired dev.parallax.gateway.platform.PlatformWorkerCoordinator coordinator;
+
+    @Test
+    void workerInboxHandlesConcurrentOrganizationsAndDuplicateSettlementOnMysql() throws Exception {
+        var contracts=new java.util.ArrayList<dev.parallax.gateway.task.WorkerTask>();
+        var users=new java.util.ArrayList<String>();
+        for(int i=0;i<2;i++) {
+            var user=identity.provision("test","mysql-worker-"+UUID.randomUUID(),"test-password-123");
+            users.add(user.id());
+            var org=identity.createOrganization(user.id(),"worker");
+            var project=identity.createProject(user.id(),org.id(),"project");
+            var repo=catalog.register(user.id(),project.id(),"api","https://github.com/team/api");
+            var config=new dev.parallax.gateway.platform.PlatformCatalogService.PolicyConfig(4,2,3,2,true,1000,3600);
+            var policy=catalog.publish(user.id(),project.id(),config);
+            tasks.configureBudget("test-admin",org.id(),100);
+            var input=new dev.parallax.gateway.platform.PlatformTaskService.Submission(repo.id(),policy.id(),"a".repeat(40),100);
+            var task=tasks.submit(user.id(),project.id(),"request",input);
+            contracts.add(task.dispatch());
+            assertThat(coordinator.prepareDispatch(task.id(),1,1)).isTrue();
+        }
+        try(var pool=java.util.concurrent.Executors.newFixedThreadPool(4)) {
+            var starts=contracts.stream().map(t -> (java.util.concurrent.Callable<Boolean>) () -> coordinator.receive(new dev.parallax.gateway.task.WorkerEvent(1,UUID.randomUUID().toString(),t.taskId(),1,1,1,dev.parallax.gateway.task.WorkerEvent.Kind.STARTED,Instant.now(),null,0,0)).accepted()).toList();
+            for(var future:pool.invokeAll(starts)) assertThat(future.get()).isTrue();
+            var done=contracts.stream().map(t -> new dev.parallax.gateway.task.WorkerEvent(1,UUID.randomUUID().toString(),t.taskId(),1,1,2,dev.parallax.gateway.task.WorkerEvent.Kind.SUCCEEDED,Instant.now(),"b".repeat(64),30,10)).toList();
+            var jobs=java.util.stream.IntStream.range(0,8).mapToObj(i -> (java.util.concurrent.Callable<Boolean>) () -> coordinator.receive(done.get(i%2)).accepted()).toList();
+            int accepted=0;for(var future:pool.invokeAll(jobs)) if(future.get()) accepted++;
+            assertThat(accepted).isEqualTo(2);
+        }
+        for(int i=0;i<contracts.size();i++) {
+            var t=contracts.get(i);
+            assertThat(tasks.budget(users.get(i),t.organizationId()).usedTokens()).isEqualTo(40);
+            assertThat(tasks.reconcile(t.organizationId()).consistent()).isTrue();
+            assertThat(coordinator.events(users.get(i),t.projectId(),t.taskId(),0,100).items()).hasSize(4);
+        }
+    }
 
     @Test
     void atomicBudgetReservationAndIdempotencyHoldUnderRealMysqlContention() throws Exception {
@@ -105,7 +140,7 @@ class MysqlPersistenceIT {
     void usesRealMysqlInnoDBAndValidatesFlyway() {
         assertThat(jdbc.queryForObject("SELECT VERSION()", String.class)).startsWith("8.");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'platform_project' AND engine = 'InnoDB'", Integer.class)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE", Integer.class)).isEqualTo(6);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE", Integer.class)).isEqualTo(7);
     }
 
     @Test
@@ -178,10 +213,11 @@ class MysqlPersistenceIT {
                 seed.executeUpdate("INSERT INTO platform_budget_ledger (id,organization_id,task_id,kind,tokens,at) VALUES ('reserve-source','org-source','task-source','RESERVE',100,CURRENT_TIMESTAMP)");
                 seed.executeUpdate("INSERT INTO platform_budget_ledger (id,organization_id,task_id,kind,tokens,at) VALUES ('settle-source','org-source','task-source','SETTLE',25,CURRENT_TIMESTAMP)");
                 seed.executeUpdate("INSERT INTO platform_outbox (id,task_id,attempt,kind,payload,status,available_at,created_at,published_at) VALUES ('outbox-source','task-source',1,'DISPATCH','{}','PUBLISHED',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)");
+                seed.executeUpdate("INSERT INTO platform_task_event (id,event_id,task_id,attempt,fencing_token,sequence_number,kind,payload,payload_sha256,received_at) VALUES (42,'event-source','task-source',1,1,2,'FAILED','{}','test-digest',CURRENT_TIMESTAMP)");
             }
             assertThatThrownBy(() -> LegacyDatabaseTransfer.copy(source, target, false)).isInstanceOf(IllegalArgumentException.class);
-            assertThat(LegacyDatabaseTransfer.copy(source, target, true)).hasSize(16).allSatisfy(row -> assertThat(row.rows()).isPositive());
-            assertThat(LegacyDatabaseTransfer.verify(source, target)).hasSize(16);
+            assertThat(LegacyDatabaseTransfer.copy(source, target, true)).hasSize(17).allSatisfy(row -> assertThat(row.rows()).isPositive());
+            assertThat(LegacyDatabaseTransfer.verify(source, target)).hasSize(17);
             assertThatThrownBy(() -> LegacyDatabaseTransfer.copy(source, target, true)).hasMessageContaining("Destination must be empty");
             try (var change = target.createStatement()) { change.executeUpdate("UPDATE platform_user SET username = 'tampered'"); }
             assertThatThrownBy(() -> LegacyDatabaseTransfer.verify(source, target)).hasMessageContaining("verification mismatch");

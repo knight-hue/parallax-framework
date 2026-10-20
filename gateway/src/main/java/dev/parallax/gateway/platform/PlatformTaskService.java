@@ -30,7 +30,7 @@ public class PlatformTaskService {
     public record Task(String id, String organizationId, String projectId, String repositoryId, String policyVersion,
                        String createdBy, String commitSha, long tokenBudget, Instant deadline, TaskState state,
                        int attempt, long fencingToken, long lastSequence, long promptTokens, long completionTokens,
-                       boolean settled, Instant leaseUntil, String resultSha256, Instant createdAt) {
+                       boolean settled, Instant leaseUntil, String resultSha256, Instant createdAt, String recoveryReason) {
         public WorkerTask dispatch() {
             return new WorkerTask(1,id,attempt,fencingToken,organizationId,projectId,repositoryId,commitSha,policyVersion,tokenBudget,deadline,null);
         }
@@ -39,9 +39,10 @@ public class PlatformTaskService {
     private final PlatformIdentityService identity;
     private final PlatformCatalogService catalog;
     private final ObjectMapper mapper;
+    private final PlatformEventStore events;
 
-    public PlatformTaskService(JdbcTemplate jdbc, PlatformIdentityService identity, PlatformCatalogService catalog, ObjectMapper mapper) {
-        this.jdbc=jdbc; this.identity=identity; this.catalog=catalog; this.mapper=mapper;
+    public PlatformTaskService(JdbcTemplate jdbc, PlatformIdentityService identity, PlatformCatalogService catalog, ObjectMapper mapper, PlatformEventStore events) {
+        this.jdbc=jdbc; this.identity=identity; this.catalog=catalog; this.mapper=mapper;this.events=events;
     }
 
     @Transactional
@@ -107,7 +108,9 @@ public class PlatformTaskService {
         WorkerTask dispatch=new WorkerTask(1,id,1,1,project.organizationId(),projectId,request.repositoryId,request.commitSha,request.policyVersion,request.tokenBudget,deadline,TraceFilter.currentTraceId());
         outbox(id,1,"DISPATCH",json(dispatch));
         identity.audit(actor,"TASK_SUBMITTED",id);
-        return current(id,false);
+        var task=current(id,false);
+        events.system(task,"QUEUED",java.util.Map.of("state","QUEUED"),created);
+        return task;
     }
 
     public Task get(String actor, String projectId, String id) {
@@ -131,12 +134,22 @@ public class PlatformTaskService {
         lockBudget(visible.organizationId);
         Task task=current(id,true);
         if(task.state.terminal()) return task;
-        if(task.state!=TaskState.QUEUED) throw conflict("Dispatched cancellation requires the worker coordinator");
+        if(task.state==TaskState.CANCEL_REQUESTED) return task;
+        if(task.state!=TaskState.QUEUED) {
+            jdbc.update("UPDATE platform_task SET state='CANCEL_REQUESTED',updated_at=? WHERE id=?",now(),id);
+            outbox(id,task.attempt,"CANCEL",json(task.dispatch()));
+            identity.audit(actor,"TASK_CANCEL_REQUESTED",id);
+            var canceled=current(id,true);
+            events.system(canceled,"CANCEL_REQUESTED",java.util.Map.of("state","CANCEL_REQUESTED"),Instant.now());
+            return canceled;
+        }
         jdbc.update("UPDATE platform_task SET state='CANCELED',fencing_token=fencing_token+1,updated_at=? WHERE id=?",now(),id);
         settle(task,0);
         jdbc.update("UPDATE platform_outbox SET status='SUPERSEDED',claim_token=NULL,claim_until=NULL WHERE task_id=? AND status<>'PUBLISHED'",id);
         identity.audit(actor,"TASK_CANCELED",id);
-        return current(id,true);
+        var canceled=current(id,true);
+        events.system(canceled,"CANCELED",java.util.Map.of("state","CANCELED"),Instant.now());
+        return canceled;
     }
 
     Budget lockBudget(String organizationId) {
@@ -177,7 +190,7 @@ public class PlatformTaskService {
     private static Budget budget(ResultSet rs) throws SQLException { return new Budget(rs.getString(1),rs.getLong(2),rs.getLong(3),rs.getLong(4)); }
     private static Task task(ResultSet rs) throws SQLException {
         Timestamp lease=rs.getTimestamp("lease_until");
-        return new Task(rs.getString("id"),rs.getString("organization_id"),rs.getString("project_id"),rs.getString("repository_id"),rs.getString("policy_version"),rs.getString("created_by"),rs.getString("commit_sha"),rs.getLong("token_budget"),rs.getTimestamp("deadline").toInstant(),TaskState.valueOf(rs.getString("state")),rs.getInt("attempt"),rs.getLong("fencing_token"),rs.getLong("last_sequence"),rs.getLong("prompt_tokens"),rs.getLong("completion_tokens"),rs.getBoolean("settled"),lease==null?null:lease.toInstant(),rs.getString("result_sha256"),rs.getTimestamp("created_at").toInstant());
+        return new Task(rs.getString("id"),rs.getString("organization_id"),rs.getString("project_id"),rs.getString("repository_id"),rs.getString("policy_version"),rs.getString("created_by"),rs.getString("commit_sha"),rs.getLong("token_budget"),rs.getTimestamp("deadline").toInstant(),TaskState.valueOf(rs.getString("state")),rs.getInt("attempt"),rs.getLong("fencing_token"),rs.getLong("last_sequence"),rs.getLong("prompt_tokens"),rs.getLong("completion_tokens"),rs.getBoolean("settled"),lease==null?null:lease.toInstant(),rs.getString("result_sha256"),rs.getTimestamp("created_at").toInstant(),rs.getString("recovery_reason"));
     }
     private static Timestamp now() { return Timestamp.from(Instant.now()); }
     private static ApiException conflict(String message) { return new ApiException(HttpStatus.CONFLICT,message); }
