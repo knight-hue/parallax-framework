@@ -1,7 +1,5 @@
 package dev.parallax.gateway.platform;
 
-import java.util.List;
-
 import dev.parallax.gateway.auth.AuthPrincipal;
 import dev.parallax.gateway.auth.JwtService;
 import dev.parallax.gateway.common.ApiException;
@@ -14,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -73,8 +72,9 @@ public class PlatformController {
     }
 
     @GetMapping("/api/v1/platform/organizations")
-    public List<PlatformIdentityService.Organization> organizations(@AuthenticationPrincipal AuthPrincipal principal) {
-        return service.organizations(PlatformIdentityService.requireUser(principal));
+    public CursorPage<PlatformIdentityService.Organization> organizations(@AuthenticationPrincipal AuthPrincipal principal,
+            @RequestParam(defaultValue="") String after, @RequestParam(defaultValue="50") int limit) {
+        return service.organizations(PlatformIdentityService.requireUser(principal), after, limit);
     }
 
     @PostMapping("/api/v1/platform/organizations/{id}/members")
@@ -84,9 +84,9 @@ public class PlatformController {
     }
 
     @GetMapping("/api/v1/platform/organizations/{id}/members")
-    public List<PlatformIdentityService.Member> members(@AuthenticationPrincipal AuthPrincipal principal,
-                                                       @PathVariable String id) {
-        return service.members(PlatformIdentityService.requireUser(principal), id);
+    public CursorPage<PlatformIdentityService.Member> members(@AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable String id, @RequestParam(defaultValue="") String after, @RequestParam(defaultValue="50") int limit) {
+        return service.members(PlatformIdentityService.requireUser(principal), id, after, limit);
     }
 
     @DeleteMapping("/api/v1/platform/organizations/{id}/members/{userId}")
@@ -103,9 +103,9 @@ public class PlatformController {
     }
 
     @GetMapping("/api/v1/platform/organizations/{id}/projects")
-    public List<PlatformIdentityService.Project> projects(@AuthenticationPrincipal AuthPrincipal principal,
-                                                         @PathVariable String id) {
-        return service.projects(PlatformIdentityService.requireUser(principal), id);
+    public CursorPage<PlatformIdentityService.Project> projects(@AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable String id, @RequestParam(defaultValue="") String after, @RequestParam(defaultValue="50") int limit) {
+        return service.projects(PlatformIdentityService.requireUser(principal), id, after, limit);
     }
 
     @GetMapping("/api/v1/platform/projects/{id}")

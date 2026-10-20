@@ -68,6 +68,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Result.fail("请求体必须为 JSON"));
     }
 
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Result<Void>> handleParameterType(Exception ex) {
+        return ResponseEntity.badRequest().body(Result.fail("Invalid request parameter"));
+    }
+
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<Result<Void>> handleNotFound(NoResourceFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Result.fail("接口不存在"));

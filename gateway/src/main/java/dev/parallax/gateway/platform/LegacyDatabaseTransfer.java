@@ -29,7 +29,9 @@ public final class LegacyDatabaseTransfer {
             new Table("platform_organization", "id", "id,name,created_at"),
             new Table("platform_membership", "organization_id,user_id", "organization_id,user_id,role"),
             new Table("platform_project", "id", "id,organization_id,name,created_at"),
-            new Table("platform_access_audit", "id", "id,actor,action,resource_id,at"));
+            new Table("platform_access_audit", "id", "id,actor,action,resource_id,at"),
+            new Table("platform_repository", "id", "id,project_id,name,clone_url,created_by,created_at"),
+            new Table("platform_policy_version", "id", "id,project_id,version_number,config_json,config_sha256,created_by,created_at"));
 
     public record Verification(String table, long rows, String sha256) { }
     private static Calendar utc() { return Calendar.getInstance(TimeZone.getTimeZone("UTC")); }

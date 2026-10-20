@@ -1,8 +1,8 @@
 # Platform identity API
 
 This module adds project ownership boundaries without changing legacy audit ownership.
-Schema is managed by Flyway; PostgreSQL/H2 migrations remain the current baseline until
-the MySQL runtime is verified. Organization members currently inherit their role for all
+Schema is managed by Flyway with MySQL as the default runtime and a legacy PostgreSQL
+profile for migration/regression. Organization members currently inherit their role for all
 projects in that organization; per-project membership overrides are not implemented.
 
 1. An existing system administrator provisions a user with `POST /api/v1/platform/users`
@@ -33,6 +33,30 @@ apply the same resource checks to tasks, events, reports, artifacts and approval
 
 This is an identity foundation, not a claim of a completed platform. Password recovery,
 organization ownership transfer, per-project overrides, SSO and a management UI are
-not implemented. Current lists are unpaginated and need bounded pagination before
-large-scale rollout. Existing rate limiting remains in force; production diagnostics must
+not implemented. All platform collection endpoints use bounded UUID seek pagination:
+`?after=<nextCursor>&limit=50` (1..100), returning `{items,nextCursor}`. A null cursor
+means the end of the collection. Existing rate limiting remains in force; production diagnostics must
 not log HTTP credential bodies or Authorization headers.
+
+## Repositories and immutable policies
+
+Under `/api/v1/platform/projects/{projectId}`:
+
+- `POST /repositories` accepts `{name,cloneUrl}` (MAINTAINER); GET lists or GET
+  `/repositories/{id}` reads (VIEWER). Names are unique within a project.
+- Clone URLs require HTTPS on operator-approved exact hosts, without credentials,
+  ports, query strings, fragments, path traversal or percent encoding. Defaults are
+  github.com/gitlab.com/gitee.com; override `parallax.repositories.allowed-hosts`.
+  This registry does not perform a network fetch. Worker checkout must separately
+  enforce DNS/redirect/egress restrictions and map repository IDs, never client paths.
+- `POST /policies` publishes a new version (MAINTAINER), GET lists or GET `/policies/{id}`
+  reads (VIEWER). No update/delete endpoint exists. Each task will bind the policy ID,
+  not a mutable "latest" alias. SHA-256 detects stored configuration changes.
+- Policy config: `{readers:4,redundancy:2,maxRounds:3,minIndependentSupport:2,
+  falsifierEnabled:true,maxTokenBudget:100000,deadlineSeconds:3600}`.
+  Limits: readers 2..16, redundancy/support 1..readers, rounds 1..8, token budget
+  1..10,000,000, deadline 60..86,400 seconds. These are platform-side bounds;
+  worker application of the snapshot belongs to the execution integration module.
+- Version numbers are serialized by a project row lock and a locking latest-version
+  read, including under MySQL REPEATABLE READ. Configuration and access audit commit
+  together. All resources check membership and project association at each access.

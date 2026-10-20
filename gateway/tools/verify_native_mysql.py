@@ -227,7 +227,7 @@ def main() -> int:
                             str(root / "gateway/pom.xml"),
                             "verify",
                             "-DskipTests=false",
-                            "-Dtest=PlatformIdentityIntegrationTest,WorkerProtocolTest",
+                            "-Dtest=PlatformIdentityIntegrationTest,PlatformCatalogIntegrationTest,WorkerProtocolTest",
                             "-Dit.test=MysqlPersistenceIT",
                             "-DskipITs=false",
                             "-Dparallax.test.mysql=true",
