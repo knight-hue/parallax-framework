@@ -39,6 +39,42 @@ class MysqlPersistenceIT {
     @Autowired RunService runs;
     @Autowired AuditRunRepository runRepository;
     @Autowired dev.parallax.gateway.platform.PlatformCatalogService catalog;
+    @Autowired dev.parallax.gateway.platform.PlatformTaskService tasks;
+
+    @Test
+    void atomicBudgetReservationAndIdempotencyHoldUnderRealMysqlContention() throws Exception {
+        var user=identity.provision("test","mysql-budget-"+UUID.randomUUID(),"test-password-123");
+        var org=identity.createOrganization(user.id(),"budget");
+        var project=identity.createProject(user.id(),org.id(),"project");
+        var repo=catalog.register(user.id(),project.id(),"api","https://github.com/team/api");
+        var config=new dev.parallax.gateway.platform.PlatformCatalogService.PolicyConfig(4,2,3,2,true,1000,3600);
+        var policy=catalog.publish(user.id(),project.id(),config);
+        tasks.configureBudget("test-admin",org.id(),300);
+        var input=new dev.parallax.gateway.platform.PlatformTaskService.Submission(repo.id(),policy.id(),"a".repeat(40),100);
+        try(var pool=java.util.concurrent.Executors.newFixedThreadPool(6)) {
+            var retries=java.util.stream.IntStream.range(0,8).mapToObj(i -> (java.util.concurrent.Callable<String>)
+                    () -> tasks.submit(user.id(),project.id(),"same",input).id()).toList();
+            var ids=new java.util.HashSet<String>();
+            for(var future:pool.invokeAll(retries)) ids.add(future.get());
+            assertThat(ids).hasSize(1);
+            var jobs=java.util.stream.IntStream.range(0,20).mapToObj(i -> (java.util.concurrent.Callable<Boolean>) () -> {
+                try { tasks.submit(user.id(),project.id(),"new-"+i,input);return true; }
+                catch(dev.parallax.gateway.common.ApiException ex) { assertThat(ex.getStatus().value()).isEqualTo(429);return false; }
+            }).toList();
+            int accepted=0;
+            for(var future:pool.invokeAll(jobs)) if(future.get()) accepted++;
+            assertThat(accepted).isEqualTo(2);
+            assertThat(tasks.budget(user.id(),org.id()).reservedTokens()).isEqualTo(300);
+            String taskId=ids.iterator().next();
+            tasks.cancel(user.id(),project.id(),taskId);tasks.cancel(user.id(),project.id(),taskId);
+            assertThat(tasks.budget(user.id(),org.id()).reservedTokens()).isEqualTo(200);
+            assertThat(tasks.reconcile(org.id()).consistent()).isTrue();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM platform_budget_ledger WHERE task_id=? AND kind='SETTLE'",Integer.class,taskId)).isEqualTo(1);
+            var other=identity.createProject(user.id(),org.id(),"other");
+            var foreign=catalog.register(user.id(),other.id(),"api","https://github.com/team/other");
+            assertThatThrownBy(()->jdbc.update("UPDATE platform_task SET repository_id=? WHERE id=?",foreign.id(),taskId)).isInstanceOf(DataIntegrityViolationException.class);
+        }
+    }
 
     @Test
     void concurrentPolicyPublishersUseCurrentReadsUnderMysqlRepeatableRead() throws Exception {
@@ -69,7 +105,7 @@ class MysqlPersistenceIT {
     void usesRealMysqlInnoDBAndValidatesFlyway() {
         assertThat(jdbc.queryForObject("SELECT VERSION()", String.class)).startsWith("8.");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'platform_project' AND engine = 'InnoDB'", Integer.class)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE", Integer.class)).isEqualTo(5);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE", Integer.class)).isEqualTo(6);
     }
 
     @Test
@@ -137,10 +173,15 @@ class MysqlPersistenceIT {
                 seed.executeUpdate("INSERT INTO platform_access_audit (id,actor,action,resource_id,at) VALUES ('access-source','user-source','CREATE_PROJECT','project-source',CURRENT_TIMESTAMP)");
                 seed.executeUpdate("INSERT INTO platform_repository (id,project_id,name,clone_url,created_by,created_at) VALUES ('repository-source','project-source','example','https://github.com/example/repo','user-source',CURRENT_TIMESTAMP)");
                 seed.executeUpdate("INSERT INTO platform_policy_version (id,project_id,version_number,config_json,config_sha256,created_by,created_at) VALUES ('policy-source','project-source',1,'{}','not-a-real-policy-digest','user-source',CURRENT_TIMESTAMP)");
+                seed.executeUpdate("INSERT INTO platform_budget_account (organization_id,token_limit,reserved_tokens,used_tokens,updated_at) VALUES ('org-source',200,0,25,CURRENT_TIMESTAMP)");
+                seed.executeUpdate("INSERT INTO platform_task (id,organization_id,project_id,repository_id,policy_version,created_by,request_key,request_sha256,commit_sha,token_budget,deadline,state,attempt,fencing_token,last_sequence,prompt_tokens,completion_tokens,settled,created_at,updated_at) VALUES ('task-source','org-source','project-source','repository-source','policy-source','user-source','request-source','test-request-hash','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',100,CURRENT_TIMESTAMP,'FAILED',1,1,2,20,5,TRUE,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)");
+                seed.executeUpdate("INSERT INTO platform_budget_ledger (id,organization_id,task_id,kind,tokens,at) VALUES ('reserve-source','org-source','task-source','RESERVE',100,CURRENT_TIMESTAMP)");
+                seed.executeUpdate("INSERT INTO platform_budget_ledger (id,organization_id,task_id,kind,tokens,at) VALUES ('settle-source','org-source','task-source','SETTLE',25,CURRENT_TIMESTAMP)");
+                seed.executeUpdate("INSERT INTO platform_outbox (id,task_id,attempt,kind,payload,status,available_at,created_at,published_at) VALUES ('outbox-source','task-source',1,'DISPATCH','{}','PUBLISHED',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)");
             }
             assertThatThrownBy(() -> LegacyDatabaseTransfer.copy(source, target, false)).isInstanceOf(IllegalArgumentException.class);
-            assertThat(LegacyDatabaseTransfer.copy(source, target, true)).hasSize(12).allSatisfy(row -> assertThat(row.rows()).isPositive());
-            assertThat(LegacyDatabaseTransfer.verify(source, target)).hasSize(12);
+            assertThat(LegacyDatabaseTransfer.copy(source, target, true)).hasSize(16).allSatisfy(row -> assertThat(row.rows()).isPositive());
+            assertThat(LegacyDatabaseTransfer.verify(source, target)).hasSize(16);
             assertThatThrownBy(() -> LegacyDatabaseTransfer.copy(source, target, true)).hasMessageContaining("Destination must be empty");
             try (var change = target.createStatement()) { change.executeUpdate("UPDATE platform_user SET username = 'tampered'"); }
             assertThatThrownBy(() -> LegacyDatabaseTransfer.verify(source, target)).hasMessageContaining("verification mismatch");
