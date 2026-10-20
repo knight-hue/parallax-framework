@@ -3,7 +3,6 @@ package dev.parallax.gateway.platform;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -85,9 +84,11 @@ public class PlatformIdentityService {
         return new Organization(id, name.strip(), "OWNER");
     }
 
-    public List<Organization> organizations(String userId) {
-        return jdbc.query("SELECT o.id, o.name, m.role FROM platform_organization o JOIN platform_membership m ON m.organization_id = o.id WHERE m.user_id = ? ORDER BY o.id",
-                (rs, n) -> new Organization(rs.getString(1), rs.getString(2), rs.getString(3)), userId);
+    public CursorPage<Organization> organizations(String userId, String after, int limit) {
+        CursorPage.validate(after, limit);
+        var rows = jdbc.query("SELECT o.id, o.name, m.role FROM platform_organization o JOIN platform_membership m ON m.organization_id = o.id WHERE m.user_id = ? AND o.id > ? ORDER BY o.id LIMIT ?",
+                (rs, n) -> new Organization(rs.getString(1), rs.getString(2), rs.getString(3)), userId, after, limit + 1);
+        return CursorPage.of(rows, limit, Organization::id);
     }
 
     public ProjectRole requireRole(String userId, String organizationId, ProjectRole minimum) {
@@ -121,10 +122,12 @@ public class PlatformIdentityService {
         audit(actor, "MEMBER_REMOVED", organizationId);
     }
 
-    public List<Member> members(String userId, String organizationId) {
+    public CursorPage<Member> members(String userId, String organizationId, String after, int limit) {
         requireRole(userId, organizationId, ProjectRole.OWNER);
-        return jdbc.query("SELECT u.id, u.username, m.role FROM platform_membership m JOIN platform_user u ON u.id = m.user_id WHERE m.organization_id = ? ORDER BY u.id",
-                (rs, n) -> new Member(rs.getString(1), rs.getString(2), rs.getString(3)), organizationId);
+        CursorPage.validate(after, limit);
+        var rows = jdbc.query("SELECT u.id, u.username, m.role FROM platform_membership m JOIN platform_user u ON u.id = m.user_id WHERE m.organization_id = ? AND u.id > ? ORDER BY u.id LIMIT ?",
+                (rs, n) -> new Member(rs.getString(1), rs.getString(2), rs.getString(3)), organizationId, after, limit + 1);
+        return CursorPage.of(rows, limit, Member::userId);
     }
 
     @Transactional
@@ -142,10 +145,12 @@ public class PlatformIdentityService {
         return new Project(id, organizationId, name.strip());
     }
 
-    public List<Project> projects(String userId, String organizationId) {
+    public CursorPage<Project> projects(String userId, String organizationId, String after, int limit) {
         requireRole(userId, organizationId, ProjectRole.VIEWER);
-        return jdbc.query("SELECT id, organization_id, name FROM platform_project WHERE organization_id = ? ORDER BY id",
-                (rs, n) -> new Project(rs.getString(1), rs.getString(2), rs.getString(3)), organizationId);
+        CursorPage.validate(after, limit);
+        var rows = jdbc.query("SELECT id, organization_id, name FROM platform_project WHERE organization_id = ? AND id > ? ORDER BY id LIMIT ?",
+                (rs, n) -> new Project(rs.getString(1), rs.getString(2), rs.getString(3)), organizationId, after, limit + 1);
+        return CursorPage.of(rows, limit, Project::id);
     }
 
     public Project project(String userId, String projectId, ProjectRole minimum) {
@@ -164,7 +169,7 @@ public class PlatformIdentityService {
         return principal.userId();
     }
 
-    private void audit(String actor, String action, String resource) {
+    void audit(String actor, String action, String resource) {
         jdbc.update("INSERT INTO platform_access_audit (id, actor, action, resource_id, at) VALUES (?, ?, ?, ?, ?)",
                 UUID.randomUUID().toString(), actor, action, resource, Timestamp.from(Instant.now()));
     }

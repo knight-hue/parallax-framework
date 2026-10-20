@@ -38,6 +38,24 @@ class MysqlPersistenceIT {
     @Autowired QuotaService quota;
     @Autowired RunService runs;
     @Autowired AuditRunRepository runRepository;
+    @Autowired dev.parallax.gateway.platform.PlatformCatalogService catalog;
+
+    @Test
+    void concurrentPolicyPublishersUseCurrentReadsUnderMysqlRepeatableRead() throws Exception {
+        var user = identity.provision("test", "mysql-catalog-" + UUID.randomUUID(), "test-password-123");
+        var org = identity.createOrganization(user.id(), "catalog");
+        var project = identity.createProject(user.id(), org.id(), "project");
+        var repository = catalog.register(user.id(), project.id(), "api", "https://github.com/team/api");
+        assertThat(catalog.repository(user.id(), project.id(), repository.id())).isEqualTo(repository);
+        var config = new dev.parallax.gateway.platform.PlatformCatalogService.PolicyConfig(4,2,3,2,true,1000,3600);
+        try (var pool = java.util.concurrent.Executors.newFixedThreadPool(4)) {
+            var jobs = java.util.stream.IntStream.range(0,8).mapToObj(i -> (java.util.concurrent.Callable<Integer>)
+                    () -> catalog.publish(user.id(), project.id(), config).versionNumber()).toList();
+            var versions = new java.util.ArrayList<Integer>();
+            for (var future : pool.invokeAll(jobs)) versions.add(future.get());
+            assertThat(versions).containsExactlyInAnyOrder(1,2,3,4,5,6,7,8);
+        }
+    }
 
     @DynamicPropertySource
     static void mysql(DynamicPropertyRegistry registry) {
@@ -51,7 +69,7 @@ class MysqlPersistenceIT {
     void usesRealMysqlInnoDBAndValidatesFlyway() {
         assertThat(jdbc.queryForObject("SELECT VERSION()", String.class)).startsWith("8.");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'platform_project' AND engine = 'InnoDB'", Integer.class)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE", Integer.class)).isEqualTo(4);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE", Integer.class)).isEqualTo(5);
     }
 
     @Test
@@ -117,10 +135,12 @@ class MysqlPersistenceIT {
                 seed.executeUpdate("INSERT INTO platform_membership (organization_id,user_id,role) VALUES ('org-source','user-source','OWNER')");
                 seed.executeUpdate("INSERT INTO platform_project (id,organization_id,name,created_at) VALUES ('project-source','org-source','测试项目',CURRENT_TIMESTAMP)");
                 seed.executeUpdate("INSERT INTO platform_access_audit (id,actor,action,resource_id,at) VALUES ('access-source','user-source','CREATE_PROJECT','project-source',CURRENT_TIMESTAMP)");
+                seed.executeUpdate("INSERT INTO platform_repository (id,project_id,name,clone_url,created_by,created_at) VALUES ('repository-source','project-source','example','https://github.com/example/repo','user-source',CURRENT_TIMESTAMP)");
+                seed.executeUpdate("INSERT INTO platform_policy_version (id,project_id,version_number,config_json,config_sha256,created_by,created_at) VALUES ('policy-source','project-source',1,'{}','not-a-real-policy-digest','user-source',CURRENT_TIMESTAMP)");
             }
             assertThatThrownBy(() -> LegacyDatabaseTransfer.copy(source, target, false)).isInstanceOf(IllegalArgumentException.class);
-            assertThat(LegacyDatabaseTransfer.copy(source, target, true)).hasSize(10).allSatisfy(row -> assertThat(row.rows()).isPositive());
-            assertThat(LegacyDatabaseTransfer.verify(source, target)).hasSize(10);
+            assertThat(LegacyDatabaseTransfer.copy(source, target, true)).hasSize(12).allSatisfy(row -> assertThat(row.rows()).isPositive());
+            assertThat(LegacyDatabaseTransfer.verify(source, target)).hasSize(12);
             assertThatThrownBy(() -> LegacyDatabaseTransfer.copy(source, target, true)).hasMessageContaining("Destination must be empty");
             try (var change = target.createStatement()) { change.executeUpdate("UPDATE platform_user SET username = 'tampered'"); }
             assertThatThrownBy(() -> LegacyDatabaseTransfer.verify(source, target)).hasMessageContaining("verification mismatch");
