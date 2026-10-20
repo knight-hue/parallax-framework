@@ -60,3 +60,38 @@ Under `/api/v1/platform/projects/{projectId}`:
 - Version numbers are serialized by a project row lock and a locking latest-version
   read, including under MySQL REPEATABLE READ. Configuration and access audit commit
   together. All resources check membership and project association at each access.
+
+## Platform tasks and token reservations
+
+System ADMIN tokens configure an organization token limit with
+`PUT /api/v1/platform/budgets/{organizationId}`: `{tokenLimit:1000000}`.
+Limits are cumulative, not an implicit daily reset; used/reserved tokens cannot be
+erased by lowering the limit. New organizations have no execution allowance until
+an administrator grants it. Tenant roles cannot grant their own budget.
+
+Members read `GET /api/v1/platform/organizations/{id}/budget`. Administrators inspect
+`GET /api/v1/platform/budgets/{id}/reconciliation`: compares account counters against
+unsettled tasks and immutable reservation/settlement ledger entries under an account
+lock. It reports mismatches without silently modifying accounting history.
+
+Under `/api/v1/platform/projects/{projectId}/tasks`:
+
+- POST (REVIEWER) requires `Idempotency-Key` (1..64 letters/digits/underscore/hyphen),
+  body `{repositoryId,policyVersion,commitSha,tokenBudget}`. SHA is a fixed full lowercase
+  40/64 digit Git object ID. Repository and policy must belong to that project; budget
+  cannot exceed the frozen policy. The policy determines the deadline.
+- The key is scoped to project + submitting user. Same input replays the original task
+  even after cancellation/exhaustion; different input returns 409. It never restarts a
+  canceled task. Exhaustion returns 429.
+- Reservation, task, RESERVE ledger, dispatch Outbox and access audit commit together.
+  Organization account row locking and conditional update enforce capacity across DB
+  connections; unique keys protect retries. Composite foreign keys enforce resource
+  associations independently of Java checks.
+- GET collection uses seek pagination; GET `/{id}` requires VIEWER. POST `/{id}/cancel`
+  allows the submitting REVIEWER or a MAINTAINER. Queued cancellation settles at zero,
+  refunds once and supersedes pending dispatch messages. Dispatched cancellation is
+  connected in the worker-coordinator module.
+
+This module durably queues work; it does not yet publish to RabbitMQ or invoke the
+Python engine. The legacy audit entry point remains independent until worker integration
+and the workbench are switched. Budget invariants are enforced in MySQL, not Redis.

@@ -8,7 +8,7 @@
 
 Java 从网关升级为平台业务主体；平台统一使用 MySQL；Python 保留独立证据装配和隔离执行。秒杀与 XA/TCC/Seata 放入独立实验，报告安全分享后置。不得沿用“Java 只做薄网关”“不需要组织用户体系”的旧范围限制。
 
-已提交任务协议与用户/组织/项目权限基础。MySQL 默认运行档、独立 Flyway、旧库离线迁移工具及真库检查已实现，见 gateway/MYSQL_OPERATIONS.md；本机验证版本是 8.0.19，目标 8.4 待验收。继续实现仓库/策略、平台任务与原子预算，再接管可靠执行。完整阶段状态见 IMPLEMENTATION_LOG.md。
+已提交任务协议、身份权限、MySQL 运行档与仓库/策略模块。平台任务/原子预算/事务 Outbox 已通过 Java 72 项及 MySQL 6 项检查；下一步接管可靠派发、Inbox、心跳/fencing、结果/审批及工作台。迁移步骤见 gateway/MYSQL_OPERATIONS.md；本机真库版本是 8.0.19，目标 8.4 待验收。完整状态见 IMPLEMENTATION_LOG.md。
 
 以下保留既有审查链路的验收入口；不能据此宣称新 Java 平台已完成。
 
