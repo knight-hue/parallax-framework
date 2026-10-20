@@ -1,0 +1,67 @@
+# Production override for prebuilt, locally available images. Never pulls/builds.
+# docker compose --env-file backend/.env -f docker-compose.yml -f docker-compose.production.yml --profile gateway up -d --no-build --pull never
+# Terminate TLS at the site's existing reverse proxy, forwarding only to web.
+services:
+  api:
+    pull_policy: never
+    ports: !reset []
+    environment:
+      PARALLAX_GATEWAY_INTERNAL_TOKEN: ${PARALLAX_GATEWAY_INTERNAL_TOKEN:?Set a random internal token}
+      PARALLAX_CORS_ORIGINS: '[]'
+      PARALLAX_ENABLE_REPAIR: 'false'
+      PARALLAX_ENABLE_REPRODUCTION: 'false'
+      PARALLAX_CALLBACK_URL: http://gateway:8080
+    read_only: true
+    tmpfs: [/tmp:size=64m,noexec,nosuid]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2
+  web:
+    pull_policy: never
+    ports: !override ["127.0.0.1:${PARALLAX_WEB_PORT:-3000}:3000"]
+    environment:
+      PARALLAX_SERVER_API: http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp:size=64m,noexec,nosuid]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+  gateway:
+    pull_policy: never
+    ports: !reset []
+    environment:
+      PARALLAX_GATEWAY_REQUIRE_AUTH: 'true'
+      PARALLAX_IDENTITY_ENABLED: 'true'
+      PARALLAX_JWT_SECRET: ${PARALLAX_JWT_SECRET:?Set a random JWT secret of at least 32 characters}
+      PARALLAX_GATEWAY_ADMIN_SECRET: ${PARALLAX_GATEWAY_ADMIN_SECRET:?Set an admin secret}
+      PARALLAX_GATEWAY_INTERNAL_TOKEN: ${PARALLAX_GATEWAY_INTERNAL_TOKEN:?Set a random internal token}
+      PARALLAX_DB_PASSWORD: ${PARALLAX_DB_PASSWORD:?Set a database password}
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp:size=128m,noexec,nosuid]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    mem_limit: 1g
+  postgres:
+    pull_policy: never
+    ports: !reset []
+    environment:
+      POSTGRES_PASSWORD: ${PARALLAX_DB_PASSWORD:?Set a database password}
+    mem_limit: 1g
+  redis:
+    pull_policy: never
+    mem_limit: 256m
+  qdrant:
+    pull_policy: never
+    ports: !reset []

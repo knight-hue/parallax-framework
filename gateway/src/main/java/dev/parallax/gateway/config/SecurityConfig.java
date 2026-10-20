@@ -50,6 +50,10 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(registry -> {
+                    // The initial REQUEST is authorized once. Streaming responses dispatch
+                    // again after its stateless SecurityContext has been cleared.
+                    registry.dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ASYNC,
+                            jakarta.servlet.DispatcherType.ERROR).permitAll();
                     registry.requestMatchers("/actuator/health/**", "/actuator/info").permitAll();
                     registry.requestMatchers("/api/v1/auth/**").permitAll();
                     // 完成回调由 X-Internal-Token 自行校验：它来自编排服务，
@@ -60,10 +64,18 @@ public class SecurityConfig {
                         // 公网暴露前必须打开 require-auth，见 SECURITY.md。
                         registry.anyRequest().permitAll();
                     } else {
+                        // 修复涉及代码生成与执行，只允许操作员 ADMIN；读审计仍遵循原策略。
+                        registry.requestMatchers("/api/v1/audits/*/repairs", "/api/v1/audits/*/repairs/**")
+                                .hasRole("ADMIN");
                         registry.anyRequest().authenticated();
                     }
                 })
-                .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authException) -> {
+                .exceptionHandling(ex -> ex.accessDeniedHandler((request, response, denied) -> {
+                    response.setStatus(HttpStatus.FORBIDDEN.value());
+                    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                    response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+                    response.getWriter().write("{\"success\":false,\"error\":\"需要管理员权限\"}");
+                }).authenticationEntryPoint((request, response, authException) -> {
                     response.setStatus(HttpStatus.UNAUTHORIZED.value());
                     response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                     response.setCharacterEncoding(StandardCharsets.UTF_8.name());

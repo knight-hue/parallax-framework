@@ -12,8 +12,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ## NEXT_PUBLIC_* 会在构建期被内联进产物，所以必须在 build 阶段传入，运行期再改变量是无效的。
-## 默认值指向本机 8000，正好适配 docker compose（api 端口映射到宿主机）。
-ARG NEXT_PUBLIC_PARALLAX_API=http://localhost:8000
+## 浏览器经同源代理访问，上游由运行时 PARALLAX_SERVER_API 指定。
+ARG NEXT_PUBLIC_PARALLAX_API=/backend
 ENV NEXT_PUBLIC_PARALLAX_API=$NEXT_PUBLIC_PARALLAX_API
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build

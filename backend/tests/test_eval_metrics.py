@@ -239,6 +239,17 @@ def test_channels_ratio_is_zero_without_agents():
     assert ArmMetrics(arm="x", task_id="t").channels_ratio == 0.0
 
 
+def test_output_ratio_distinguishes_producers_from_assigned_readers():
+    from parallax.eval.metrics import ArmMetrics
+
+    metrics = ArmMetrics(
+        arm="x", task_id="t", effective_channels=1.0, agent_count=1, assigned_reader_count=3
+    )
+    assert metrics.channels_ratio == 1.0
+    assert metrics.assigned_channels_ratio == pytest.approx(0.3333)
+    assert ArmMetrics(arm="legacy", task_id="t").assigned_channels_ratio is None
+
+
 # ---- 两种"冗余"不能混用 ----
 
 

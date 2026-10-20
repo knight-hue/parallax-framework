@@ -17,6 +17,7 @@ const STATUS: Record<string, { label: string; tone: BadgeTone }> = {
   running: { label: '运行中', tone: 'accent' },
   done: { label: '完成', tone: 'ok' },
   failed: { label: '失败', tone: 'danger' },
+  canceled: { label: '已取消', tone: 'neutral' },
 };
 
 export function RunHistory({

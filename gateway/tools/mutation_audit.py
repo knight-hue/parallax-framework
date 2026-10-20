@@ -7,6 +7,7 @@ in a security or lifecycle rule. The checkout itself is never modified.
 
 from __future__ import annotations
 
+import argparse
 import shutil
 import os
 import subprocess
@@ -43,6 +44,9 @@ MUTANTS = (
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--offline", action="store_true", help="Use only the existing Maven cache")
+    args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     survivors: list[str] = []
     maven = "mvn.cmd" if os.name == "nt" else "mvn"
@@ -52,7 +56,7 @@ def main() -> int:
             shutil.copytree(
                 root,
                 worktree,
-                ignore=shutil.ignore_patterns("target", ".git"),
+                ignore=shutil.ignore_patterns("target", ".git", ".env", ".env.*"),
             )
             path = worktree / mutant.file
             original = path.read_text(encoding="utf-8")
@@ -60,7 +64,14 @@ def main() -> int:
                 raise RuntimeError(f"{mutant.name}: mutation target is not unique")
             path.write_text(original.replace(mutant.needle, mutant.replacement), encoding="utf-8")
             result = subprocess.run(
-                [maven, "-B", "-DskipITs=true", f"-Dtest={mutant.test_class}", "test"],
+                [
+                    maven,
+                    *(["-o"] if args.offline else []),
+                    "-B",
+                    "-DskipITs=true",
+                    f"-Dtest={mutant.test_class}",
+                    "test",
+                ],
                 cwd=worktree,
                 capture_output=True,
                 text=True,

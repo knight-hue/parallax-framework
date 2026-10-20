@@ -129,6 +129,11 @@ class RepoSourceManager:
         return ResolvedSource(path, actual, None)
 
     def _commit(self, path: Path, *, required: bool = True) -> str | None:
+        # 不把任意普通子目录误认为其祖先 Git 仓库（例如 runs 中的上传目录）。
+        if not (path / ".git").exists():
+            if required:
+                raise ConfigurationError("源码根目录不是 Git checkout")
+            return None
         try:
             return self._run(["git", "-C", str(path), "rev-parse", "HEAD"]).strip()
         except ConfigurationError:

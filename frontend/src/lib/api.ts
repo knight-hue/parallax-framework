@@ -2,16 +2,23 @@ import type {
   AuditSubmitted,
   RunRecord,
   RunResultEnvelope,
+  RepairProposal,
 } from './types';
 
 /**
  * 后端地址。
  *
- * 默认指向本机 8000（FastAPI 服务的默认端口）。生产经 Java 网关暴露时，
- * 把它设成网关地址即可，前端代码不需要改动——这也是"薄网关"这个设计的价值所在。
+ * 默认使用同源代理；生产上游由服务器端 PARALLAX_SERVER_API 指定。
  */
 export const API_BASE =
-  process.env.NEXT_PUBLIC_PARALLAX_API?.replace(/\/$/, '') ?? 'http://localhost:8000';
+  process.env.NEXT_PUBLIC_PARALLAX_API?.replace(/\/$/, '') || '/backend';
+
+let accessToken = '';
+export function setAccessToken(token: string) { accessToken = token.trim(); }
+export function accessHeaders(): Record<string, string> {
+  return accessToken ? accessToken.startsWith('plx_')
+    ? { 'X-API-Key': accessToken } : { Authorization: `Bearer ${accessToken}` } : {};
+}
 
 export class ApiError extends Error {
   constructor(
@@ -26,7 +33,7 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    headers: { 'Content-Type': 'application/json', ...accessHeaders(), ...(init?.headers ?? {}) },
     cache: 'no-store',
   });
 
@@ -74,7 +81,32 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  proposeRepair: (runId: string, claimId: string) =>
+    request<RepairProposal>(`/api/v1/audits/${runId}/repairs`, {
+      method: 'POST', body: JSON.stringify({ claim_id: claimId }),
+    }),
+
+  getRepair: (runId: string, repairId: string) =>
+    request<RepairProposal>(`/api/v1/audits/${runId}/repairs/${repairId}`),
+
+  approveRepair: (runId: string, proposal: RepairProposal) =>
+    request<RepairProposal>(`/api/v1/audits/${runId}/repairs/${proposal.repair_id}/approve`, {
+      method: 'POST', body: JSON.stringify({ approval_digest: proposal.approval_digest }),
+    }),
+
   reportUrl: (runId: string) => `${API_BASE}/api/v1/audits/${runId}/report`,
+
+  downloadReport: async (runId: string) => {
+    const response = await fetch(`${API_BASE}/api/v1/audits/${runId}/report`, {
+      headers: accessHeaders(), cache: 'no-store',
+    });
+    if (!response.ok) throw new ApiError(`报告下载 HTTP ${response.status}`, response.status);
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = url; link.download = `${runId}.md`;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
 
   eventsUrl: (runId: string) => `${API_BASE}/api/v1/audits/${runId}/events`,
 };

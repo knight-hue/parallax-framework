@@ -6,6 +6,24 @@ from parallax.core.reputation import SQLiteReputationStore
 from parallax.domain.models import AgentReputation
 
 
+def test_duplicate_events_are_idempotent_across_store_instances(tmp_path):
+    path = tmp_path / "reputation.sqlite3"
+    for _ in range(3):
+        SQLiteReputationStore(path).record_event("r", "run", "claim", "verified")
+    rep = SQLiteReputationStore(path).get("r")
+    assert rep.claims_verified == 1
+    assert len(rep.events) == 1
+
+
+def test_concurrent_retries_do_not_inflate_reputation(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    store = SQLiteReputationStore(tmp_path / "reputation.sqlite3")
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(lambda _: store.record_event("r", "run", "claim", "verified"), range(12)))
+    assert store.get("r").claims_verified == 1
+
+
 def test_sqlite_reputation_survives_a_new_store_instance(tmp_path: Path):
     path = tmp_path / "reputation.sqlite3"
     first = SQLiteReputationStore(path)

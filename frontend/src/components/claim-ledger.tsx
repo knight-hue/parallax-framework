@@ -6,8 +6,8 @@ import { Badge, Card, CardBody, CardHeader, EmptyState, type BadgeTone } from '@
 import { cn, formatPercent } from '@/lib/utils';
 
 const BUCKETS = [
-  { key: 'high_confidence', label: '高置信', tone: 'ok' as BadgeTone, hint: '被 ≥2 个独立 Agent 交叉验证' },
-  { key: 'pending', label: '待验证', tone: 'warn' as BadgeTone, hint: '单一来源孤证' },
+  { key: 'high_confidence', label: '高置信', tone: 'ok' as BadgeTone, hint: '独立支持通道满足本次运行阈值；事实仍需验证' },
+  { key: 'pending', label: '待验证', tone: 'warn' as BadgeTone, hint: '独立支持不足、相关性约束超限或尚待验证' },
   { key: 'disputed', label: '争议', tone: 'danger' as BadgeTone, hint: '存在极性相反的主张' },
 ] as const;
 
@@ -102,7 +102,7 @@ export function ClaimLedger({
                       {/* 「几个独立 Agent 确认」是这一屏最该被看见的数字——
                           它直接区分"多源印证"和"孤证"。 */}
                       <span>
-                        独立来源 <strong className="text-[var(--color-fg)]">{claim.verified_by.length}</strong> 个
+                        独立通道 <strong className="text-[var(--color-fg)]">{claim.independent_support ?? claim.verified_by.length}</strong> 个
                       </span>
                       <span>置信度 {formatPercent(claim.confidence, 1)}</span>
                       {claim.disputed_with.length > 0 ? (

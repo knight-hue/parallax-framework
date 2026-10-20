@@ -11,7 +11,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import os
 from pathlib import Path
 
 from parallax.domain.errors import AdapterError
@@ -41,6 +43,8 @@ DEFAULT_EXCLUDES: frozenset[str] = frozenset(
         ".vscode",
         ".tox",
         "site-packages",
+        ".toolchain",
+        "runs",
     }
 )
 
@@ -97,20 +101,47 @@ class RepoAdapter:
 
     def _iter_files(self) -> list[Path]:
         if self.include_files:
-            return [self.root / rel for rel in self.include_files]
+            selected = [self.root / rel for rel in self.include_files]
+            for path in selected:
+                self._check_boundary(path)
+                if any(
+                    part in self.excludes or part.startswith(".env")
+                    for part in path.relative_to(self.root).parts
+                ):
+                    raise AdapterError("显式输入不能包含排除目录或环境配置")
+            return sorted(set(selected))
         found: list[Path] = []
-        for path in self.root.rglob("*"):
-            if not path.is_file():
-                continue
-            if path.suffix not in self.extensions:
-                continue
-            rel_parts = path.relative_to(self.root).parts
-            if any(part in self.excludes for part in rel_parts[:-1]):
-                continue
-            found.append(path)
+        for root, directories, files in os.walk(self.root, followlinks=False):
+            directories[:] = sorted(
+                name
+                for name in directories
+                if name not in self.excludes
+                and not name.startswith(".env")
+                and not (Path(root) / name).is_symlink()
+            )
+            for name in files:
+                path = Path(root) / name
+                if (
+                    path.suffix in self.extensions
+                    and not path.is_symlink()
+                    and not name.startswith(".env")
+                ):
+                    found.append(path)
         return sorted(found)
 
+    def _check_boundary(self, path: Path) -> None:
+        if not path.resolve().is_relative_to(self.root):
+            raise AdapterError("证据文件越出仓库根目录")
+        current = path
+        while current != self.root:
+            if current.is_symlink():
+                raise AdapterError("证据文件不能经过符号链接")
+            if current.parent == current:
+                raise AdapterError("证据文件越出仓库根目录")
+            current = current.parent
+
     def _to_unit(self, path: Path) -> EvidenceUnit | None:
+        self._check_boundary(path)
         try:
             size = path.stat().st_size
         except OSError as exc:
@@ -120,7 +151,11 @@ class RepoAdapter:
             logger.info("跳过超限文件 %s（%d 字节）", path.name, size)
             return None
         try:
-            content = path.read_text(encoding="utf-8")
+            with path.open("rb") as stream:
+                raw = stream.read(self.max_file_bytes + 1)
+            if len(raw) > self.max_file_bytes:
+                return None
+            content = raw.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
         except (UnicodeDecodeError, OSError) as exc:
             logger.warning("跳过无法解码的文件 %s：%s", path, exc)
             return None
@@ -138,6 +173,7 @@ class RepoAdapter:
                 "lines": content.count("\n") + 1,
                 "bytes": size,
                 "language": path.suffix.lstrip("."),
+                "sha256": hashlib.sha256(raw).hexdigest(),
             },
         )
 

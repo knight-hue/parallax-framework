@@ -76,7 +76,7 @@ public class UpstreamClient {
         String url = trimTrailingSlash(baseUrl) + path + (query == null || query.isBlank() ? "" : "?" + query);
 
         HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
-                .timeout(props.getGateway().readTimeout())
+                .timeout(path.contains("/repairs") ? Duration.ofMinutes(5) : props.getGateway().readTimeout())
                 .header("Accept", "text/event-stream, application/json");
 
         String traceId = headers.get(TraceFilter.TRACE_HEADER);
@@ -90,6 +90,10 @@ public class UpstreamClient {
         // 把调用方身份带给上游，这样上游的完成回调能说明"这次运行属于谁"。
         // 用请求头而不是环境变量：归属是**每次请求**的属性，不是部署的属性。
         String credentialId = headers.get(CredentialHeaders.CREDENTIAL_ID);
+        String operator = headers.get("X-Parallax-Operator");
+        if (operator != null && !operator.isBlank()) {
+            builder.header("X-Parallax-Operator", operator);
+        }
         if (credentialId != null && !credentialId.isBlank()) {
             builder.header(CredentialHeaders.CREDENTIAL_ID, credentialId);
         }

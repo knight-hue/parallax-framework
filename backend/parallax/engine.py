@@ -15,6 +15,7 @@ from parallax.core.partitioning import BlindPartitioner
 from parallax.core.reader_pool import ReaderPool
 from parallax.core.reputation import InMemoryReputationStore, ReputationPolicy
 from parallax.core.scheduling import AdaptiveFocusScheduler
+from parallax.core.semantic_partitioning import SemanticClosurePartitioner
 from parallax.domain.enums import ClaimStatus
 from parallax.domain.models import Claim, Report, RunManifest
 from parallax.graph.build import build_graph
@@ -63,6 +64,12 @@ class ParallaxEngine:
         reputation_store: ReputationStore | None = None,
     ) -> ParallaxEngine:
         settings = settings or load_settings()
+        if falsifier is None and settings.enable_llm_falsifier:
+            from parallax.infra.falsifier_llm import LLMFalsifier
+
+            falsifier = LLMFalsifier(
+                client, max_evidence_chars=settings.falsifier_max_evidence_chars
+            )
 
         ledger = ClaimLedger(validators=validators)
         aggregator = Aggregator(
@@ -79,6 +86,14 @@ class ParallaxEngine:
             redundancy=settings.redundancy,
             seed=settings.seed,
         )
+        if settings.semantic_partitioning:
+            partitioner = SemanticClosurePartitioner(
+                n_readers=settings.n_readers,
+                redundancy=settings.redundancy,
+                seed=settings.seed,
+                closure_hops=settings.semantic_closure_hops,
+                max_context_units=settings.semantic_max_context_units,
+            )
         pool = ReaderPool(
             client=client,
             plugin=plugin,
@@ -179,6 +194,7 @@ class ParallaxEngine:
             coverage_fill_rate=matrix.fill_rate(),
             max_evidence_overlap_rate=runtime.settings.max_evidence_overlap_rate,
             min_independent_support=runtime.settings.effective_min_independent_support(),
+            evidence=runtime.evidence,
         )
         return Report(
             run_id=run_id,
@@ -189,7 +205,9 @@ class ParallaxEngine:
             coverage=matrix,
             manifest=runtime.manifest,
             independence=independence,
-            provenance=build_provenance_graph(all_claims, assignments, runtime.manifest.receipts),
+            provenance=build_provenance_graph(
+                all_claims, assignments, runtime.manifest.receipts, evidence=runtime.evidence
+            ),
         )
 
     def _representative(self, group: LedgerGroup) -> Claim | None:

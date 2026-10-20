@@ -16,11 +16,14 @@ import logging
 import os
 import socket
 import time
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+from parallax.domain.models import Claim, RunManifest
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +46,7 @@ def _atomic_write(path: Path, text: str) -> None:
     `os.replace`（`Path.replace`）在同一文件系统内是原子的，因此读者要么看到旧内容、
     要么看到新内容。
     """
-    tmp = path.with_name(path.name + ".tmp")
+    tmp = path.with_name(path.name + f".{uuid.uuid4().hex}.tmp")
     tmp.write_text(text, encoding="utf-8")
     tmp.replace(path)
 
@@ -89,6 +92,15 @@ class RunStore:
     # ---- 路径 ----
 
     def run_dir(self, run_id: str) -> Path:
+        if (
+            not run_id
+            or len(run_id) > 128
+            or any(
+                char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+                for char in run_id
+            )
+        ):
+            raise ValueError("非法运行 ID")
         return self.root / run_id
 
     def _meta(self, run_id: str) -> Path:
@@ -188,7 +200,7 @@ class RunStore:
         """按创建时间倒序列出。只读 meta.json，不碰结果文件。"""
         records: list[RunRecord] = []
         for child in self.root.iterdir():
-            if not child.is_dir():
+            if not child.is_dir() or child.name.startswith("."):
                 continue
             record = self.get(child.name)
             if record is not None:
@@ -220,3 +232,39 @@ class RunStore:
             return json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             return None
+
+    def save_claims(self, run_id: str, claims: list[Claim]) -> None:
+        _atomic_write(
+            self.run_dir(run_id) / "claims.json",
+            json.dumps(
+                [claim.model_dump(mode="json") for claim in claims], ensure_ascii=False, indent=2
+            ),
+        )
+
+    def read_claim(self, run_id: str, claim_id: str) -> Claim | None:
+        path = self.run_dir(run_id) / "claims.json"
+        if path.exists():
+            for payload in json.loads(path.read_text(encoding="utf-8")):
+                if payload.get("claim_id") == claim_id:
+                    return Claim.model_validate(payload)
+        return None
+
+    def save_manifest(self, run_id: str, manifest: RunManifest) -> None:
+        _atomic_write(self.run_dir(run_id) / "manifest.json", manifest.model_dump_json(indent=2))
+
+    def save_source_hashes(self, run_id: str, hashes: dict[str, str]) -> None:
+        _atomic_write(
+            self.run_dir(run_id) / "source-hashes.json", json.dumps(hashes, sort_keys=True)
+        )
+
+    def read_source_hashes(self, run_id: str) -> dict[str, str]:
+        path = self.run_dir(run_id) / "source-hashes.json"
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+    def read_manifest(self, run_id: str) -> RunManifest | None:
+        path = self.run_dir(run_id) / "manifest.json"
+        return (
+            RunManifest.model_validate_json(path.read_text(encoding="utf-8"))
+            if path.exists()
+            else None
+        )

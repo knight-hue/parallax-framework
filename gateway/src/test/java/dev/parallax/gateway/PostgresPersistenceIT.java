@@ -32,6 +32,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 /**
  * **真实 PostgreSQL** 上的集成测试。
@@ -61,7 +62,10 @@ class PostgresPersistenceIT {
 
     @SuppressWarnings("resource") // 生命周期由 @Container（Testcontainers JUnit 扩展）托管，IDE 的"资源未关闭"是误报
     @Container
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine")
+    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>(
+            DockerImageName.parse(System.getProperty("parallax.test.postgres-image", "postgres:17-alpine"))
+                    .asCompatibleSubstituteFor("postgres"))
+            .withImagePullPolicy(image -> false)
             .withDatabaseName("parallax")
             .withUsername("parallax")
             .withPassword("parallax");

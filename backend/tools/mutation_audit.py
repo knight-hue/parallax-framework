@@ -174,7 +174,15 @@ MUTANTS = (
 def _copy_backend(destination: Path) -> Path:
     target = destination / "backend"
     ignored = shutil.ignore_patterns(
-        ".venv", ".pytest_cache", ".ruff_cache", "__pycache__", ".pytest-tmp", "runs", "eval"
+        ".venv",
+        ".pytest_cache",
+        ".ruff_cache",
+        "__pycache__",
+        ".pytest-tmp",
+        "runs",
+        "eval",
+        ".env",
+        ".env.*",
     )
     shutil.copytree(ROOT, target, ignore=ignored)
     return target

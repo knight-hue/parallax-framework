@@ -68,7 +68,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     /** 只有"提交"才贵，"查询/看进度"不该被同一个小桶卡住。 */
     private boolean isExpensive(HttpServletRequest request) {
-        return EXPENSIVE_PATH.equals(request.getRequestURI())
+        return (EXPENSIVE_PATH.equals(request.getRequestURI())
+                || request.getRequestURI().matches("/api/v1/audits/[A-Za-z0-9_-]+/repairs(/.*)?"))
                 && "POST".equalsIgnoreCase(request.getMethod());
     }
 

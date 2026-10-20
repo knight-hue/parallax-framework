@@ -117,13 +117,13 @@ class SQLiteReputationStore:
 
     def get(self, agent_id: str, role: str = "reader") -> AgentReputation:
         with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO agent_reputation (agent_id, role) VALUES (?, ?)",
+                (agent_id, role),
+            )
             row = conn.execute(
                 "SELECT * FROM agent_reputation WHERE agent_id = ?", (agent_id,)
             ).fetchone()
-            if row is None:
-                reputation = AgentReputation(agent_id=agent_id, role=role)
-                self.save(reputation)
-                return reputation
             return self._from_row(row)
 
     def save(self, reputation: AgentReputation) -> None:
@@ -238,9 +238,12 @@ class ReputationPolicy:
     ) -> dict[str, float]:
         """仲裁裁决落地后才结算声誉。
 
-        裁决为 HIGH_CONFIDENCE → ASSERT 方胜；裁决为 PENDING → 视为未能证实，
-        DENY 方胜（「无法证实」不等于「证伪」，所以只做 win/loss 记录，不改 claim 结论语义）。
+        裁决为 HIGH_CONFIDENCE → ASSERT 方胜；PENDING / DISPUTED 不结算。
+        当前仲裁端口无法区分“否定成立”和“证据不足”，宁可不扣分也不惩罚异见。
         """
+        if upheld != ClaimStatus.HIGH_CONFIDENCE:
+            # 无法证实/仍有争议不构成反方事实胜出，不能惩罚任何一方。
+            return {}
         winners_polarity = (
             Polarity.ASSERT if upheld == ClaimStatus.HIGH_CONFIDENCE else Polarity.DENY
         )

@@ -244,7 +244,7 @@ def effective_channels(agent_fingerprints: dict[str, set[str]]) -> float:
 
     两个端点行为：
         所有 Agent 完全一致 → G 秩为 1 → K* = 1（等于只有一条通道）
-        所有 Agent 完全互斥 → G 为对角阵 → K* = N（N 条独立通道）
+        所有 Agent 完全互斥且产出量相同 → G 为等权对角阵 → K* = N
 
     它直接量化了 arXiv 2602.03794 的「有效独立通道数」，
     且**不需要 ground truth**，因此也能在没有标注的真实仓库上直接测。
@@ -294,15 +294,28 @@ class ArmMetrics(BaseModel):
     **不是同口径比较**——这个坑在真实仓库验证阶段才发现，此前的文档确实踩了它。
     """
     agent_count: int = 0
-    """实际产出过 claim 的不同 Agent 数（多轮下 = 每轮读者数之和）。K\\* 的上限。"""
+    """实际产出过 claim 的不同 Agent 数，可能小于执行过的 Reader 数。K\\* 的上限。"""
+
+    assigned_reader_count: int | None = None
+    """从 manifest 计数的非空分区 Reader 数；旧产物未知时保留 None。"""
+
+    @property
+    def assigned_channels_ratio(self) -> float | None:
+        if self.assigned_reader_count is None:
+            return None
+        return (
+            round(self.effective_channels / self.assigned_reader_count, 4)
+            if self.assigned_reader_count
+            else 0.0
+        )
 
     @property
     def channels_ratio(self) -> float:
         """归一化独立通道占比 = K\\* / agent_count，值域 (0, 1]。
 
-        跨臂比较应当用这个而不是裸 K\\*：它回答的是
-        「这 N 个 Agent 发挥出了几成独立性」，
-        从而让轮次不同、读者数不同的两个臂可比。
+        这是仅对产出者归一化的描述统计，零产出的 Reader 不在分母。
+        不能把它当作所有已执行 Reader 的独立性或准确率；同时报告
+        assigned_reader_count/assigned_channels_ratio、实际 tokens 和轮数。
         """
         if not self.agent_count:
             return 0.0
@@ -397,6 +410,7 @@ def compute_metrics(
         redundancy=round(1.0 - distinct_fingerprints / total_claims, 4) if total_claims else 0.0,
         effective_channels=effective_channels(per_agent),
         agent_count=agent_count,
+        assigned_reader_count=sum(bool(ids) for ids in report.manifest.all_assignments().values()),
         coverage_fill_rate=round(report.coverage.fill_rate(), 4),
         rounds=len(report.manifest.rounds),
         total_claims=total_claims,
