@@ -3,16 +3,21 @@ package dev.parallax.gateway.auth;
 /**
  * 认证主体。
  *
- * 三个字段对应两类凭据：
- * - **JWT**（运营人员）：`credentialId` 为 null，靠 `role` 授权；
+ * 凭据类型：
+ * - **JWT**（运营人员）：`credentialId`、`userId` 为 null，靠 `role` 授权；
  * - **API Key**（集成方）：`credentialId` 必填，配额与记账都按它归属。
+ * - **用户 JWT**：`userId` 必填，成员关系实时查库，不能继承全局管理员角色。
  *
  * `subject` 用凭据的 `name` 而不是 id：日志里"ci-bot 超了额度"比一串 UUID 有用。
  */
-public record AuthPrincipal(String subject, String role, String credentialId) {
+public record AuthPrincipal(String subject, String role, String credentialId, String userId) {
 
     public static final String ROLE_ADMIN = "ADMIN";
     public static final String ROLE_VIEWER = "VIEWER";
+
+    public AuthPrincipal(String subject, String role, String credentialId) {
+        this(subject, role, credentialId, null);
+    }
 
     /** JWT 主体（无配额归属）。 */
     public AuthPrincipal(String subject, String role) {
