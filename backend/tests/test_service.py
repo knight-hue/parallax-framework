@@ -22,6 +22,34 @@ from parallax.service.runner import AuditRunner
 from parallax.service.store import RunRecord, RunStore
 from tests.conftest import make_responder, make_settings
 
+
+def test_platform_lifespan_starts_replay_and_stops_worker(tmp_path, monkeypatch):
+    calls = []
+
+    class Worker:
+        def __init__(self, *args):
+            pass
+
+        async def start(self):
+            calls.append("start")
+
+        async def shutdown(self):
+            calls.append("shutdown")
+
+    monkeypatch.setattr("parallax.service.app.PlatformWorkerService", Worker)
+    settings = make_settings().model_copy(
+        update={
+            "platform_url": "http://platform",
+            "gateway_internal_token": "token",
+            "platform_source_hosts": ["github.com"],
+        }
+    )
+    app = create_app(settings, runs_dir=tmp_path)
+    with TestClient(app):
+        assert calls == ["start"]
+    assert calls == ["start", "shutdown"]
+
+
 # ──────────────────────────── 事件总线 ────────────────────────────
 
 

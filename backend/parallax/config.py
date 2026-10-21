@@ -186,6 +186,8 @@ class Settings(BaseSettings):
     platform_url: str = ""
     """Fixed Java origin used by the platform worker; empty keeps the worker disabled."""
     platform_source_hosts: list[str] = Field(default_factory=list)
+    platform_heartbeat_seconds: float = Field(default=20.0, ge=0.01, le=60)
+    platform_replay_seconds: float = Field(default=5.0, ge=0.01, le=60)
     """Exact HTTPS Git hosts permitted for platform source retrieval."""
 
     def is_llm_configured(self) -> bool:

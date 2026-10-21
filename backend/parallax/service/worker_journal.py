@@ -197,6 +197,13 @@ class WorkerJournal:
                 raise JournalConflict("Acknowledgement differs from the persisted event")
             conn.execute("UPDATE delivery SET acknowledged=1 WHERE event_id=?", (event.event_id,))
 
+    def is_pending(self, event: WorkerEvent) -> bool:
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT acknowledged FROM delivery WHERE event_id=?", (event.event_id,)
+            ).fetchone()
+            return row is not None and row[0] == 0
+
     def pending(self, limit: int = 100) -> list[WorkerEvent]:
         if not 1 <= limit <= 100:
             raise ValueError("Delivery batch must be 1..100")

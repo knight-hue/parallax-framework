@@ -1,7 +1,7 @@
 # Reliable platform dispatch
 
 This runtime is opt-in. Keep `PARALLAX_DISPATCH_ENABLED=false` until the platform
-Python Worker endpoints are installed. The legacy audit runner is independent.
+Python Worker endpoints and the broker are accepted together. The legacy audit runner is independent.
 
 Set these through the deployment secret/config provider (never commit credentials):
 
@@ -11,6 +11,15 @@ Set these through the deployment secret/config provider (never commit credential
 - `PARALLAX_PLATFORM_WORKER_URL`: fixed private HTTP(S) Worker base URL. Redirects
   are disabled; it is never taken from task input.
 - `PARALLAX_GATEWAY_INTERNAL_TOKEN`: same nonempty internal secret on Java and Worker.
+
+On Python set `PARALLAX_PLATFORM_URL` to the fixed Java origin and
+`PARALLAX_PLATFORM_SOURCE_HOSTS` to a JSON array of exact allowed source hosts.
+`PARALLAX_PLATFORM_HEARTBEAT_SECONDS` defaults to 20 (must be shorter than the Java
+lease, allowing for network delays); `PARALLAX_PLATFORM_REPLAY_SECONDS` defaults to 5.
+The application starts receipt replay automatically and stops executions on shutdown.
+Heartbeats currently report zero until final cumulative usage is known. Interrupted
+provider work never receives an invented zero-cost terminal refund: Java lease
+recovery conservatively charges the reservation and records uncertain usage.
 
 The runtime declares durable direct exchange `parallax.dispatch.v1`, separate quorum
 task/cancel queues, and a quorum dead-letter queue. Requires RabbitMQ 4.1+ with quorum
