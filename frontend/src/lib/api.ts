@@ -3,6 +3,9 @@ import type {
   RunRecord,
   RunResultEnvelope,
   RepairProposal,
+  PlatformTask,
+  PlatformTaskPage,
+  PlatformRepairReview,
 } from './types';
 
 /**
@@ -109,4 +112,23 @@ export const api = {
   },
 
   eventsUrl: (runId: string) => `${API_BASE}/api/v1/audits/${runId}/events`,
+
+  platformTasks: (projectId: string, after = '', limit = 20) =>
+    request<PlatformTaskPage>(`/api/v1/platform/projects/${encodeURIComponent(projectId)}/tasks?after=${encodeURIComponent(after)}&limit=${limit}`),
+
+  platformTask: (projectId: string, taskId: string) =>
+    request<PlatformTask>(`/api/v1/platform/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`),
+
+  submitPlatformTask: (projectId: string, idempotencyKey: string, payload: { repositoryId: string; policyVersion: string; commitSha: string; tokenBudget: number }) =>
+    request<PlatformTask>(`/api/v1/platform/projects/${encodeURIComponent(projectId)}/tasks`, { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: JSON.stringify(payload) }),
+
+  cancelPlatformTask: (projectId: string, taskId: string) =>
+    request<PlatformTask>(`/api/v1/platform/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/cancel`, { method: 'POST' }),
+
+  proposePlatformRepair: (projectId: string, taskId: string, payload: { sourceCommitSha: string; patchSha256: string; patchContent: string; testCommand: string }) =>
+    request<PlatformRepairReview>(`/api/v1/platform/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/repairs`, { method: 'POST', body: JSON.stringify(payload) }),
+
+  approvePlatformRepair: (projectId: string, taskId: string, reviewId: string, approvalDigest: string) =>
+    request<PlatformRepairReview>(`/api/v1/platform/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/repairs/${encodeURIComponent(reviewId)}/approve`, { method: 'POST', body: JSON.stringify({ approvalDigest }) }),
+
 };

@@ -10,6 +10,7 @@ import { CoverageHeatmap } from '@/components/coverage-heatmap';
 import { EventStream } from '@/components/event-stream';
 import { RepairPanel } from '@/components/repair-panel';
 import { RunHistory, RunSummary } from '@/components/run-history';
+import { PlatformWorkspace } from '@/components/platform-workspace';
 import { Badge, Button, Card, CardBody, CardHeader, EmptyState } from '@/components/ui/primitives';
 import { formatPercent } from '@/lib/utils';
 
@@ -194,6 +195,8 @@ export default function Page() {
           </CardBody>
         </Card>
       ) : null}
+
+      <PlatformWorkspace />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)_360px]">
         {/* 左栏：提交与历史 */}

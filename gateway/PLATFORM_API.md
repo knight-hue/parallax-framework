@@ -156,3 +156,23 @@ VIEWER membership and successful completion. It returns the bound artifact and v
 stored content against the successful digest; corruption returns 409. Revoked members
 and other projects cannot retrieve it. This is bounded database report storage; an S3
 backend, patch lifecycle and approval integration are separate pending modules.
+
+## Repair review and isolated verification
+
+`POST /api/v1/platform/projects/{projectId}/tasks/{taskId}/repairs` requires a live
+REVIEWER and a `SUCCEEDED` task. The body is
+`{sourceCommitSha,patchSha256,patchContent,testCommand}`. The source commit must equal
+the task snapshot and the patch digest is recalculated from the supplied UTF-8 bytes.
+The response contains an immutable `approvalDigest`, which also binds the successful
+report digest and test command. Repeating the same proposal is idempotent.
+
+`POST .../repairs/{reviewId}/approve` requires a MAINTAINER and the exact approval
+digest. It records approval only; it does not claim a regression passed. The isolated
+executor submits its result through the private
+`POST /api/v1/internal/platform/repair-verifications?projectId=...&taskId=...&reviewId=...`
+endpoint with `X-Internal-Token`. Its body contains the approval digest, a verification
+ID, SHA-256 of the JSON evidence and the evidence itself. The gateway checks that the
+evidence names the exact review/task/commit/patch/command, proves a marked baseline
+failure and a zero exit regression, and makes the terminal receipt idempotent. Public
+users can read a proposal or page proposals with current project membership; they
+cannot submit a verification receipt.
