@@ -2,6 +2,9 @@ server:
   port: ${PARALLAX_GATEWAY_PORT:8080}
 
 spring:
+  autoconfigure:
+    # AMQP starts only with the explicit platform dispatch runtime configuration.
+    exclude: org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
   profiles:
     default: mysql
   application:
@@ -33,6 +36,12 @@ spring:
       request-timeout: 1800000
 
 parallax:
+  dispatch:
+    enabled: ${PARALLAX_DISPATCH_ENABLED:false}
+    rabbit-uri: ${PARALLAX_RABBIT_URI:}
+    worker-url: ${PARALLAX_PLATFORM_WORKER_URL:http://127.0.0.1:8000}
+    publish-delay-ms: ${PARALLAX_DISPATCH_PUBLISH_DELAY_MS:500}
+    recovery-delay-ms: ${PARALLAX_DISPATCH_RECOVERY_DELAY_MS:5000}
   gateway:
     upstream-base-url: ${PARALLAX_UPSTREAM_URL:http://127.0.0.1:8000}
     connect-timeout-ms: ${PARALLAX_CONNECT_TIMEOUT_MS:5000}

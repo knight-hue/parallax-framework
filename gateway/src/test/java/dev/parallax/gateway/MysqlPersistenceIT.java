@@ -41,6 +41,38 @@ class MysqlPersistenceIT {
     @Autowired dev.parallax.gateway.platform.PlatformCatalogService catalog;
     @Autowired dev.parallax.gateway.platform.PlatformTaskService tasks;
     @Autowired dev.parallax.gateway.platform.PlatformWorkerCoordinator coordinator;
+    @Autowired dev.parallax.gateway.platform.PlatformOutboxStore outbox;
+
+    @Test
+    void concurrentOutboxClaimsAndExpiredOwnershipHoldOnMysql() throws Exception {
+        // This verifier owns an isolated database; keep unrelated fixtures out of the claim set.
+        jdbc.update("UPDATE platform_outbox SET status='SUPERSEDED',claim_token=NULL,claim_until=NULL");
+        var user=identity.provision("test","mysql-outbox-"+UUID.randomUUID(),"test-password-123");
+        var org=identity.createOrganization(user.id(),"outbox");
+        var project=identity.createProject(user.id(),org.id(),"project");
+        var repo=catalog.register(user.id(),project.id(),"api","https://github.com/team/api");
+        var policy=catalog.publish(user.id(),project.id(),new dev.parallax.gateway.platform.PlatformCatalogService.PolicyConfig(4,2,3,2,true,1000,3600));
+        tasks.configureBudget("test-admin",org.id(),400);
+        for(int i=0;i<4;i++) tasks.submit(user.id(),project.id(),"request-"+i,new dev.parallax.gateway.platform.PlatformTaskService.Submission(repo.id(),policy.id(),"a".repeat(40),100));
+        var claims=new java.util.ArrayList<dev.parallax.gateway.platform.PlatformOutboxStore.Claim>();
+        try(var pool=java.util.concurrent.Executors.newFixedThreadPool(4)) {
+            var jobs=java.util.stream.IntStream.range(0,12).mapToObj(i -> (java.util.concurrent.Callable<java.util.Optional<dev.parallax.gateway.platform.PlatformOutboxStore.Claim>>) outbox::claim).toList();
+            for(var future:pool.invokeAll(jobs)) future.get().ifPresent(claims::add);
+        }
+        assertThat(claims).hasSize(4);
+        assertThat(claims.stream().map(dev.parallax.gateway.platform.PlatformOutboxStore.Claim::id).distinct()).hasSize(4);
+        var expired=claims.getFirst();
+        jdbc.update("UPDATE platform_outbox SET claim_until=? WHERE id=?",Timestamp.from(Instant.now().minusSeconds(1)),expired.id());
+        var reclaimed=outbox.claim().orElseThrow();
+        assertThat(reclaimed.id()).isEqualTo(expired.id());
+        assertThat(reclaimed.claimToken()).isNotEqualTo(expired.claimToken());
+        assertThat(outbox.complete(expired,true)).isFalse();
+        assertThat(outbox.retry(expired)).isFalse();
+        assertThat(outbox.complete(reclaimed,true)).isTrue();
+        for(var claim:claims) if(!claim.id().equals(expired.id())) assertThat(outbox.complete(claim,true)).isTrue();
+        assertThat(tasks.budget(user.id(),org.id()).reservedTokens()).isEqualTo(400);
+        assertThat(tasks.reconcile(org.id()).consistent()).isTrue();
+    }
 
     @Test
     void workerInboxHandlesConcurrentOrganizationsAndDuplicateSettlementOnMysql() throws Exception {

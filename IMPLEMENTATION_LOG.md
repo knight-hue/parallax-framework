@@ -76,3 +76,15 @@
 - Java 全量 82 项、真实 MySQL 7 项通过；新增 10 项协调测试，真库覆盖不同组织并发开工、重复完成及额度核对。
 - 真 PostgreSQL → MySQL 迁移扩展至 V7/17 张非空表，逐字段核对通过。脱敏摘要：eval/java-platform/worker-coordinator.json。
 - 已按授权用 Maven 补齐 Spring AMQP 3.2.12、RabbitMQ Java client 5.25.0、Redisson 3.52.0，尚未修改主 POM 或声明其运行验收完成。
+
+## 可靠消息派发与恢复接线
+
+状态：Java 派发运行代码、后台恢复与 HTTP 桥已实现，默认关闭；Python 平台 Worker 接入和真实 RabbitMQ 验收待完成。
+
+- 事务 Outbox 使用短事务领取、30 秒租约、随机领取令牌、过期重领和发布失败退避；broker I/O 不持有数据库事务。
+- 真实 MySQL 并发测试发现默认 RR 下状态索引更新发生死锁，领取事务改为 READ COMMITTED 后通过；过期领取者不能覆盖新领取者。
+- RabbitMQ 持久消息、mandatory 路由返回、关联确认及超时；quorum 队列、手动 ACK、有限重投和至少一次死信转移；后台分批发布和失联恢复。
+- 固定私网 Worker HTTP 地址、内部令牌、禁止跳转；2xx/安全重复或过期确认，临时错误重投，永久错误进入死信。当前不能开启派发替代尚未实现的 Python 接口。
+- Java 全量 92 项、真实 MySQL 8 项通过；真 PostgreSQL → MySQL V7/17 张非空表复制核验通过。Ruff/format、diff 检查通过。
+- RabbitMQ 的确认/返回/超时和 HTTP ACK 分类有 5 项测试，broker/channel 为 mock；另有 3 项真实 broker IT 已编译，未运行。本机无 RabbitMQ 缓存镜像，验收脚本预检查明确退出，无下载。
+- 运行与故障处理：gateway/DISPATCH_OPERATIONS.md；脱敏记录：eval/java-platform/reliable-dispatch.json。未证明 RabbitMQ 集群容错、容量或生产上线。
