@@ -319,10 +319,11 @@ class PlatformWorkerIntegrationTest {
         assertThatThrownBy(()->reviews.approve(f.user,f.project,f.task.id(),proposal.id(),"0".repeat(64))).hasMessageContaining("digest");
         var approved=reviews.approve(f.user,f.project,f.task.id(),proposal.id(),proposal.approvalDigest());
         assertThat(approved.status()).isEqualTo(PlatformRepairReviewService.Status.APPROVED);
-        var verification=new PlatformRepairReviewService.VerificationRequest("worker-123",digestHex("passed"),true,"isolated test process exit=0");
-        var passed=reviews.verify(f.user,f.project,f.task.id(),proposal.id(),verification);
+        String evidence="{\"review_id\":\""+proposal.id()+"\",\"task_id\":\""+f.task.id()+"\",\"source_commit_sha\":\""+f.task.commitSha()+"\",\"patch_sha256\":\""+patchSha+"\",\"test_command\":\"mvn -q -DskipTests=false test\",\"baseline_exit_code\":1,\"regression_exit_code\":0,\"baseline_failure_contains\":\"AssertionError\",\"baseline_output\":\"AssertionError\",\"status\":\"regression_passed\"}";
+        var verification=new PlatformRepairReviewService.VerificationRequest("worker-123",proposal.approvalDigest(),digestHex(evidence),true,evidence);
+        var passed=reviews.verify(f.project,f.task.id(),proposal.id(),verification);
         assertThat(passed.status()).isEqualTo(PlatformRepairReviewService.Status.PASSED);
-        assertThat(reviews.verify(f.user,f.project,f.task.id(),proposal.id(),verification)).isEqualTo(passed);
-        assertThatThrownBy(()->reviews.verify(f.user,f.project,f.task.id(),proposal.id(),new PlatformRepairReviewService.VerificationRequest("worker-124",digestHex("other"),true,"other"))).hasMessageContaining("already final");
+        assertThat(reviews.verify(f.project,f.task.id(),proposal.id(),verification)).isEqualTo(passed);
+        assertThatThrownBy(()->reviews.verify(f.project,f.task.id(),proposal.id(),new PlatformRepairReviewService.VerificationRequest("worker-124",proposal.approvalDigest(),digestHex("other"),true,"other"))).hasMessageContaining("valid JSON");
     }
 }

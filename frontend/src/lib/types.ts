@@ -158,6 +158,38 @@ export interface RunResultEnvelope {
   result?: RunResult;
 }
 
+export type PlatformTaskState = 'QUEUED' | 'DISPATCHED' | 'RUNNING' | 'CANCEL_REQUESTED' | 'SUCCEEDED' | 'FAILED' | 'CANCELED';
+export interface PlatformTask {
+  id: string;
+  projectId: string;
+  repositoryId: string;
+  policyVersion: string;
+  commitSha: string;
+  tokenBudget: number;
+  deadline: string;
+  state: PlatformTaskState;
+  attempt: number;
+  fencingToken: number;
+  settled: boolean;
+  resultSha256?: string | null;
+  recoveryReason?: string | null;
+}
+export interface PlatformTaskPage { items: PlatformTask[]; nextCursor: string | null; }
+export interface PlatformRepairReview {
+  id: string;
+  taskId: string;
+  projectId: string;
+  sourceCommitSha: string;
+  patchSha256: string;
+  patchContent: string;
+  testCommand: string;
+  approvalDigest: string;
+  status: 'AWAITING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'VERIFYING' | 'PASSED' | 'FAILED';
+  verificationId?: string | null;
+  verificationSha256?: string | null;
+  verificationDetail?: string | null;
+}
+
 /** 编排层发出的事件。`type` 就是 SSE 的 `event:` 字段。 */
 export interface ParallaxEvent {
   seq: number;

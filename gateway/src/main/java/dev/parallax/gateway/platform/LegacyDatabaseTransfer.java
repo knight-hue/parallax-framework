@@ -37,7 +37,8 @@ public final class LegacyDatabaseTransfer {
             new Table("platform_budget_ledger", "id", "id,organization_id,task_id,kind,tokens,at"),
             new Table("platform_outbox", "id", "id,task_id,attempt,kind,payload,status,available_at,claim_token,claim_until,publish_attempts,created_at,published_at"),
             new Table("platform_task_event", "id", "id,event_id,task_id,attempt,fencing_token,sequence_number,kind,payload,payload_sha256,received_at"),
-            new Table("platform_task_artifact", "id", "id,artifact_id,task_id,attempt,fencing_token,sha256,content,created_at"));
+            new Table("platform_task_artifact", "id", "id,artifact_id,task_id,attempt,fencing_token,sha256,content,created_at"),
+            new Table("platform_repair_review", "id", "id,task_id,project_id,created_by,source_commit_sha,patch_sha256,patch_content,test_command,approval_digest,status,approved_by,approved_at,verification_id,verification_sha256,verification_detail,created_at,updated_at"));
 
     public record Verification(String table, long rows, String sha256) { }
     private static Calendar utc() { return Calendar.getInstance(TimeZone.getTimeZone("UTC")); }

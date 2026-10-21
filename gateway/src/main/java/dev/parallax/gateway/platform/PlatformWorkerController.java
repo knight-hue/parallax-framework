@@ -16,7 +16,8 @@ public class PlatformWorkerController {
     private final ParallaxProperties props;
     private final PlatformExecutionSnapshot snapshots;
     private final PlatformArtifactService artifacts;
-    public PlatformWorkerController(PlatformWorkerCoordinator coordinator,ParallaxProperties props,PlatformExecutionSnapshot snapshots,PlatformArtifactService artifacts) { this.coordinator=coordinator;this.props=props;this.snapshots=snapshots;this.artifacts=artifacts; }
+    private final PlatformRepairReviewService reviews;
+    public PlatformWorkerController(PlatformWorkerCoordinator coordinator,ParallaxProperties props,PlatformExecutionSnapshot snapshots,PlatformArtifactService artifacts,PlatformRepairReviewService reviews) { this.coordinator=coordinator;this.props=props;this.snapshots=snapshots;this.artifacts=artifacts;this.reviews=reviews; }
 
     @PostMapping("/api/v1/internal/platform/events")
     public PlatformWorkerCoordinator.Acknowledgement receive(@RequestHeader(value="X-Internal-Token",required=false) String token,
@@ -42,6 +43,14 @@ public class PlatformWorkerController {
         if(body.length()>8000) throw ApiException.badRequest("Worker task exceeds supported size");
         try { return snapshots.resolve(WorkerProtocol.readTask(body)); }
         catch(java.io.IOException ex) { throw ApiException.badRequest("Invalid worker task contract"); }
+    }
+
+    @PostMapping("/api/v1/internal/platform/repair-verifications")
+    public PlatformRepairReviewService.Review repairVerification(@RequestHeader(value="X-Internal-Token",required=false) String token,
+            @RequestParam String projectId, @RequestParam String taskId, @RequestParam String reviewId,
+            @RequestBody PlatformRepairReviewService.VerificationRequest request) {
+        requireInternal(token);
+        return reviews.verify(projectId, taskId, reviewId, request);
     }
     private void requireInternal(String token) {
         String expected=props.getGateway().getInternalToken();
