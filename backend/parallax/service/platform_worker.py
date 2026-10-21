@@ -9,6 +9,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 from parallax.config import Settings
 from parallax.engine import ParallaxEngine
@@ -92,7 +93,8 @@ class PlatformWorkerService:
                 ).encode()
             ).hexdigest()
             usage = engine.usage_snapshot()
-            return report, usage["prompt_tokens"], usage["completion_tokens"], digest
+            content = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            return content, usage["prompt_tokens"], usage["completion_tokens"], digest
         finally:
             await client.aclose()
 
@@ -137,12 +139,13 @@ class PlatformWorkerService:
     async def _execute(self, client: PlatformClient, task: WorkerTask, snapshot) -> None:
         prompt = completion = 0
         try:
-            result, prompt, completion, digest = await self.engine_factory(
+            content, prompt, completion, digest = await self.engine_factory(
                 task=task,
                 snapshot=snapshot,
                 sources=self.sources,
                 canceled=lambda: self.journal.canceled(task),
             )
+            await client.upload_artifact(task, uuid4().hex, digest, content)
             await self._finish(client, task, "SUCCEEDED", prompt, completion, digest)
         except asyncio.CancelledError:
             await self._finish(client, task, "CANCELED", prompt, completion)

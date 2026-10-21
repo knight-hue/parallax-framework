@@ -42,6 +42,7 @@ class MysqlPersistenceIT {
     @Autowired dev.parallax.gateway.platform.PlatformTaskService tasks;
     @Autowired dev.parallax.gateway.platform.PlatformWorkerCoordinator coordinator;
     @Autowired dev.parallax.gateway.platform.PlatformOutboxStore outbox;
+    @Autowired dev.parallax.gateway.platform.PlatformArtifactService artifacts;
 
     @Test
     void concurrentOutboxClaimsAndExpiredOwnershipHoldOnMysql() throws Exception {
@@ -95,7 +96,14 @@ class MysqlPersistenceIT {
         try(var pool=java.util.concurrent.Executors.newFixedThreadPool(4)) {
             var starts=contracts.stream().map(t -> (java.util.concurrent.Callable<Boolean>) () -> coordinator.receive(new dev.parallax.gateway.task.WorkerEvent(1,UUID.randomUUID().toString(),t.taskId(),1,1,1,dev.parallax.gateway.task.WorkerEvent.Kind.STARTED,Instant.now(),null,0,0)).accepted()).toList();
             for(var future:pool.invokeAll(starts)) assertThat(future.get()).isTrue();
-            var done=contracts.stream().map(t -> new dev.parallax.gateway.task.WorkerEvent(1,UUID.randomUUID().toString(),t.taskId(),1,1,2,dev.parallax.gateway.task.WorkerEvent.Kind.SUCCEEDED,Instant.now(),"b".repeat(64),30,10)).toList();
+            String content="{\"report\":\"中文 😀\"}";
+            String digest=java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(content.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            for(var t:contracts) {
+                var upload=new dev.parallax.gateway.platform.PlatformArtifactService.Upload(t.taskId(),1,1,UUID.randomUUID().toString(),digest,content);
+                var saved=artifacts.put(upload);
+                assertThat(artifacts.put(upload)).isEqualTo(saved);
+            }
+            var done=contracts.stream().map(t -> new dev.parallax.gateway.task.WorkerEvent(1,UUID.randomUUID().toString(),t.taskId(),1,1,2,dev.parallax.gateway.task.WorkerEvent.Kind.SUCCEEDED,Instant.now(),digest,30,10)).toList();
             var jobs=java.util.stream.IntStream.range(0,8).mapToObj(i -> (java.util.concurrent.Callable<Boolean>) () -> coordinator.receive(done.get(i%2)).accepted()).toList();
             int accepted=0;for(var future:pool.invokeAll(jobs)) if(future.get()) accepted++;
             assertThat(accepted).isEqualTo(2);
@@ -172,7 +180,7 @@ class MysqlPersistenceIT {
     void usesRealMysqlInnoDBAndValidatesFlyway() {
         assertThat(jdbc.queryForObject("SELECT VERSION()", String.class)).startsWith("8.");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'platform_project' AND engine = 'InnoDB'", Integer.class)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE", Integer.class)).isEqualTo(7);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE", Integer.class)).isEqualTo(8);
     }
 
     @Test
@@ -248,8 +256,11 @@ class MysqlPersistenceIT {
                 seed.executeUpdate("INSERT INTO platform_task_event (id,event_id,task_id,attempt,fencing_token,sequence_number,kind,payload,payload_sha256,received_at) VALUES (42,'event-source','task-source',1,1,2,'FAILED','{}','test-digest',CURRENT_TIMESTAMP)");
             }
             assertThatThrownBy(() -> LegacyDatabaseTransfer.copy(source, target, false)).isInstanceOf(IllegalArgumentException.class);
-            assertThat(LegacyDatabaseTransfer.copy(source, target, true)).hasSize(17).allSatisfy(row -> assertThat(row.rows()).isPositive());
-            assertThat(LegacyDatabaseTransfer.verify(source, target)).hasSize(17);
+            try(var seed=source.createStatement()) {
+                seed.executeUpdate("INSERT INTO platform_task_artifact (id,artifact_id,task_id,attempt,fencing_token,sha256,content,created_at) VALUES (42,'artifact-source','task-source',1,1,'test-digest','报告 😀',CURRENT_TIMESTAMP)");
+            }
+            assertThat(LegacyDatabaseTransfer.copy(source, target, true)).hasSize(18).allSatisfy(row -> assertThat(row.rows()).isPositive());
+            assertThat(LegacyDatabaseTransfer.verify(source, target)).hasSize(18);
             assertThatThrownBy(() -> LegacyDatabaseTransfer.copy(source, target, true)).hasMessageContaining("Destination must be empty");
             try (var change = target.createStatement()) { change.executeUpdate("UPDATE platform_user SET username = 'tampered'"); }
             assertThatThrownBy(() -> LegacyDatabaseTransfer.verify(source, target)).hasMessageContaining("verification mismatch");

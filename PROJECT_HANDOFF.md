@@ -8,7 +8,7 @@
 
 Java 从网关升级为平台业务主体；平台统一使用 MySQL；Python 保留独立证据装配和隔离执行。秒杀与 XA/TCC/Seata 放入独立实验，报告安全分享后置。不得沿用“Java 只做薄网关”“不需要组织用户体系”的旧范围限制。
 
-已实现任务协议、身份权限、MySQL 运行档、仓库/策略、平台任务/预算、Inbox、心跳/fencing 和事件重放。Java 可靠派发及后台恢复已接线，默认关闭；不可变执行快照、Python 内部客户端、持久投递日志和平台 Worker 执行生命周期已实现，真实 Java↔Python 联调及产物落库尚未完成。最新 Java 94 项、Python 363 项及真实 MySQL 8 项通过；下一步完成产物验证/结果审批，再接工作台。RabbitMQ 没有本地缓存镜像，真实 broker IT 已编译但未运行，不能冒充消息链路验收。迁移步骤见 gateway/MYSQL_OPERATIONS.md；本机真库版本是 8.0.19，目标 8.4 待验收。完整状态见 IMPLEMENTATION_LOG.md。
+已实现任务协议、身份权限、MySQL 运行档、仓库/策略、平台任务/预算、Inbox、心跳/fencing 和事件重放。Java 可靠派发及后台恢复已接线，默认关闭；不可变执行快照、Python 内部客户端、持久投递日志、平台 Worker 生命周期和数据库报告产物已实现。报告上传验证摘要、执行版本与租约，成功结算必须有匹配产物，读取检查实时项目权限及内容完整性。最新 Java 98 项、Python 370 项及真实 MySQL 8 项通过，V8/18 张非空表迁移核对通过；真实 Java↔Python 联调、长任务续租、结果审批及工作台仍待完成。Docker 已可用，RabbitMQ 仍无本地缓存镜像，真实 broker IT 未运行，不能冒充消息链路验收。迁移步骤见 gateway/MYSQL_OPERATIONS.md；本机真库版本是 8.0.19，目标 8.4 待验收。完整状态见 IMPLEMENTATION_LOG.md。
 
 以下保留既有审查链路的验收入口；不能据此宣称新 Java 平台已完成。
 

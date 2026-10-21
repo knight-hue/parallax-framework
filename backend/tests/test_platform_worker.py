@@ -53,6 +53,9 @@ class Client:
             raise PlatformUnavailable("offline")
         return {"accepted": True}
 
+    async def upload_artifact(self, *args):
+        return {"artifact_id": args[1], "sha256": args[2]}
+
     async def aclose(self):
         self.closed += 1
 
@@ -69,7 +72,7 @@ async def test_dispatch_claims_once_and_does_not_duplicate_engine(tmp_path: Path
 
     async def engine(**kwargs):
         started.append(kwargs["task"].task_id)
-        return object(), 2, 3, "a" * 64
+        return "{}", 2, 3, "a" * 64
 
     service = PlatformWorkerService(
         Settings(
