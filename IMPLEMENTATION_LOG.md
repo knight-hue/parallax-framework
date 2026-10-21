@@ -130,3 +130,13 @@
 - 开工确认返回取消时不启动引擎；任务 deadline、失联、过期拒绝及服务退出停止执行。已发起模型工作且用量不明时不伪报零用量终态，由 Java 租约恢复保守结算。心跳当前仅用于续租，最终用量在成功完成时上报，不宣称实时精确计费。
 - 新增 11 项测试覆盖长任务续租、失联/拒绝、取消、deadline、重启精确重放、退出及迟到开工、跨任务隔离和 FastAPI lifespan。Python 全量 381 项通过，Ruff/format 通过。
 - 源码归档线程受自身网络和大小超时约束，asyncio 取消不能强制杀死已经运行的线程；专用执行器、容量和跨节点验收仍待补齐。
+## Java ↔ Python 独立进程 HTTP 联调
+
+状态：已实现并通过本机确定性跨进程验收；RabbitMQ、多实例和公网部署仍按限制项保留。
+
+- Java WorkerHttpBridge 固定 HTTP/1.1，禁止 Python Uvicorn 的 HTTP/2 Upgrade 协商；请求只使用服务端配置的内部地址和令牌。
+- 新增独立 Python 进程夹具，使用确定性源码与假模型，不读取真实 API 配置，不产生模型费用。
+- 验证 STARTED 授权、心跳续租、报告上传/摘要校验、Java 预算结算、重复投递、Worker 重启去重、跨项目读取拒绝以及取消后失联的保守结算。
+- Python 全量 381 项、Java WorkerHttpBridge 2 项、PlatformWorkerProcessIT 1 项、gateway 离线 Maven 测试通过，证据见 `eval/java-platform/platform-worker.json`。
+- RabbitMQ 真 broker、跨节点故障和 MySQL 8.4 现场验收仍未完成，不能把本机 H2/HTTP 夹具验收写成公网生产上线。
+

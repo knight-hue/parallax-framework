@@ -11,7 +11,7 @@ import dev.parallax.gateway.task.WorkerProtocol;
 /** Fixed operator-configured worker endpoint; never accepts a URL or path from the message. */
 public final class WorkerHttpBridge {
     public enum Delivery { ACK, RETRY, DEAD_LETTER }
-    private final HttpClient client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).followRedirects(HttpClient.Redirect.NEVER).build();
+    private final HttpClient client=HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(3)).followRedirects(HttpClient.Redirect.NEVER).build();
     private final URI execute;
     private final URI cancel;
     private final String token;
