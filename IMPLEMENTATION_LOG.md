@@ -140,3 +140,12 @@
 - Python 全量 381 项、Java WorkerHttpBridge 2 项、PlatformWorkerProcessIT 1 项、gateway 离线 Maven 测试通过，证据见 `eval/java-platform/platform-worker.json`。
 - RabbitMQ 真 broker、跨节点故障和 MySQL 8.4 现场验收仍未完成，不能把本机 H2/HTTP 夹具验收写成公网生产上线。
 
+## Java 修复提案、审批与隔离回归回执
+
+状态：Java 侧版本绑定和审计闭环已实现；隔离执行仍由专用 Worker 负责。
+
+- V9 新增 `platform_repair_review`，以任务成功结果的精确 commit、补丁 SHA-256、补丁内容和测试命令生成不可变 approval digest。
+- 提案需要项目 REVIEWER 权限；批准需要 MAINTAINER 权限；批准后的验证回执要求结果摘要、执行标识和详细结果，终态回执幂等且不能被另一执行覆盖。
+- 状态只允许等待批准→批准→通过/失败，所有变更写入平台审计；跨项目、错误源码版本、错误摘要、重复终态均拒绝。
+- H2/Flyway 迁移和 `PlatformWorkerIntegrationTest` 审批回归测试通过。该模块不把审批记录伪装成隔离执行成功，真实 Worker 回归证据仍需通过回执接口提交。
+
