@@ -34,6 +34,7 @@ class PlatformWorkerIntegrationTest {
     @Autowired TestRestTemplate rest;
     @Autowired JwtService jwt;
     @Autowired PlatformExecutionSnapshot snapshots;
+    @Autowired PlatformArtifactService artifacts;
 
     @Test
     void executionSnapshotRequiresPrivateCredentialAndAnExactLeasedContract() {
@@ -73,6 +74,70 @@ class PlatformWorkerIntegrationTest {
         var retry=fixture();dispatch(retry);expireLease(retry.task.id());coordinator.recover(retry.task.id());
         assertThatThrownBy(()->snapshots.resolve(retry.task.dispatch())).hasMessageContaining("differs");
     }
+
+    @Test
+    void artifactRequiresExactDigestAndCurrentAttempt() {
+        var f=fixture();start(f);
+        var id=UUID.randomUUID().toString();
+        assertThatThrownBy(()->artifacts.put(new PlatformArtifactService.Upload(f.task.id(),1,1,id,"0".repeat(64),"{}")))
+                .hasMessageContaining("digest");
+        var saved=artifacts.put(new PlatformArtifactService.Upload(f.task.id(),1,1,id,digestHex("{}"),"{}"));
+        assertThat(saved.sha256()).isEqualTo(digestHex("{}"));
+        assertThat(artifacts.put(new PlatformArtifactService.Upload(f.task.id(),1,1,id,digestHex("{}"),"{}"))).isEqualTo(saved);
+        assertThatThrownBy(()->artifacts.put(new PlatformArtifactService.Upload(f.task.id(),1,2,UUID.randomUUID().toString(),digestHex("x"),"x")))
+                .hasMessageContaining("Stale");
+        expireLease(f.task.id());
+        assertThatThrownBy(()->artifacts.put(new PlatformArtifactService.Upload(f.task.id(),1,1,id,digestHex("{}"),"{}")))
+                .hasMessageContaining("expired");
+    }
+
+    @Test
+    void successWithoutArtifactCannotSettleBudgetOrAdvanceSequence() {
+        var f=fixture();start(f);
+        var done=event(f.task,2,WorkerEvent.Kind.SUCCEEDED,30,10);
+        assertThatThrownBy(()->coordinator.receive(done)).hasMessageContaining("verified artifact");
+        assertThat(tasks.get(f.user,f.project,f.task.id()).lastSequence()).isEqualTo(1);
+        assertThat(tasks.budget(f.user,f.org).reservedTokens()).isEqualTo(100);
+        artifact(f);
+        assertThat(coordinator.receive(done).accepted()).isTrue();
+        assertThat(tasks.budget(f.user,f.org).usedTokens()).isEqualTo(40);
+    }
+
+    @Test
+    void resultRequiresProjectMembershipAndDetectsStoredContentTampering() {
+        var f=fixture();start(f);
+        assertThatThrownBy(()->artifacts.result(f.user,f.project,f.task.id())).hasMessageContaining("no successful result");
+        artifact(f);coordinator.receive(event(f.task,2,WorkerEvent.Kind.SUCCEEDED,30,10));
+        String endpoint="/api/v1/platform/projects/"+f.project+"/tasks/"+f.task.id()+"/result";
+        var headers=new HttpHeaders();headers.setBearerAuth(jwt.issueUserToken(f.user,"test"));
+        var response=rest.exchange(endpoint,HttpMethod.GET,new HttpEntity<>(headers),Map.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).containsEntry("content","{}").containsEntry("sha256",digestHex("{}"));
+        var stranger=fixture();
+        headers.setBearerAuth(jwt.issueUserToken(stranger.user,"test"));
+        assertThat(rest.exchange(endpoint,HttpMethod.GET,new HttpEntity<>(headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        jdbc.update("DELETE FROM platform_membership WHERE organization_id=? AND user_id=?",f.org,f.user);
+        headers.setBearerAuth(jwt.issueUserToken(f.user,"test"));
+        assertThat(rest.exchange(endpoint,HttpMethod.GET,new HttpEntity<>(headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        jdbc.update("INSERT INTO platform_membership(organization_id,user_id,role) VALUES (?,?,'VIEWER')",f.org,f.user);
+        jdbc.update("UPDATE platform_task_artifact SET content='tampered' WHERE task_id=?",f.task.id());
+        assertThatThrownBy(()->artifacts.result(f.user,f.project,f.task.id())).hasMessageContaining("integrity");
+    }
+
+    @Test
+    void artifactHttpIngressRequiresPrivateCredential() {
+        var f=fixture();start(f);
+        String endpoint="/api/v1/internal/platform/artifacts";
+        var upload=new PlatformArtifactService.Upload(f.task.id(),1,1,UUID.randomUUID().toString(),digestHex("{}"),"{}");
+        var headers=new HttpHeaders();headers.setContentType(MediaType.APPLICATION_JSON);
+        assertThat(rest.postForEntity(endpoint,new HttpEntity<>(upload,headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        headers.setBearerAuth(jwt.issueUserToken(f.user,"test"));
+        assertThat(rest.postForEntity(endpoint,new HttpEntity<>(upload,headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        headers=new HttpHeaders();headers.setContentType(MediaType.APPLICATION_JSON);headers.set("X-Internal-Token","test-internal-token");
+        var response=rest.postForEntity(endpoint,new HttpEntity<>(upload,headers),Map.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).containsEntry("sha256",digestHex("{}")).containsEntry("taskId",f.task.id());
+    }
     private record Fixture(String user,String org,String project,PlatformTaskService.Task task) { }
     private Fixture fixture() {
         var user=identity.provision("test","worker-"+UUID.randomUUID(),"test-password-123");
@@ -85,8 +150,12 @@ class PlatformWorkerIntegrationTest {
         return new Fixture(user.id(),org.id(),project.id(),task);
     }
     private WorkerEvent event(PlatformTaskService.Task t,long seq,WorkerEvent.Kind kind,long prompt,long completion) {
-        return new WorkerEvent(1,UUID.randomUUID().toString(),t.id(),t.attempt(),t.fencingToken(),seq,kind,Instant.now(),kind==WorkerEvent.Kind.SUCCEEDED?"b".repeat(64):null,prompt,completion);
+        return new WorkerEvent(1,UUID.randomUUID().toString(),t.id(),t.attempt(),t.fencingToken(),seq,kind,Instant.now(),kind==WorkerEvent.Kind.SUCCEEDED?digestHex("{}"):null,prompt,completion);
     }
+    private void artifact(Fixture f) {
+        artifacts.put(new PlatformArtifactService.Upload(f.task.id(),f.task.attempt(),f.task.fencingToken(),UUID.randomUUID().toString(),digestHex("{}"),"{}"));
+    }
+    private static String digestHex(String value) { return java.util.HexFormat.of().formatHex(digest(value)); }
     private void dispatch(Fixture f) { assertThat(coordinator.prepareDispatch(f.task.id(),1,1)).isTrue(); }
     private void start(Fixture f) { dispatch(f);coordinator.receive(event(f.task,1,WorkerEvent.Kind.STARTED,0,0)); }
     private void expireLease(String id) { jdbc.update("UPDATE platform_task SET lease_until=? WHERE id=?",Timestamp.from(Instant.now().minusSeconds(1)),id); }
@@ -94,6 +163,7 @@ class PlatformWorkerIntegrationTest {
     @Test
     void finalEventsSettleActualUsageExactlyOnceIncludingConcurrentDuplicates() throws Exception {
         var f=fixture();start(f);
+        artifact(f);
         var done=event(f.task,2,WorkerEvent.Kind.SUCCEEDED,30,10);
         try(var pool=Executors.newFixedThreadPool(4)) {
             var jobs=IntStream.range(0,8).mapToObj(i -> (Callable<Boolean>) () -> coordinator.receive(done).accepted()).toList();
@@ -133,6 +203,7 @@ class PlatformWorkerIntegrationTest {
     @Test
     void cancellationRacingSuccessSettlesOnceAndHeartbeatCannotExtendCancelLease() {
         var f=fixture();start(f);
+        artifact(f);
         var cancel=tasks.cancel(f.user,f.project,f.task.id());
         assertThat(cancel.state()).isEqualTo(TaskState.CANCEL_REQUESTED);
         var progress=coordinator.receive(event(f.task,2,WorkerEvent.Kind.PROGRESS,10,0));

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
@@ -146,3 +147,31 @@ class PlatformClient:
         except (KeyError, TypeError, ValueError) as exc:
             raise PlatformRejected("Invalid execution acknowledgement") from exc
         return body
+
+    async def upload_artifact(
+        self, task: WorkerTask, artifact_id: str, sha256: str, content: str
+    ) -> dict:
+        body = {
+            "task_id": task.task_id,
+            "attempt": task.attempt,
+            "fencing_token": task.fencing_token,
+            "artifact_id": artifact_id,
+            "sha256": sha256,
+            "content": content,
+        }
+        result = await self._post(
+            "/api/v1/internal/platform/artifacts", json.dumps(body, separators=(",", ":"))
+        )
+        if (
+            result.get("taskId") != task.task_id
+            or type(result.get("attempt")) is not int
+            or result["attempt"] != task.attempt
+            or type(result.get("fencingToken")) is not int
+            or result["fencingToken"] != task.fencing_token
+            or result.get("sha256") != sha256
+            or result.get("content") != content
+            or not isinstance(result.get("artifactId"), str)
+            or not result["artifactId"]
+        ):
+            raise PlatformRejected("Invalid artifact acknowledgement")
+        return result

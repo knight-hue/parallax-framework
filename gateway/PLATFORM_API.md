@@ -129,8 +129,8 @@ event ID (not worker sequence); events include system transitions and accepted w
 receipts, survive restart and remain ordered across attempt changes. Use the last returned
 ID for future polling; a null nextCursor only means the current page reaches today's end.
 No process-local queue is the source of platform progress. SSE/workbench integration is
-still pending. A success digest is a contract receipt; artifact retrieval/verification is
-implemented in the artifact integration stage.
+still pending. Successful completion requires a stored artifact with matching task,
+attempt, fence and SHA-256; an absent artifact cannot advance state or settle budget.
 
 `POST /api/v1/internal/platform/execution-snapshot` uses the same mandatory private
 credential and strict v1 WorkerTask. It validates the authoritative contract, active
@@ -138,4 +138,21 @@ dispatch lease, repository allowlist and policy integrity, returning `{task,clon
 policy_json,policy_sha256,cancel_requested}`. A stale contract/lease is 409; terminal
 or expired work is 410. A lookup is not an execution grant: STARTED must still be
 persisted and acknowledged before model or source I/O. Python's local delivery journal
-and fixed-origin client implement retry foundations; actual engine integration is pending.
+and fixed-origin client implement retry foundations. The worker runs the evidence engine
+after STARTED and uploads its report before sending SUCCEEDED; real cross-process
+acceptance remains pending.
+
+## Immutable result artifacts
+
+`POST /api/v1/internal/platform/artifacts` requires the private internal credential and
+body `{task_id,attempt,fencing_token,artifact_id,sha256,content}`. UTF-8 content is limited
+to 2,000,000 bytes and its digest is verified. Only the current running/cancel-requested
+attempt with an active lease/deadline may upload. Repeated content for the same attempt
+returns the stored artifact with the same microsecond creation timestamp. Conflicting
+artifact IDs return 409. Python validates the returned execution binding and content.
+
+`GET /api/v1/platform/projects/{projectId}/tasks/{taskId}/result` requires live project
+VIEWER membership and successful completion. It returns the bound artifact and verifies
+stored content against the successful digest; corruption returns 409. Revoked members
+and other projects cannot retrieve it. This is bounded database report storage; an S3
+backend, patch lifecycle and approval integration are separate pending modules.

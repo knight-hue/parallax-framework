@@ -15,7 +15,7 @@ Java 默认运行档为 `mysql`，独立 Flyway 历史位于 `db/mysql`；旧库
 ## 停写迁移与核对
 
 1. 停止全部网关/任务写入并冻结入口，备份 PostgreSQL、runs 产物和配置；记录应用提交号。恢复备份到隔离实例后核对才能确认备份有效。
-2. 源库先在 legacy-postgres 档迁移至 V7（补齐仓库/策略/平台任务、预算和事件表），目标是执行 MySQL V1—V7 后的空库。不要在两端运行新任务。
+2. 源库先在 legacy-postgres 档迁移至 V8（补齐仓库/策略/平台任务、预算、事件和产物表），目标是执行 MySQL V1—V8 后的空库。不要在两端运行新任务。
 3. 设置 `TRANSFER_SOURCE_URL/USER/PASSWORD` 和 `TRANSFER_TARGET_URL/USER/PASSWORD` 环境变量；口令不得写入命令或版本库。
 4. 用已构建 jar 的 Boot loader 启动离线工具：
 
@@ -25,7 +25,7 @@ java -Dloader.main=dev.parallax.gateway.platform.LegacyDatabaseTransfer -cp gate
 java -Dloader.main=dev.parallax.gateway.platform.LegacyDatabaseTransfer -cp gateway/target/parallax-gateway-0.1.0.jar org.springframework.boot.loader.launch.PropertiesLauncher --verify
 ```
 
-工具只复制白名单十七张业务表，保留主键和外键顺序，不复制 Flyway 历史、不删表、不关闭外键。只允许空目标库或原始默认额度种子；复制在一个目标事务中，逐字段规范化为 UTC 微秒/数值/布尔值后核对每表数量及 SHA-256，通过才提交。源库只读，异常回滚。`--verify` 要在停写状态使用，避免边读边写造成不一致。
+工具只复制白名单十八张业务表，保留主键和外键顺序，不复制 Flyway 历史、不删表、不关闭外键。只允许空目标库或原始默认额度种子；复制在一个目标事务中，逐字段规范化为 UTC 微秒/数值/布尔值后核对每表数量及 SHA-256，通过才提交。源库只读，异常回滚。`--verify` 要在停写状态使用，避免边读边写造成不一致。
 
 5. 使用 MySQL 运行档启动 Java，执行 Flyway validate、健康检查、身份/权限和提交回调冒烟，核对原报告/产物仍可访问，再开放写入。
 6. 开放写入前可退回旧应用和未改动的源库。开放后 MySQL 出现新数据时，禁止简单切回旧库：重新停写、备份并逐项对账，处理新增任务/账本/产物后再决定恢复方案。工具不实现在线双写或增量同步。

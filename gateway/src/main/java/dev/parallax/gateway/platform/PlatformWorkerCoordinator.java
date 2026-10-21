@@ -30,12 +30,13 @@ public class PlatformWorkerCoordinator {
     private final int leaseSeconds;
     private final int maxAttempts;
     private final PlatformEventStore store;
+    private final PlatformArtifactService artifacts;
 
-    public PlatformWorkerCoordinator(JdbcTemplate jdbc, PlatformTaskService tasks, ObjectMapper mapper, Clock clock, PlatformEventStore store,
+    public PlatformWorkerCoordinator(JdbcTemplate jdbc, PlatformTaskService tasks, ObjectMapper mapper, Clock clock, PlatformEventStore store, PlatformArtifactService artifacts,
             @Value("${parallax.worker.lease-seconds:120}") int leaseSeconds,
             @Value("${parallax.worker.max-attempts:3}") int maxAttempts) {
         if(leaseSeconds<10 || leaseSeconds>3600 || maxAttempts<1 || maxAttempts>10) throw new IllegalArgumentException("Invalid worker lease/retry configuration");
-        this.jdbc=jdbc;this.tasks=tasks;this.mapper=mapper;this.clock=clock;this.store=store;this.leaseSeconds=leaseSeconds;this.maxAttempts=maxAttempts;
+        this.jdbc=jdbc;this.tasks=tasks;this.mapper=mapper;this.clock=clock;this.store=store;this.artifacts=artifacts;this.leaseSeconds=leaseSeconds;this.maxAttempts=maxAttempts;
     }
 
     @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
@@ -78,6 +79,7 @@ public class PlatformWorkerCoordinator {
             }
             case SUCCEEDED -> {
                 if(task.state()!=TaskState.RUNNING && task.state()!=TaskState.CANCEL_REQUESTED) throw conflict("Task was not started");
+                artifacts.require(task,event.resultSha256());
                 yield TaskState.SUCCEEDED;
             }
             case FAILED -> {

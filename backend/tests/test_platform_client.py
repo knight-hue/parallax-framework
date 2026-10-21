@@ -200,3 +200,36 @@ async def test_network_and_unparseable_acknowledgements_are_retryable():
 def test_only_a_fixed_origin_is_allowed(url):
     with pytest.raises(ValueError):
         PlatformClient(url, "secret")
+
+
+@pytest.mark.parametrize(
+    "change", [None, "taskId", "attempt", "fencingToken", "sha256", "content", "artifactId"]
+)
+async def test_artifact_acknowledgement_must_match_execution_and_content(change):
+    contract = task()
+    content = '{"report":"中文 😀"}'
+    digest = hashlib.sha256(content.encode()).hexdigest()
+    result = {
+        "artifactId": "stored-artifact",
+        "taskId": contract.task_id,
+        "attempt": 1,
+        "fencingToken": 1,
+        "sha256": digest,
+        "content": content,
+    }
+    if change is not None:
+        result[change] = None
+
+    def handler(request):
+        assert request.url.path == "/api/v1/internal/platform/artifacts"
+        assert request.headers["X-Internal-Token"] == "secret"
+        assert json.loads(request.content)["content"] == content
+        return httpx.Response(200, json=result)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        client = PlatformClient("http://platform", "secret", client=http)
+        if change is None:
+            assert await client.upload_artifact(contract, "new-artifact", digest, content) == result
+        else:
+            with pytest.raises(PlatformRejected, match="artifact acknowledgement"):
+                await client.upload_artifact(contract, "new-artifact", digest, content)
