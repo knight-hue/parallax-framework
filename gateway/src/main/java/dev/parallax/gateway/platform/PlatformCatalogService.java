@@ -102,6 +102,17 @@ public class PlatformCatalogService {
                 (rs,n) -> policy(rs), projectId, id).stream().findFirst().orElseThrow(PlatformCatalogService::notFound);
     }
 
+    /** Only called after the internal worker boundary checks the authoritative task. */
+    ExecutionPolicy executionPolicy(String projectId,String repositoryId,String policyId) {
+        String url=jdbc.queryForList("SELECT clone_url FROM platform_repository WHERE project_id=? AND id=?",String.class,projectId,repositoryId)
+                .stream().findFirst().orElseThrow(PlatformCatalogService::notFound);
+        canonicalUrl(url);
+        var rows=jdbc.query("SELECT id,project_id,version_number,config_json,config_sha256 FROM platform_policy_version WHERE project_id=? AND id=?",
+                (rs,n)->{ var policy=policy(rs);policy.config().validate();return new ExecutionPolicy(url,rs.getString(4),policy.configSha256()); },projectId,policyId);
+        return rows.stream().findFirst().orElseThrow(PlatformCatalogService::notFound);
+    }
+    record ExecutionPolicy(String cloneUrl,String policyJson,String policySha256) { }
+
     public CursorPage<Policy> policies(String actor, String projectId, String after, int limit) {
         identity.project(actor, projectId, ProjectRole.VIEWER);
         CursorPage.validate(after, limit);

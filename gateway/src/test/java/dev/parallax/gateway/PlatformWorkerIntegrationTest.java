@@ -33,6 +33,46 @@ class PlatformWorkerIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired TestRestTemplate rest;
     @Autowired JwtService jwt;
+    @Autowired PlatformExecutionSnapshot snapshots;
+
+    @Test
+    void executionSnapshotRequiresPrivateCredentialAndAnExactLeasedContract() {
+        var f=fixture();
+        assertThatThrownBy(()->snapshots.resolve(f.task.dispatch())).hasMessageContaining("active dispatch lease");
+        dispatch(f);
+        String endpoint="/api/v1/internal/platform/execution-snapshot";
+        var h=new HttpHeaders();h.setContentType(MediaType.APPLICATION_JSON);
+        assertThat(rest.postForEntity(endpoint,new HttpEntity<>(f.task.dispatch(),h),Map.class).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        h.setBearerAuth(jwt.issueUserToken(f.user,"test"));
+        assertThat(rest.postForEntity(endpoint,new HttpEntity<>(f.task.dispatch(),h),Map.class).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        h=new HttpHeaders();h.setContentType(MediaType.APPLICATION_JSON);h.set("X-Internal-Token","test-internal-token");
+        var response=rest.postForEntity(endpoint,new HttpEntity<>(f.task.dispatch(),h),Map.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).containsEntry("clone_url","https://github.com/team/api").containsEntry("cancel_requested",false);
+        String json=(String)response.getBody().get("policy_json");
+        String hash=java.util.HexFormat.of().formatHex(digest(json));
+        assertThat(response.getBody()).containsEntry("policy_sha256",hash);
+        var t=f.task.dispatch();
+        var altered=new WorkerTask(1,t.taskId(),t.attempt(),t.fencingToken(),t.organizationId(),t.projectId(),t.repositoryId(),t.commitSha(),t.policyVersion(),t.tokenBudget()+1,t.deadline(),null);
+        assertThatThrownBy(()->snapshots.resolve(altered)).hasMessageContaining("differs");
+        tasks.cancel(f.user,f.project,f.task.id());
+        assertThat(snapshots.resolve(t).cancelRequested()).isTrue();
+        coordinator.receive(event(f.task,1,WorkerEvent.Kind.CANCELED,0,0));
+        assertThatThrownBy(()->snapshots.resolve(t)).hasMessageContaining("no longer executable");
+    }
+    private static byte[] digest(String value) {
+        try { return java.security.MessageDigest.getInstance("SHA-256").digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)); }
+        catch(java.security.NoSuchAlgorithmException ex) { throw new AssertionError(ex); }
+    }
+
+    @Test
+    void snapshotRejectsStoredPolicyTamperingAndOldAttempts() {
+        var f=fixture();dispatch(f);
+        jdbc.update("UPDATE platform_policy_version SET config_json='{}' WHERE id=?",f.task.policyVersion());
+        assertThatThrownBy(()->snapshots.resolve(f.task.dispatch())).hasMessageContaining("integrity");
+        var retry=fixture();dispatch(retry);expireLease(retry.task.id());coordinator.recover(retry.task.id());
+        assertThatThrownBy(()->snapshots.resolve(retry.task.dispatch())).hasMessageContaining("differs");
+    }
     private record Fixture(String user,String org,String project,PlatformTaskService.Task task) { }
     private Fixture fixture() {
         var user=identity.provision("test","worker-"+UUID.randomUUID(),"test-password-123");

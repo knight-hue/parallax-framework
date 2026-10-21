@@ -88,3 +88,14 @@
 - Java 全量 92 项、真实 MySQL 8 项通过；真 PostgreSQL → MySQL V7/17 张非空表复制核验通过。Ruff/format、diff 检查通过。
 - RabbitMQ 的确认/返回/超时和 HTTP ACK 分类有 5 项测试，broker/channel 为 mock；另有 3 项真实 broker IT 已编译，未运行。本机无 RabbitMQ 缓存镜像，验收脚本预检查明确退出，无下载。
 - 运行与故障处理：gateway/DISPATCH_OPERATIONS.md；脱敏记录：eval/java-platform/reliable-dispatch.json。未证明 RabbitMQ 集群容错、容量或生产上线。
+
+## 不可变执行快照与 Worker 持久通信基础
+
+状态：已实现并验证；尚未连接实际引擎执行，派发仍默认关闭。
+
+- Java 内部执行快照核对当前 attempt/fence、组织/项目/仓库/策略、提交、预算和有效租约；重新校验仓库白名单与策略摘要。快照查询不授予执行权，只有 STARTED 回执可以授权。
+- Python 固定平台地址客户端禁止跳转，验证快照摘要和回执，临时错误可重试；内部令牌不通过租户 JWT 替代。
+- SQLite WAL/FULL 本地投递日志先落盘后确认；每 attempt 仅一次本地启动领取，回执 ID/序号/用量持久化，重启不重启已领取任务。跨节点仍依赖 Java fencing。
+- Java 全量 94 项、本地 MySQL 8 项及 PostgreSQL → MySQL 17 张非空表核对通过；Python 全量 343 项通过，Ruff/format 和 diff 检查通过。
+- 新增快照 HTTP 测试 2 项、客户端测试 22 项、持久日志测试 9 项；快照测试使用测试数据库，不能表述为目标 MySQL 8.4 现场验收。
+- 真实 RabbitMQ、实际 Worker 执行/产物接入、多实例故障和公网部署尚未完成。

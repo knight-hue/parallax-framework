@@ -101,7 +101,7 @@ public class PlatformTaskService {
                 request.tokenBudget,now(),project.organizationId(),request.tokenBudget);
         if(reserved!=1) throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,"Organization token budget exhausted");
         String id=UUID.randomUUID().toString();
-        Instant created=Instant.now(), deadline=created.plusSeconds(policy.config().deadlineSeconds());
+        Instant created=Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS), deadline=created.plusSeconds(policy.config().deadlineSeconds());
         jdbc.update("INSERT INTO platform_task (id,organization_id,project_id,repository_id,policy_version,created_by,request_key,request_sha256,commit_sha,token_budget,deadline,state,attempt,fencing_token,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,'QUEUED',1,1,?,?)",
                 id,project.organizationId(),projectId,request.repositoryId,request.policyVersion,actor,requestKey,hash,request.commitSha,request.tokenBudget,Timestamp.from(deadline),Timestamp.from(created),Timestamp.from(created));
         ledger(project.organizationId(),id,"RESERVE",request.tokenBudget);
