@@ -46,6 +46,9 @@ class PlatformOutboxIntegrationTest {
             var jobs=IntStream.range(0,8).mapToObj(i -> (Callable<String>) () -> store.claim().map(PlatformOutboxStore.Claim::id).orElse(null)).toList();
             var ids=new java.util.HashSet<String>();int count=0;
             for(var future:pool.invokeAll(jobs)) { String id=future.get();if(id!=null) {count++;ids.add(id);} }
+            // SKIP LOCKED may temporarily return empty while another claimer holds
+            // the candidate lock. A subsequent scheduler scan drains remaining rows.
+            for(var next=store.claim();next.isPresent();next=store.claim()) {count++;ids.add(next.get().id());}
             assertThat(count).isEqualTo(2);assertThat(ids).hasSize(2);
         }
         jdbc.update("UPDATE platform_outbox SET claim_until=? WHERE status='IN_FLIGHT'",Timestamp.from(Instant.now().minusSeconds(1)));

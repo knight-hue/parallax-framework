@@ -131,3 +131,11 @@ ID for future polling; a null nextCursor only means the current page reaches tod
 No process-local queue is the source of platform progress. SSE/workbench integration is
 still pending. A success digest is a contract receipt; artifact retrieval/verification is
 implemented in the artifact integration stage.
+
+`POST /api/v1/internal/platform/execution-snapshot` uses the same mandatory private
+credential and strict v1 WorkerTask. It validates the authoritative contract, active
+dispatch lease, repository allowlist and policy integrity, returning `{task,clone_url,
+policy_json,policy_sha256,cancel_requested}`. A stale contract/lease is 409; terminal
+or expired work is 410. A lookup is not an execution grant: STARTED must still be
+persisted and acknowledged before model or source I/O. Python's local delivery journal
+and fixed-origin client implement retry foundations; actual engine integration is pending.
