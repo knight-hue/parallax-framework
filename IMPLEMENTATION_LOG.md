@@ -99,3 +99,13 @@
 - Java 全量 94 项、本地 MySQL 8 项及 PostgreSQL → MySQL 17 张非空表核对通过；Python 全量 343 项通过，Ruff/format 和 diff 检查通过。
 - 新增快照 HTTP 测试 2 项、客户端测试 22 项、持久日志测试 9 项；快照测试使用测试数据库，不能表述为目标 MySQL 8.4 现场验收。
 - 真实 RabbitMQ、实际 Worker 执行/产物接入、多实例故障和公网部署尚未完成。
+
+## 平台 Worker 执行接入（单机安全边界）
+
+状态：执行生命周期已接入，真实平台联调和产物落库仍待完成。
+
+- 新增平台专用 Worker 服务和固定 HTTPS 源码归档边界：只接受配置的精确主机、完整 40/64 位提交哈希；禁用 Git 全局配置、跳转、凭据助手和 hooks，归档拒绝符号链接、设备文件、路径逃逸、重复大小写路径和超限树。
+- Java STARTED 回执确认前不触发源码读取或模型调用；本地日志按 attempt 只领取一次，重复 Rabbit/HTTP 投递不会重复启动。取消、失败和网络断开保留精确 event ID，重放不新建事件。
+- 新增 `/api/v1/platform-worker/execute`、`/cancel` 内部端点，固定内部令牌、8 KiB 请求上限；旧文件型 AuditRunner 仍保持独立，未把两套任务状态混为一处。
+- Python 全量 363 项通过，包含平台 Worker 及源码边界测试；Ruff、format、diff 检查通过。
+- 当前限制：真实 RabbitMQ 镜像尚未缓存，实际 Java↔Python 联调、报告产物上传/摘要验证、跨节点故障和 MySQL 8.4 现场验收仍未完成；平台派发默认关闭。

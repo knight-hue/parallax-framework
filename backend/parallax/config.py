@@ -182,6 +182,12 @@ class Settings(BaseSettings):
     webhook_secret: str = ""
     """GitHub webhook 的 HMAC secret；为空时 webhook 端点保持关闭。"""
 
+    # ---- Java platform worker ----
+    platform_url: str = ""
+    """Fixed Java origin used by the platform worker; empty keeps the worker disabled."""
+    platform_source_hosts: list[str] = Field(default_factory=list)
+    """Exact HTTPS Git hosts permitted for platform source retrieval."""
+
     def is_llm_configured(self) -> bool:
         return bool(self.llm_api_key)
 

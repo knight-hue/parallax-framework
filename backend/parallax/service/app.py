@@ -35,6 +35,7 @@ from parallax.config import Settings, load_settings
 from parallax.domain.errors import ConfigurationError
 from parallax.plugins.code_audit import DEFECT_CLASSES
 from parallax.service.events import RunEventBus
+from parallax.service.platform_worker import PlatformWorkerService
 from parallax.service.repair import RepairPlan, RepairService, safe_relative
 from parallax.service.runner import AuditRunner
 from parallax.service.schemas import (
@@ -51,6 +52,7 @@ from parallax.service.trace import (
     install_log_filter,
     set_trace_id,
 )
+from parallax.service.worker_protocol import WorkerTask
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +118,10 @@ def create_app(
         timeout_s=resolved.reproduction_timeout_s,
     )
     app.state.repairs = repairs
+    platform_worker = None
+    if resolved.platform_url and resolved.gateway_internal_token and resolved.platform_source_hosts:
+        platform_worker = PlatformWorkerService(resolved, store.root / ".platform-worker")
+    app.state.platform_worker = platform_worker
 
     @app.middleware("http")
     async def internal_boundary(request: Request, call_next):
@@ -188,6 +194,50 @@ def create_app(
                     "defect_classes": list(DEFECT_CLASSES),
                 }
             ],
+        }
+
+    async def platform_worker_request(request: Request) -> None:
+        expected = resolved.gateway_internal_token
+        supplied = request.headers.get("X-Internal-Token", "")
+        if not expected or not supplied or not hmac.compare_digest(supplied, expected):
+            raise HTTPException(status_code=401, detail="需要平台内部凭据")
+        if platform_worker is None:
+            raise HTTPException(status_code=503, detail="平台 Worker 未配置")
+
+    @app.post("/api/v1/platform-worker/execute", status_code=202)
+    async def platform_execute(request: Request) -> dict:
+        await platform_worker_request(request)
+        body = await request.body()
+        if len(body) > 8192:
+            raise HTTPException(status_code=413, detail="WorkerTask body too large")
+        try:
+            task = WorkerTask.model_validate_json(body)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="无效的 WorkerTask") from exc
+        result = await platform_worker.dispatch(task)
+        return {
+            "accepted": True,
+            "result": result,
+            "task_id": task.task_id,
+            "attempt": task.attempt,
+        }
+
+    @app.post("/api/v1/platform-worker/cancel", status_code=202)
+    async def platform_cancel(request: Request) -> dict:
+        await platform_worker_request(request)
+        body = await request.body()
+        if len(body) > 8192:
+            raise HTTPException(status_code=413, detail="WorkerTask body too large")
+        try:
+            task = WorkerTask.model_validate_json(body)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="无效的 WorkerTask") from exc
+        result = await platform_worker.cancel(task)
+        return {
+            "accepted": True,
+            "result": result,
+            "task_id": task.task_id,
+            "attempt": task.attempt,
         }
 
     # ---- 提交与查询 ----
