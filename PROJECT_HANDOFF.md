@@ -16,7 +16,7 @@ Java 从网关升级为平台业务主体；平台统一使用 MySQL；Python �
 
 验收入口：
 
-- Python：已有 .venv 执行 pytest，当前 363 项；Ruff/format。
+- Python：已有 .venv 执行 pytest，当前 381 项；Ruff/format。
 - 前端：已有依赖下 lint、typecheck、test:sse、build。
 - 网关：mvn -o verify；真实 PG/Redis 使用本地缓存镜像 override 且禁止拉取。
 - 完整服务链路：`backend/tools/verify_native_stack.py`，显式使用 legacy-postgres，仅回环端口与自身临时资源，退出清理。

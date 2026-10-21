@@ -98,9 +98,15 @@ def create_app(
         recovered = runner.recover()
         if recovered:
             logger.info("已恢复 %d 个未完成审查任务", recovered)
-        yield
-        logger.info("Parallax 服务停止：等待在跑任务收敛")
-        await runner.shutdown()
+        if platform_worker is not None:
+            await platform_worker.start()
+        try:
+            yield
+        finally:
+            logger.info("Parallax 服务停止：等待在跑任务收敛")
+            if platform_worker is not None:
+                await platform_worker.shutdown()
+            await runner.shutdown()
 
     app = FastAPI(
         title="Parallax",

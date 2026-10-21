@@ -1,0 +1,6 @@
+{
+  "module": "platform-worker-heartbeat-replay-shutdown",
+  "date": "2026-10-21",
+  "checks": {"python_full_tests": {"passed": 381, "failed": 0, "skipped": 0}, "ruff": "passed", "format": "passed"},
+  "limitations": ["Cross-process acceptance pending", "Heartbeat does not report in-flight provider usage", "Unknown usage conservatively settled by Java lease recovery", "RabbitMQ and target production acceptance pending"]
+}
