@@ -1,0 +1,18 @@
+{
+  "module": "reliable-dispatch-and-recovery-wiring",
+  "date": "2026-10-21",
+  "mysql_tested": "8.0.19",
+  "checks": {
+    "java_full_tests": {"passed": 92, "failed": 0, "skipped": 0},
+    "mysql_integration": {"passed": 8, "failed": 0, "skipped": 0},
+    "mysql_claim_contention": "4 distinct claims from 12 concurrent requests; expired owner cannot overwrite replacement",
+    "mysql_deadlock_fix": "READ COMMITTED claim transaction avoids status-index next-key deadlock reproduced under RR",
+    "postgres_to_mysql_nonempty_tables": 17,
+    "outbox_tests": 5,
+    "transport_mock_tests": 3,
+    "loopback_http_bridge_tests": 2,
+    "rabbit_real_tests": {"compiled": 3, "executed": 0},
+    "cached_image_preflight": "exit 2, no cached RabbitMQ image, no download"
+  },
+  "limitations": ["Python platform Worker endpoints pending", "Dispatch disabled by default", "Real RabbitMQ and broker cluster failover not verified", "MySQL 8.4 not verified", "No public production deployment"]
+}

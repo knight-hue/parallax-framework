@@ -119,9 +119,9 @@ with `X-Internal-Token`. Missing configuration returns 503; missing/wrong token 
   conservatively with `WORKER_LOST_USAGE_UNCERTAIN`; reported token counters remain the
   last observation. This is an uncertainty charge, not a measured provider invoice. No
   automatic restart spends a fresh full budget while the old worker may still be alive.
-- Recovery currently has a transactional service entry point. The reliable dispatch module
-  must wire bounded background scans and operational metrics before claiming automatic
-  recovery or multi-instance production execution.
+- With the opt-in dispatch runtime enabled, bounded background scans call recovery and
+  expose metrics. See DISPATCH_OPERATIONS.md; Python platform integration and real
+  broker/multi-instance acceptance remain pending.
 
 `GET /api/v1/platform/projects/{projectId}/tasks/{taskId}/events?after=0&limit=50`
 checks live project membership and returns `{items,nextCursor}`. Cursor is the database
