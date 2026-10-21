@@ -35,6 +35,7 @@ from parallax.config import Settings, load_settings
 from parallax.domain.errors import ConfigurationError
 from parallax.plugins.code_audit import DEFECT_CLASSES
 from parallax.service.events import RunEventBus
+from parallax.service.platform_client import PlatformRejected, PlatformUnavailable
 from parallax.service.platform_worker import PlatformWorkerService
 from parallax.service.repair import RepairPlan, RepairService, safe_relative
 from parallax.service.runner import AuditRunner
@@ -52,6 +53,7 @@ from parallax.service.trace import (
     install_log_filter,
     set_trace_id,
 )
+from parallax.service.worker_journal import JournalConflict
 from parallax.service.worker_protocol import WorkerTask
 
 logger = logging.getLogger(__name__)
@@ -144,6 +146,15 @@ def create_app(
     @app.exception_handler(ValueError)
     async def invalid_input(request: Request, exc: ValueError):
         return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    @app.exception_handler(PlatformUnavailable)
+    async def platform_unavailable(request: Request, exc: PlatformUnavailable):
+        return JSONResponse(status_code=503, content={"detail": "Platform temporarily unavailable"})
+
+    @app.exception_handler(PlatformRejected)
+    @app.exception_handler(JournalConflict)
+    async def platform_rejected(request: Request, exc: Exception):
+        return JSONResponse(status_code=409, content={"detail": "Execution rejected or stale"})
 
     app.add_middleware(
         CORSMiddleware,

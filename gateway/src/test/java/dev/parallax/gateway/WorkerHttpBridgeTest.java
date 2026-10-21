@@ -32,6 +32,7 @@ class WorkerHttpBridgeTest {
         String json=payload();
         server.createContext("/api/v1/platform-worker/execute",exchange->{
             calls.incrementAndGet();
+            assertThat(exchange.getRequestHeaders().getFirst("Upgrade")).isNull();
             assertThat(exchange.getRequestHeaders().getFirst("X-Internal-Token")).isEqualTo("test-token");
             assertThat(new String(exchange.getRequestBody().readAllBytes(),java.nio.charset.StandardCharsets.UTF_8)).isEqualTo(json);
             exchange.sendResponseHeaders(status.get(),-1);exchange.close();
