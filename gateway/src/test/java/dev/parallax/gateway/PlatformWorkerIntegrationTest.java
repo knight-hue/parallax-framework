@@ -35,6 +35,7 @@ class PlatformWorkerIntegrationTest {
     @Autowired JwtService jwt;
     @Autowired PlatformExecutionSnapshot snapshots;
     @Autowired PlatformArtifactService artifacts;
+    @Autowired PlatformRepairReviewService reviews;
 
     @Test
     void executionSnapshotRequiresPrivateCredentialAndAnExactLeasedContract() {
@@ -305,5 +306,23 @@ class PlatformWorkerIntegrationTest {
         var other=fixture();
         assertThatThrownBy(()->coordinator.events(other.user,f.project,f.task.id(),0,50)).isInstanceOf(ApiException.class);
         assertThatThrownBy(()->coordinator.events(f.user,f.project,f.task.id(),-1,50)).isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void repairApprovalBindsSourceAndPatchAndVerificationIsIdempotent() {
+        var f=fixture();start(f);artifact(f);coordinator.receive(event(f.task,2,WorkerEvent.Kind.SUCCEEDED,30,10));
+        String patch="diff --git a/Demo.java b/Demo.java\n+fixed\n";
+        String patchSha=digestHex(patch);
+        var proposal=reviews.propose(f.user,f.project,f.task.id(),new PlatformRepairReviewService.ProposalRequest(f.task.commitSha(),patchSha,patch,"mvn -q -DskipTests=false test"));
+        assertThat(proposal.status()).isEqualTo(PlatformRepairReviewService.Status.AWAITING_APPROVAL);
+        assertThat(reviews.propose(f.user,f.project,f.task.id(),new PlatformRepairReviewService.ProposalRequest(f.task.commitSha(),patchSha,patch,"mvn -q -DskipTests=false test"))).isEqualTo(proposal);
+        assertThatThrownBy(()->reviews.approve(f.user,f.project,f.task.id(),proposal.id(),"0".repeat(64))).hasMessageContaining("digest");
+        var approved=reviews.approve(f.user,f.project,f.task.id(),proposal.id(),proposal.approvalDigest());
+        assertThat(approved.status()).isEqualTo(PlatformRepairReviewService.Status.APPROVED);
+        var verification=new PlatformRepairReviewService.VerificationRequest("worker-123",digestHex("passed"),true,"isolated test process exit=0");
+        var passed=reviews.verify(f.user,f.project,f.task.id(),proposal.id(),verification);
+        assertThat(passed.status()).isEqualTo(PlatformRepairReviewService.Status.PASSED);
+        assertThat(reviews.verify(f.user,f.project,f.task.id(),proposal.id(),verification)).isEqualTo(passed);
+        assertThatThrownBy(()->reviews.verify(f.user,f.project,f.task.id(),proposal.id(),new PlatformRepairReviewService.VerificationRequest("worker-124",digestHex("other"),true,"other"))).hasMessageContaining("already final");
     }
 }
