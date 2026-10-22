@@ -1,0 +1,28 @@
+{
+  "module": "labs-redis-flash-sale",
+  "date": "2026-10-22",
+  "checks": {
+    "redis_version": "8.10.0",
+    "redis_lab": "passed",
+    "flash_sale_lab": "passed",
+    "sqlite_baseline": {"success": 100, "stock": 0, "orders": 100},
+    "redis_lua": {"first_success": 100, "repeat_duplicate": 100, "sold_out": 100, "stock": 0},
+    "confirmed_orders": 100
+  },
+  "verified_behaviors": [
+    "Redis object encodings are observable",
+    "negative caching reduces repeated misses",
+    "single-flight rebuild produces one database load",
+    "TTL jitter spreads expiry",
+    "compare-and-delete prevents an expired holder from deleting a new lock owner",
+    "SQLite conditional decrement does not oversell in the lab",
+    "Redis Lua pre-deduction prevents oversell and duplicate grants",
+    "successful grants reconcile with persisted orders"
+  ],
+  "limitations": [
+    "Single Redis node; no cluster, failover or network partition",
+    "SQLite is not MySQL InnoDB; no MySQL lock/MVCC acceptance",
+    "No MQ, consumer retry, hot-key capacity or production load test",
+    "The minimal RESP client is for labs only"
+  ]
+}
