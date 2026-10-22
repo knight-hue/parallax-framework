@@ -38,6 +38,7 @@ from collections.abc import Mapping
 
 from langgraph.graph import END, START, StateGraph
 
+from parallax.core.arbitration import statement_digest
 from parallax.core.independence import analyze_dependencies, evidence_overlap_rate
 from parallax.domain.enums import ClaimStatus, Polarity, RoundStopReason
 from parallax.domain.models import EvidenceUnit, RoundRecord
@@ -519,14 +520,24 @@ def _dispute_rows(
 
 
 async def _arbitrate_disputes(runtime: ParallaxRuntime, groups: list) -> None:
-    """对争议组执行仲裁（仅当注入了仲裁器）。"""
+    """对争议组执行仲裁（仅当注入了仲裁器）。
+
+    需要原始证据才能裁决的仲裁器（实现 `EvidenceAwareArbitrator`）在第一次调用前
+    通过 `bind_evidence()` 拿到证据快照；纯 LLM 仲裁不实现该协议，行为不变。
+    """
     arbitrator = runtime.arbitrator
     if arbitrator is None:
         return
+    binder = getattr(arbitrator, "bind_evidence", None)
+    if binder is not None:
+        binder({unit.evidence_id: unit for unit in runtime.evidence})
     for group in runtime.aggregator.arbitration_queue(groups):
+        claims = [
+            c for c in (runtime.ledger.claim(cid) for cid in group.claim_ids) if c is not None
+        ]
         verdict = await arbitrator.arbitrate(  # type: ignore[attr-defined]
             group,
-            [c for c in (runtime.ledger.claim(cid) for cid in group.claim_ids) if c is not None],
+            claims,
         )
         if verdict != ClaimStatus.DISPUTED:
             runtime.aggregator.apply_arbitration(group, verdict)
@@ -536,5 +547,18 @@ async def _arbitrate_disputes(runtime: ParallaxRuntime, groups: list) -> None:
         runtime.record_receipt(
             "arbitration",
             claim_ids=list(group.claim_ids),
-            payload={"fingerprint": group.fingerprint, "status": verdict.value},
+            payload={
+                "fingerprint": group.fingerprint,
+                "status": verdict.value,
+                "arbitrator": getattr(arbitrator, "name", type(arbitrator).__name__),
+                # 结论不进回执，只留摘要：回执可复核，但不能反推出被剥离的结论。
+                "statement_digests": {
+                    claim.claim_id: statement_digest(claim.statement) for claim in claims
+                },
+                "evidence_signals": {
+                    claim.claim_id: claim.metadata["evidence_signal"]
+                    for claim in claims
+                    if "evidence_signal" in claim.metadata
+                },
+            },
         )
