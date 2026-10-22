@@ -45,12 +45,12 @@ Java 已接管身份/组织/项目权限、仓库和不可变策略、任务状�
 - RabbitMQ 真 broker、多实例故障、跨节点协调、容量压测和消息链路现场验收；当前本机没有 RabbitMQ 镜像，不能下载补齐。
 - MySQL 8.4 目标环境验收、现场备份恢复、正式镜像、TLS、公网部署和 S3 兼容产物存储。
 - Worker 专用隔离执行器的容量/强制终止验收；当前报告产物为有大小上限的 MySQL 存储。
-- `labs/jvm`、`labs/concurrency`、`labs/mysql`、`labs/redis`、`labs/spring`、`labs/distributed-tx`、`labs/flash-sale` 全套可运行实验。
+- `labs/jvm`、`labs/concurrency`、`labs/redis`、`labs/spring`、`labs/flash-sale` 已运行验证；`labs/distributed-tx` 已运行 2PC/TCC SQLite 模拟；`labs/mysql` 与 Seata 因无可用目标服务/依赖未运行。
 - 报告安全分享已有基础实现（高熵短码、哈希存储、过期、撤销、访问上限、聚合统计）；独立短链域名、热点容量与多实例验收待完成。
 
 ## 下一步
 
-下一步独立完成 `labs/jvm`、`labs/concurrency`、`labs/mysql`、`labs/redis`、`labs/spring`、`labs/distributed-tx`、`labs/flash-sale` 实验；同时在已有服务条件下做 RabbitMQ、多实例、备份恢复和容量验收。所有未实际运行的环境和性能数据必须保持“未验收”状态。
+下一步补 `labs/mysql` 与 Seata AT/TCC 的目标环境验收；同时在已有服务条件下做 RabbitMQ、多实例、备份恢复和容量验收。所有未实际运行的环境和性能数据必须保持“未验收”状态。
 
 ## 约束
 

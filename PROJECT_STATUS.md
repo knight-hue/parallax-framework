@@ -18,7 +18,7 @@ Java 默认运行档和 Compose 已切为 MySQL，旧 PostgreSQL 作为显式回
 | 缓存与可观测 | 策略只读缓存、Redisson 可选重建锁、TTL/故障回源、真实 Redis 集成测试已通过；任务/Worker/审批/缓存/Outbox 指标已接入；Worker 已有可终止子进程模式和并发上限；容器/VM 隔离、Prometheus 采集、多实例故障、跨进程诊断及容量验收待完善 |
 | 研发闭环 | Java 侧权限/审批/产物管理已实现；GitHub PR 签名、项目绑定、固定 commit 与 delivery 幂等已实现；GitLab、真实 webhook 现场验收、Java 缺陷样例和容器/VM 级隔离执行器仍待完成 |
 | 后置扩展 | 报告安全分享已实现：128 位高熵短码、哈希存储、过期、撤销、访问上限和聚合统计；独立短链域名、热点容量与多实例验收待完成 |
-| 原理与故障实验 | JVM、AQS、MySQL、Redis、Spring、独立 XA/TCC/Seata 与秒杀实验尚未完成 |
+| 原理与故障实验 | JVM、并发、Redis、Spring、秒杀实验已运行；2PC/TCC 已用独立 SQLite 资源模拟；MySQL 8.4 真库锁/MVCC 与 Seata AT/TCC 因本机无可用目标服务/依赖未运行 |
 
 2026-10-21 Worker 增量：平台模式已接入启动自动重放、周期续租、deadline 中断和退出取消；回执按 task/attempt 加锁，慢重放不阻塞其他任务心跳。执行中断或失联不以零用量退款，由 Java 保守恢复。Java↔Python 独立进程真实 HTTP 已通过，覆盖 STARTED、心跳、产物摘要、结算、重启去重、权限拒绝和取消失联；Python 全量 381 项、gateway 离线 Maven 测试通过。尚未据此证明真实 RabbitMQ、多实例或公网生产运行。
 
