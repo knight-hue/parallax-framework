@@ -5,6 +5,23 @@
 
 ## [Unreleased]
 
+### 2026-10-22 抗从众控制面：结论剥离、缺口归因、独立性闸门
+
+- 新增 `core/arbitration.py`：仲裁输入改为不含 `statement` 的 `Observation`，
+  仲裁器回到证据上重新推导三态信号。实验（12 场景 × 4 异见位置）显示结论粘性
+  从 0 升到 1 时，错误裁决从 0/48 升到 24/48，正确少数被救回率从 67% 降到 0。
+- 新增 `core/gap_attribution.py`：把空缺拆成 `partition_gap` 与 `reader_miss`，
+  用 Chapman 中位数估计漏检；无重捕不发数字，检出率留 0.95 上限。
+  模拟验证：p=0.4/0.6/0.8 时估计相对偏差 -0.5%/-0.2%/+0.6%。
+- 新增 `core/admission.py`：独立性指标从报表变成闸门（off/observe/enforce），
+  重叠超预算降冗余、通道不足加 Reader，用尽后把高置信降为待验证，
+  并新增停止原因 `independence_below_budget`。
+- 新增配置 `independence_gate`、`min_effective_channels`、`min_normalized_independence`、
+  `max_independence_attempts`，默认 observe + 阈值 0，不改变既有行为。
+- 新增 43 项测试；后端 435 passed。证据：`eval/java-platform/` 下三份 JSON。
+- README 补充「与最近邻研究的边界（不主张的部分）」：信息分区、冲突感知账本、
+  结构化异议、同伴可信度均已有 2026 年工作，本项目不声称首创。
+
 ### 2026-10-20 最终目标校准（文档）
 
 - 新增 PROJECT_GOALS.md，统一定位为 Java 主导的智能代码审查与修复协作平台，保留独立证据装配引擎与开源协议。

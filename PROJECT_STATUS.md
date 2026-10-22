@@ -49,6 +49,7 @@ Java 默认运行档和 Compose 已切为 MySQL，旧 PostgreSQL 作为显式回
 | 用户模型 | 兼容端点 gpt-6.1-sol，urllib3/util 三文件，5 臂 × 3 次重复，15/15 有效，Reader 失败 0 |
 | 动态修复 | 真实模型发现并反证确认，操作员修订测试命令后批准；Docker 基线 exit 1，修复副本 exit 0 |
 | Compose | 生产合并配置校验通过；未下载、未构建缺少的项目镜像 |
+| 抗从众控制面（2026-10-22） | 结论剥离仲裁、缺口归因、独立性闸门已接入编排；后端 435 项测试通过；证据见 `blind-arbitration.json`、`gap-attribution.json`、`independence-gate.json` |
 
 产物在 `eval/acceptance/20261020` 和 `eval/real/openai-20261020-accepted`。本机完整链路使用确定性假模型；真实模型实验和修复另有独立产物，二者不能混称。
 
