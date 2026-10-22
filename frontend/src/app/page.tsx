@@ -11,6 +11,7 @@ import { EventStream } from '@/components/event-stream';
 import { RepairPanel } from '@/components/repair-panel';
 import { RunHistory, RunSummary } from '@/components/run-history';
 import { PlatformWorkspace } from '@/components/platform-workspace';
+import { PlatformAdmin } from '@/components/platform-admin';
 import { Badge, Button, Card, CardBody, CardHeader, EmptyState } from '@/components/ui/primitives';
 import { formatPercent } from '@/lib/utils';
 
@@ -29,6 +30,7 @@ export default function Page() {
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [streamRunId, setStreamRunId] = useState<string | null>(null);
   const [viewRunId, setViewRunId] = useState<string | null>(null);
+  const [activeProjectId, setActiveProjectId] = useState('');
   const [result, setResult] = useState<RunResult | null>(null);
   const [resultError, setResultError] = useState<string | null>(null);
   const [selectedClaim, setSelectedClaim] = useState<ClaimRow | null>(null);
@@ -196,7 +198,9 @@ export default function Page() {
         </Card>
       ) : null}
 
-      <PlatformWorkspace />
+      <PlatformAdmin onSelectProject={setActiveProjectId} />
+
+      <PlatformWorkspace key={activeProjectId} projectId={activeProjectId} onProjectIdChange={setActiveProjectId} />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)_360px]">
         {/* 左栏：提交与历史 */}
