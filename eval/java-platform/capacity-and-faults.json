@@ -1,0 +1,46 @@
+{
+  "module": "capacity-and-fault-injection",
+  "date": "2026-10-22",
+  "topology": {
+    "instances": 2,
+    "ports": [18081, 18082],
+    "host": "single workstation, both instances and all dependencies on one machine",
+    "jvm": "JDK 21, -Xms256m -Xmx512m per instance",
+    "mysql": "8.4.0 on 127.0.0.1:3307",
+    "redis": "container redis on 127.0.0.1:6379 (DB 1)",
+    "rate_limit": "capacity 100000 / 60s so the probe measures latency rather than throttle rejection"
+  },
+  "capacity": {
+    "tool": "gateway/tools/verify_capacity.py",
+    "endpoint": "GET /api/v1/usage/me (authenticated, hits MySQL)",
+    "requests": 600,
+    "concurrency": 12,
+    "wall_seconds": 17.689,
+    "throughput_rps": 33.92,
+    "status_counts": {"200": 600},
+    "error_rate": 0.0,
+    "latency_ms": {"min": 64.65, "p50": 186.45, "p95": 822.39, "p99": 4495.52, "max": 5280.6, "mean": 346.48}
+  },
+  "faults": [
+    {
+      "fault": "redis down",
+      "action": "docker stop redis",
+      "observed": "12/12 requests across both instances still returned 200; rate limiting degraded to the in-memory bucket",
+      "metric": "parallax_ratelimit_degraded_total = 1 after the first failed Redis attempt",
+      "recovery": "docker start redis, next request 200"
+    },
+    {
+      "fault": "mysql down",
+      "action": "kill the mysqld process on port 3307",
+      "observed": "authenticated read did not respond within a 15s client timeout, and /actuator/health was equally unresponsive; no fail-fast",
+      "recovery": "restart mysqld, next request 200 without restarting the gateway"
+    }
+  ],
+  "limitations": [
+    "Both instances and every dependency share one workstation; numbers are not a production capacity claim",
+    "Short burst only: no soak test, no ramp, no percentiles over a warmed JVM (p99 includes cold-start effects)",
+    "No load balancer or ingress in front; the probe alternates between instances itself",
+    "MySQL outage has no fail-fast or dedicated readiness signal, which is a real operational gap worth fixing",
+    "Data set is a single API key with a small ledger, so the query cost is not representative of a large tenant"
+  ]
+}
