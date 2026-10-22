@@ -1,0 +1,15 @@
+# Parallax 独立实验
+
+这些实验用于原理验证和故障排查训练，**独立启动、独立数据，不接入平台默认生产拓扑**。
+
+| 实验 | 状态 | 运行方式 |
+|---|---|---|
+| `labs/jvm` | 已运行验证 | `powershell -File labs/jvm/run.ps1` |
+| `labs/concurrency` | 已运行验证 | `powershell -File labs/concurrency/run.ps1` |
+| `labs/mysql` | 待补 | 需要目标 MySQL 8.4 / 本机 MySQL 服务 |
+| `labs/redis` | 待补 | 需要本机 Redis 服务或镜像 |
+| `labs/spring` | 待补 | 需要 Spring Boot 依赖 |
+| `labs/distributed-tx` | 待补 | XA/TCC/Seata 对照 |
+| `labs/flash-sale` | 待补 | SQLite 基线 + Redis Lua 预扣 |
+
+固定版本、命令、观察结果和限制写在各自 README。未实际运行的环境或性能数字不会写成已验收。
