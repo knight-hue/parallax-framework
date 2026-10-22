@@ -15,6 +15,10 @@ spring:
     url: ${PARALLAX_DB_URL:jdbc:postgresql://127.0.0.1:5432/parallax}
     username: ${PARALLAX_DB_USER:parallax}
     password: ${PARALLAX_DB_PASSWORD:parallax}
+    hikari:
+      # 数据库不可用时快速失败：默认 30s 会让请求一直挂着，健康检查也测不出问题。
+      connection-timeout: ${PARALLAX_DB_CONNECTION_TIMEOUT_MS:3000}
+      validation-timeout: ${PARALLAX_DB_VALIDATION_TIMEOUT_MS:2000}
   jpa:
     # 表结构由 Flyway 拥有。设为 validate 而不是 update：
     # update 会让"迁移没跑"这件事在开发机上永远发现不了，直到上生产。
