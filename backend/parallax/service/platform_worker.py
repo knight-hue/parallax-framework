@@ -12,6 +12,7 @@ from weakref import WeakValueDictionary
 
 from parallax.config import Settings
 from parallax.service.platform_client import PlatformClient, PlatformRejected, PlatformUnavailable
+from parallax.service.platform_container import PlatformContainerExecutor
 from parallax.service.platform_engine import PLATFORM_QUESTION, run_engine
 from parallax.service.platform_executor import PlatformProcessExecutor
 from parallax.service.platform_sources import PlatformSources
@@ -57,9 +58,17 @@ class PlatformWorkerService:
             if settings.platform_execution_mode == "process"
             else None
         )
-        default_engine = (
-            self.execute_process if self.process_executor is not None else self.execute_default
+        self.container_executor = (
+            PlatformContainerExecutor(settings, self.root)
+            if settings.platform_execution_mode == "container"
+            else None
         )
+        if self.container_executor is not None:
+            default_engine = self.execute_container
+        elif self.process_executor is not None:
+            default_engine = self.execute_process
+        else:
+            default_engine = self.execute_default
         self.engine_factory = engine_factory or default_engine
         self.sources = PlatformSources(self.root / "sources", hosts)
         self._running: dict[tuple[str, int], asyncio.Task] = {}
@@ -136,6 +145,20 @@ class PlatformWorkerService:
             raise RuntimeError("Platform process executor is not configured")
         source = await asyncio.to_thread(sources.resolve, snapshot.clone_url, task.commit_sha)
         return await self.process_executor.run(
+            task=task,
+            source_path=source.path,
+            settings=self._settings_for(task, snapshot),
+            canceled=canceled,
+        )
+
+    async def execute_container(self, *, task, snapshot, sources, canceled):
+        """Run the evidence engine in a throwaway container with no network."""
+        if canceled() or datetime.now(UTC) >= task.deadline:
+            raise asyncio.CancelledError
+        if self.container_executor is None:
+            raise RuntimeError("Platform container executor is not configured")
+        source = await asyncio.to_thread(sources.resolve, snapshot.clone_url, task.commit_sha)
+        return await self.container_executor.run(
             task=task,
             source_path=source.path,
             settings=self._settings_for(task, snapshot),

@@ -189,12 +189,20 @@ class Settings(BaseSettings):
     platform_heartbeat_seconds: float = Field(default=20.0, ge=0.01, le=60)
     platform_replay_seconds: float = Field(default=5.0, ge=0.01, le=60)
     """Exact HTTPS Git hosts permitted for platform source retrieval."""
-    platform_execution_mode: Literal["inline", "process"] = "inline"
-    """`process` runs the evidence engine in a killable child process."""
+    platform_execution_mode: Literal["inline", "process", "container"] = "inline"
+    """`process` runs the engine in a killable child process; `container` adds a container boundary."""
     platform_max_concurrent_tasks: int = Field(default=2, ge=1, le=32)
     """Bound concurrent platform executions; excess work waits for a slot."""
     platform_process_terminate_grace_seconds: float = Field(default=2.0, ge=0.1, le=30)
     """Time allowed for a killed child process to exit before force-kill is considered done."""
+
+    # ---- Container isolation (platform_execution_mode=container) ----
+    platform_container_image: str = "parallax-engine-sandbox:local"
+    """Image containing this backend; see backend/docker/sandbox.Dockerfile."""
+    platform_container_memory_mb: int = Field(default=768, ge=128, le=8192)
+    platform_container_cpus: float = Field(default=1.0, gt=0, le=8)
+    platform_container_pids: int = Field(default=128, ge=16, le=4096)
+    platform_container_tmpfs_mb: int = Field(default=64, ge=8, le=1024)
 
     def is_llm_configured(self) -> bool:
         return bool(self.llm_api_key)
