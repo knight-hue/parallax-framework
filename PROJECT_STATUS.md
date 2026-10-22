@@ -1,6 +1,6 @@
 # Parallax 项目状态
 
-更新：2026-10-21。验收依据见 [ACCEPTANCE.md](ACCEPTANCE.md)，运行方式见 [OPERATIONS.md](OPERATIONS.md)。
+更新：2026-10-22。验收依据见 [ACCEPTANCE.md](ACCEPTANCE.md)，运行方式见 [OPERATIONS.md](OPERATIONS.md)。
 
 最终目标已校准为：**Java 主导的智能代码审查与修复协作平台，以独立证据装配为审查引擎，平台统一使用 MySQL。** 目标与范围见 [PROJECT_GOALS.md](PROJECT_GOALS.md)，实施细节见 [JAVA_BACKEND_PLAN_V2.md](JAVA_BACKEND_PLAN_V2.md)。
 
@@ -13,7 +13,7 @@ Java 默认运行档和 Compose 已切为 MySQL，旧 PostgreSQL 作为显式回
 | 范围 | 当前差距 |
 |---|---|
 | MySQL 平台数据 | 默认运行档、独立迁移、真库测试与离线复制已实现；8.4、现场备份恢复与新任务表并发验收待完成 |
-| Java 业务主体 | 用户/组织/项目权限、仓库/策略、集合分页、平台任务、报告产物及修复提案/审批/回归回执已实现；工作台接管待实现 |
+| Java 业务主体 | 用户/组织/项目权限、仓库/策略、集合分页、平台任务、报告产物及修复提案/审批/回归回执已实现；工作台已接入 Java 任务与审批入口，组织/项目管理 UI 待完善 |
 | 可靠执行与额度 | 预占/结算/释放/对账、Outbox、Inbox、fencing/心跳/恢复与事件重放已实现；Java MQ 发布/消费和后台恢复已接线但默认关闭，Python/工作台切换、真 RabbitMQ 与多实例故障验收待完成 |
 | 缓存与可观测 | 策略只读缓存、Redisson 可选重建锁、TTL/故障回源、真实 Redis 集成测试已通过；多实例故障、执行器隔离、跨进程诊断及容量验收待完善 |
 | 研发闭环 | 保留现有修复机制，补齐 Java 侧权限/审批/产物管理、PR 集成与 Java 缺陷样例 |
