@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.parallax.gateway.config.ParallaxProperties;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
@@ -13,7 +14,9 @@ class PlatformPolicyCacheTest {
     @Test
     void withoutRedisEveryReadFallsBackToAuthoritativeLoader() {
         var properties = new ParallaxProperties();
-        var cache = new PlatformPolicyCache(new ObjectMapper(), emptyProvider(), properties);
+        var registry = new SimpleMeterRegistry();
+        var cache = new PlatformPolicyCache(new ObjectMapper(), emptyProvider(), properties,
+                new PlatformMetrics(registry));
         var loads = new AtomicInteger();
         var policy = new PlatformCatalogService.Policy("p-1", "project-1", 1,
                 new PlatformCatalogService.PolicyConfig(2, 1, 1, 1, false, 100, 60), "hash");
@@ -21,12 +24,15 @@ class PlatformPolicyCacheTest {
         assertThat(cache.get("project-1", "p-1", () -> { loads.incrementAndGet(); return policy; })).isEqualTo(policy);
         assertThat(cache.get("project-1", "p-1", () -> { loads.incrementAndGet(); return policy; })).isEqualTo(policy);
         assertThat(loads).hasValue(2);
+        assertThat(registry.get(PlatformMetrics.CACHE_OUTCOME).tag("outcome", "bypass").counter().count())
+                .isEqualTo(2);
     }
 
     @Test
     void cacheKeysAreProjectScopedAndEvictionForcesReload() {
         var properties = new ParallaxProperties();
-        var cache = new PlatformPolicyCache(new ObjectMapper(), emptyProvider(), properties);
+        var cache = new PlatformPolicyCache(new ObjectMapper(), emptyProvider(), properties,
+                new PlatformMetrics(new SimpleMeterRegistry()));
         var loads = new AtomicInteger();
         var policy = new PlatformCatalogService.Policy("p-1", "project-1", 1,
                 new PlatformCatalogService.PolicyConfig(2, 1, 1, 1, false, 100, 60), "hash");

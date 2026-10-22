@@ -38,12 +38,14 @@ public class PlatformRepairReviewService {
     private final PlatformIdentityService identity;
     private final PlatformTaskService tasks;
     private final ObjectMapper mapper;
+    private final PlatformMetrics metrics;
 
-    public PlatformRepairReviewService(JdbcTemplate jdbc, PlatformIdentityService identity, PlatformTaskService tasks, ObjectMapper mapper) {
+    public PlatformRepairReviewService(JdbcTemplate jdbc, PlatformIdentityService identity, PlatformTaskService tasks, ObjectMapper mapper, PlatformMetrics metrics) {
         this.jdbc = jdbc;
         this.identity = identity;
         this.tasks = tasks;
         this.mapper = mapper;
+        this.metrics = metrics;
     }
 
     @Transactional
@@ -64,6 +66,7 @@ public class PlatformRepairReviewService {
         jdbc.update("INSERT INTO platform_repair_review (id,task_id,project_id,created_by,source_commit_sha,patch_sha256,patch_content,test_command,approval_digest,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,'AWAITING_APPROVAL',?,?)",
                     id, taskId, projectId, actor, task.commitSha(), request.patchSha256(), request.patchContent(), request.testCommand(), digest, Timestamp.from(now), Timestamp.from(now));
         identity.audit(actor, "REPAIR_PROPOSED", id);
+        metrics.repairAction("propose", "accepted");
         return get(actor, projectId, taskId, id);
     }
 
@@ -81,6 +84,7 @@ public class PlatformRepairReviewService {
         jdbc.update("UPDATE platform_repair_review SET status='APPROVED',approved_by=?,approved_at=?,updated_at=? WHERE id=? AND status='AWAITING_APPROVAL'",
                 actor, Timestamp.from(now), Timestamp.from(now), reviewId);
         identity.audit(actor, "REPAIR_APPROVED", reviewId);
+        metrics.repairAction("approve", "accepted");
         return get(actor, projectId, taskId, reviewId);
     }
 
@@ -103,6 +107,7 @@ public class PlatformRepairReviewService {
         jdbc.update("UPDATE platform_repair_review SET status=?,verification_id=?,verification_sha256=?,verification_detail=?,updated_at=? WHERE id=?",
                 request.passed() ? Status.PASSED.name() : Status.FAILED.name(), request.verificationId(), request.resultSha256(), request.detail(), Timestamp.from(now), reviewId);
         identity.audit("platform-worker", request.passed() ? "REPAIR_VERIFIED" : "REPAIR_REGRESSION_FAILED", reviewId);
+        metrics.repairAction("verify", request.passed() ? "passed" : "failed");
         return locked(projectId, taskId, reviewId);
     }
 

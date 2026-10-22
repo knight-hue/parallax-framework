@@ -217,3 +217,17 @@ and task id are persisted.
 This is a deployment-wide trust boundary: the shared secret authenticates the GitHub
 sender, not an individual tenant. GitLab ingress and per-tenant webhook secrets are not
 implemented yet.
+
+## Platform metrics
+
+`GET /actuator/prometheus` exposes bounded-cardinality platform signals:
+
+- `parallax.platform.task.transition{state}` — submitted/worker state transitions;
+- `parallax.platform.worker.event{kind,accepted}` — accepted or rejected worker events;
+- `parallax.platform.repair.action{action,outcome}` — proposal, approval and verification;
+- `parallax.policy.cache{outcome}` — hit, miss, rebuild, invalid, fallback, bypass, write_error;
+- `parallax.outbox.pending`, `parallax.outbox.inflight`, `parallax.outbox.oldest.age.seconds`.
+
+Project, repository, delivery and credential identifiers are never metric tags. The
+outbox gauges query MySQL at scrape time and return zero on query failure so a metrics
+problem cannot take down health probes.

@@ -173,3 +173,13 @@
 - `system.webhook` 是禁用账号，不能登录；首次绑定或投递前确保其组织 REVIEWER 成员资格，组织行锁避免并发首次插入竞态。
 - 验证：`PlatformPrWebhookIntegrationTest` 6 项、Java 全量 107 项通过；V10 在 H2/Flyway 上执行成功。未执行真实 GitHub 投递、GitLab 和目标 MySQL 8.4 验收。脱敏摘要：`eval/java-platform/github-pr.json`。
 
+## 平台指标与运行诊断
+
+状态：已实现并通过单元/集成测试；Prometheus 采集、多实例和容量诊断待在目标环境验收。
+
+- 新增 `PlatformMetrics`，只使用有限取值标签，预注册任务状态、Worker 事件、修复动作和缓存结果计数，避免项目/仓库 ID 等无界标签打爆时间序列。
+- 任务提交、排队取消、Worker 事件接受和状态迁移接入 `parallax.platform.task.transition` 与 `parallax.platform.worker.event`。
+- 修复提案、批准和验证回执接入 `parallax.platform.repair.action`；策略缓存命中、损坏、重建、回退、旁路和写入失败接入 `parallax.policy.cache`。
+- 新增 `PlatformOutboxMetrics`：`parallax.outbox.pending`、`parallax.outbox.inflight` 与 `parallax.outbox.oldest.age.seconds`，在抓取时查询且异常返回 0，不阻断健康检查。
+- 验证：`PlatformMetricsTest`、`PlatformMetricsIntegrationTest`、Java 全量 109 项、真实 Redis 缓存 IT 4 项通过。未声称 Prometheus、多实例或容量验收完成。脱敏摘要：`eval/java-platform/metrics.json`。
+

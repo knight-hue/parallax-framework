@@ -1,0 +1,31 @@
+{
+  "module": "platform-metrics-and-diagnostics",
+  "date": "2026-10-22",
+  "checks": {
+    "java_full_tests": {"passed": 109, "failed": 0, "skipped": 0},
+    "policy_cache_real_redis_it": {"passed": 4, "failed": 0, "skipped": 0, "redis_image": "redis:latest"},
+    "metrics_unit_test": {"passed": 1, "failed": 0, "skipped": 0}
+  },
+  "signals": [
+    "parallax.platform.task.transition{state}",
+    "parallax.platform.worker.event{kind,accepted}",
+    "parallax.platform.repair.action{action,outcome}",
+    "parallax.policy.cache{outcome}",
+    "parallax.outbox.pending",
+    "parallax.outbox.inflight",
+    "parallax.outbox.oldest.age.seconds"
+  ],
+  "verified_behaviors": [
+    "task submission and cancellation increment bounded state counters",
+    "accepted worker events increment kind/accepted counters",
+    "repair proposal, approval and verification outcomes are observable",
+    "cache hit, rebuild, invalid, fallback and bypass outcomes are observable",
+    "outbox backlog gauges are registered and scrape failures return zero instead of breaking health"
+  ],
+  "limitations": [
+    "Metrics are not persisted; Prometheus or another scrape backend is required",
+    "No multi-instance or capacity test was performed",
+    "Trace/metric correlation in a real collector was not verified",
+    "MySQL 8.4 target-environment acceptance pending"
+  ]
+}
