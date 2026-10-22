@@ -1,0 +1,30 @@
+# 分布式事务实验
+
+独立运行，不需要平台服务；使用多个独立 SQLite 数据库模拟两个资源分支和一个协调器。
+
+```powershell
+powershell -File .\run.ps1
+```
+
+## 2PC 模拟
+
+- `try_reserve` 在两个资源上持久化 TRY/预占记录（预占库存）；
+- 协调器写入 `COMMITTED`/`ABORTED` 决策；
+- `recover` 在协调器崩溃后：
+  - `PREPARING` 无决策 → 回滚两个分支；
+  - `COMMITTED` 已落盘 → 幂等提交两个分支；
+- 覆盖正常提交、第二个资源准备失败、决策前崩溃、决策后崩溃和重复提交。
+
+这是**协议级模拟**：SQLite 没有跨库 XA prepared transaction 和全局锁，不能当作真实 XA 的锁/阻塞/恢复证明。
+
+## TCC 模拟
+
+- `try_reserve` 预占库存并写 TRY；
+- `confirm` 只从 TRY → COMMITTED；
+- `cancel` 只从 TRY → CANCELED，重复 cancel 幂等；
+- 空回滚（没有 TRY 直接 cancel）不产生库存变化；
+- 悬挂的 TRY 可由超时任务 cancel，释放预占。
+
+## Seata
+
+本机没有 Seata Server、Seata 依赖或镜像缓存；**未运行 Seata AT/TCC**。不能用本实验的 SQLite 结果冒充 Seata 验收。真实验收需要固定兼容版本、MySQL 8.4/目标数据库、undo_log/全局锁观测和故障注入。
