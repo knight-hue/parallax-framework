@@ -55,4 +55,16 @@ class SeataAtLabTest {
                 .as("the rollback path undoes and removes the branch undo_log rows itself")
                 .isZero();
     }
+
+    @Test
+    void committedUndoLogIsEventuallyCleanedUp() throws Exception {
+        checkout.checkout(SKU, 1, false);
+        long deadline = System.nanoTime() + java.time.Duration.ofSeconds(40).toNanos();
+        while (inventory.undoLogRows() > 0 && System.nanoTime() < deadline) {
+            Thread.sleep(500);
+        }
+        assertThat(inventory.undoLogRows())
+                .as("RM async worker removes undone-log rows after the global commit")
+                .isZero();
+    }
 }

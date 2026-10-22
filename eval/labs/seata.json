@@ -7,13 +7,14 @@
   "spring_boot": "3.5.16",
   "jdk": 21,
   "checks": {
-    "at_tests": {"passed": 3, "failed": 0},
+    "at_tests": {"passed": 4, "failed": 0},
     "tcc_tests": {"passed": 2, "failed": 0}
   },
   "verified_behaviors": [
     "AT global commit applies the order insert and the stock deduction together",
     "AT failure after deduction restores stock and removes the order row through undo_log",
     "AT rollback path clears its own undo_log rows",
+    "Committed undo_log rows are removed by the RM async worker (observed about 10s later, test polls up to 30s)",
     "TCC try freezes stock and writes a TRY reservation",
     "TCC confirm consumes the frozen stock and marks the reservation CONFIRMED",
     "TCC cancel releases the frozen stock and marks the reservation CANCELLED",
@@ -27,7 +28,7 @@
   "limitations": [
     "Single datasource; cross-database branches not exercised",
     "No TC crash, branch retry or hanging-transaction fault injection",
-    "Committed undo_log rows were observed to stay at log_status=0, so automatic cleanup is not asserted and needs separate monitoring",
+    "undo_log cleanup after commit is asynchronous, so tests observe it with a bounded wait rather than instantly",
     "TCC idempotency uses conditional updates rather than the Seata TCC fence table"
   ]
 }
