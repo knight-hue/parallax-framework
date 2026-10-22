@@ -51,7 +51,7 @@ class PlatformOutboxIntegrationTest {
             for(var next=store.claim();next.isPresent();next=store.claim()) {count++;ids.add(next.get().id());}
             assertThat(count).isEqualTo(2);assertThat(ids).hasSize(2);
         }
-        jdbc.update("UPDATE platform_outbox SET claim_until=? WHERE status='IN_FLIGHT'",Timestamp.from(Instant.now().minusSeconds(1)));
+        jdbc.update("UPDATE platform_outbox SET claim_until=? WHERE status='IN_FLIGHT'",Timestamp.from(Instant.EPOCH));
         var sent=new java.util.ArrayList<String>();
         var dispatcher=dispatcher(c->{
             assertThat(jdbc.queryForObject("SELECT status FROM platform_outbox WHERE id=?",String.class,c.id())).isEqualTo("IN_FLIGHT");
@@ -71,7 +71,7 @@ class PlatformOutboxIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT status FROM platform_outbox WHERE task_id=?",String.class,f.task.id())).isEqualTo("PENDING");
         assertThat(tasks.budget(f.user,f.task.organizationId()).reservedTokens()).isEqualTo(100);
         assertThat(dispatcher.publishOne()).isFalse();
-        jdbc.update("UPDATE platform_outbox SET available_at=? WHERE task_id=?",Timestamp.from(Instant.now().minusSeconds(1)),f.task.id());
+        jdbc.update("UPDATE platform_outbox SET available_at=? WHERE task_id=?",Timestamp.from(Instant.EPOCH),f.task.id());
         assertThat(dispatcher(c->{}).publishOne()).isTrue();
         assertThat(jdbc.queryForObject("SELECT publish_attempts FROM platform_outbox WHERE task_id=?",Integer.class,f.task.id())).isEqualTo(2);
     }
@@ -79,7 +79,7 @@ class PlatformOutboxIntegrationTest {
     @Test
     void expiredClaimCannotOverwriteTheNewPublishersDecision() {
         fixture();var old=store.claim().orElseThrow();
-        jdbc.update("UPDATE platform_outbox SET claim_until=? WHERE id=?",Timestamp.from(Instant.now().minusSeconds(1)),old.id());
+        jdbc.update("UPDATE platform_outbox SET claim_until=? WHERE id=?",Timestamp.from(Instant.EPOCH),old.id());
         var current=store.claim().orElseThrow();
         assertThat(current.claimToken()).isNotEqualTo(old.claimToken());
         assertThat(store.owned(old)).isFalse();assertThat(store.complete(old,true)).isFalse();assertThat(store.retry(old)).isFalse();
