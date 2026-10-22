@@ -165,14 +165,25 @@
 
 ## GitHub PR 签名接入与项目绑定
 
-状态：已实现并通过 H2/Flyway 集成测试；真实 GitHub webhook、GitLab 与目标 MySQL 8.4 现场验收待完成。
+状态：已实现并通过 H2/Flyway 集成测试；真实 GitHub webhook 与目标 MySQL 8.4 现场验收待完成。
 
 - V10 新增 `platform_repository_link`、`platform_webhook_delivery` 和禁用的 `system.webhook` 账号；仓库外部 ID 全局唯一，投递记录保存 PR 编号、载荷摘要和任务 ID。
 - 新增 `PlatformPrService`/`PlatformPrController`：GitHub webhook 使用 HMAC-SHA256 校验原始请求体，只接受 `pull_request` 的 `opened/reopened/synchronize`。
 - 客户端不能自报 clone URL、策略或 commit：仓库 ID 必须解析到显式项目绑定，载荷 clone URL 必须与登记仓库一致，任务固定使用 `pull_request.head.sha` 和项目最新不可变策略。
 - `X-GitHub-Delivery` 作为任务幂等键；重复投递返回原任务，不重复预占预算；同一 delivery 使用不同内容返回 409。
 - `system.webhook` 是禁用账号，不能登录；首次绑定或投递前确保其组织 REVIEWER 成员资格，组织行锁避免并发首次插入竞态。
-- 验证：`PlatformPrWebhookIntegrationTest` 6 项、Java 全量 107 项通过；V10 在 H2/Flyway 上执行成功。未执行真实 GitHub 投递、GitLab 和目标 MySQL 8.4 验收。脱敏摘要：`eval/java-platform/github-pr.json`。
+- 验证：`PlatformPrWebhookIntegrationTest` 6 项、Java 全量 107 项通过；V10 在 H2/Flyway 上执行成功。未执行真实 GitHub 投递和目标 MySQL 8.4 验收。脱敏摘要：`eval/java-platform/github-pr.json`。
+
+## GitLab MR token 接入
+
+状态：已实现并通过 H2/Flyway 集成测试；真实 GitLab hook 投递待有公网 HTTPS 入口后再验收。
+
+- 新增 `POST /api/v1/platform/webhooks/gitlab`：GitLab 不签原始报文，改用 `X-Gitlab-Token` 与 `PARALLAX_GITLAB_WEBHOOK_SECRET` 常量时间比对，未配置密钥时返回 404 关闭入口，密钥错误返回 401。
+- 只接受 `X-Gitlab-Event: Merge Request Hook` 且 `object_kind=merge_request`；`open/reopen/update` 触发评审，其他事件返回 `accepted=false` 而不建任务。
+- `project.git_http_url` 必须与登记仓库一致，`project.id` 必须解析到 provider 为 `GITLAB` 的显式绑定，任务固定使用 `object_attributes.last_commit.id`。
+- `X-Gitlab-Event-UUID` 作幂等键；重复投递返回原任务，同一 UUID 换内容返回 409。GitHub 与 GitLab 复用同一条受理路径，投递记录、策略/预算校验、`system.webhook` 作者和审计完全一致。
+- 绑定校验从"仅 GITHUB"放宽为 `GITHUB|GITLAB`，与 V10 既有的 provider 约束保持一致，未新增迁移。
+- 验证：`PlatformGitLabWebhookIntegrationTest` 3 项 + `PlatformPrWebhookIntegrationTest` 6 项、Java 全量 116 项通过。未执行真实 GitLab 投递。脱敏摘要：`eval/java-platform/gitlab-mr.json`。
 
 ## 平台指标与运行诊断
 

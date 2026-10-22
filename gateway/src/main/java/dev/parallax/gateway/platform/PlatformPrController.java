@@ -44,4 +44,15 @@ public class PlatformPrController {
         var result = service.githubWebhook(signature, event, deliveryId, body);
         return ResponseEntity.status(result.accepted() ? HttpStatus.ACCEPTED : HttpStatus.OK).body(result);
     }
+
+    /** GitLab merge-request ingress: shared token header plus the event UUID as the idempotency key. */
+    @PostMapping("/api/v1/platform/webhooks/gitlab")
+    public ResponseEntity<PlatformPrService.DeliveryResult> gitlab(
+            @RequestHeader(value = "X-Gitlab-Token", required = false) String token,
+            @RequestHeader(value = "X-Gitlab-Event", required = false) String event,
+            @RequestHeader(value = "X-Gitlab-Event-UUID", required = false) String deliveryId,
+            @RequestBody String body) {
+        var result = service.gitlabWebhook(token, event, deliveryId, body);
+        return ResponseEntity.status(result.accepted() ? HttpStatus.ACCEPTED : HttpStatus.OK).body(result);
+    }
 }

@@ -39,7 +39,10 @@ public class PlatformPrService {
     /** Disabled account created by V10; it cannot log in and only submits bound webhook tasks. */
     public static final String SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000001";
     private static final String GITHUB = "GITHUB";
+    private static final String GITLAB = "GITLAB";
     private static final Set<String> GITHUB_ACTIONS = Set.of("opened", "reopened", "synchronize");
+    /** GitLab 的 MR 事件用 open/reopen/update，语义与 GitHub 对应。 */
+    private static final Set<String> GITLAB_ACTIONS = Set.of("open", "reopen", "update");
 
     public record LinkRequest(String provider, String externalId, Long tokenBudget) { }
     public record Link(String id, String projectId, String repositoryId, String provider,
@@ -75,10 +78,12 @@ public class PlatformPrService {
         catalog.repository(actor, projectId, repositoryId);
         if (request == null || request.provider() == null) throw ApiException.badRequest("Provider is required");
         String provider = request.provider().strip().toUpperCase(Locale.ROOT);
-        if (!GITHUB.equals(provider)) throw ApiException.badRequest("Only GitHub repository links are supported");
+        if (!GITHUB.equals(provider) && !GITLAB.equals(provider)) {
+            throw ApiException.badRequest("Only GitHub or GitLab repository links are supported");
+        }
         String externalId = request.externalId() == null ? "" : request.externalId().strip();
         if (!externalId.matches("[0-9]{1,120}")) {
-            throw ApiException.badRequest("GitHub repository id must be numeric");
+            throw ApiException.badRequest("Repository id must be numeric");
         }
         var policy = catalog.latestPolicyForAutomation(projectId);
         long maximum = policy.config().maxTokenBudget();
@@ -116,29 +121,65 @@ public class PlatformPrService {
         if (secret == null || secret.isBlank()) {
             throw new ApiException(HttpStatus.NOT_FOUND, "GitHub webhook is not enabled");
         }
-        if (body == null || body.getBytes(StandardCharsets.UTF_8).length > properties.getWebhooks().getMaxBodyBytes()) {
-            throw new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "Webhook body is missing or too large");
-        }
+        requireBody(body);
         if (!validSignature(secret, body, signature)) {
             throw ApiException.unauthorized("Webhook signature is invalid");
         }
         if (!"pull_request".equals(event)) {
             return new DeliveryResult(false, "event type does not trigger review", null, null, null);
         }
-        if (deliveryId == null || !deliveryId.matches("[A-Za-z0-9_-]{1,64}")) {
-            throw ApiException.badRequest("A valid X-GitHub-Delivery header is required");
-        }
+        requireDeliveryId(deliveryId, "X-GitHub-Delivery");
         JsonNode payload = parse(body);
         String action = payload.path("action").asText("");
         if (!GITHUB_ACTIONS.contains(action)) {
             return new DeliveryResult(false, "pull request action does not trigger review", null, null, null);
         }
         JsonNode repository = payload.path("repository");
-        String externalId = repository.path("id").asText("");
-        String cloneUrl = repository.path("clone_url").asText("");
         JsonNode pull = payload.path("pull_request");
-        int pullRequestNumber = pull.path("number").asInt(0);
-        String headSha = pull.path("head").path("sha").asText("");
+        return accept(GITHUB, deliveryId, repository.path("id").asText(""), repository.path("clone_url").asText(""),
+                pull.path("number").asInt(0), pull.path("head").path("sha").asText(""),
+                PlatformTaskService.hash(body), "GITHUB_PR_TASK_CREATED", "gh-",
+                "GitHub repository is not linked to a Parallax project");
+    }
+
+    /**
+     * GitLab merge-request ingress. GitLab authenticates with a shared token header instead of an
+     * HMAC body signature, so the token is compared in constant time before the payload is read.
+     */
+    @Transactional
+    public DeliveryResult gitlabWebhook(String token, String event, String deliveryId, String body) {
+        String secret = properties.getWebhooks().getGitlabSecret();
+        if (secret == null || secret.isBlank()) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "GitLab webhook is not enabled");
+        }
+        requireBody(body);
+        if (token == null || !constantTimeEquals(secret, token)) {
+            throw ApiException.unauthorized("Webhook token is invalid");
+        }
+        if (!"Merge Request Hook".equals(event)) {
+            return new DeliveryResult(false, "event type does not trigger review", null, null, null);
+        }
+        requireDeliveryId(deliveryId, "X-Gitlab-Event-UUID");
+        JsonNode payload = parse(body);
+        if (!"merge_request".equals(payload.path("object_kind").asText(""))) {
+            return new DeliveryResult(false, "object kind does not trigger review", null, null, null);
+        }
+        JsonNode attributes = payload.path("object_attributes");
+        String action = attributes.path("action").asText("");
+        if (!GITLAB_ACTIONS.contains(action)) {
+            return new DeliveryResult(false, "merge request action does not trigger review", null, null, null);
+        }
+        JsonNode project = payload.path("project");
+        return accept(GITLAB, deliveryId, project.path("id").asText(""), project.path("git_http_url").asText(""),
+                attributes.path("iid").asInt(0), attributes.path("last_commit").path("id").asText(""),
+                PlatformTaskService.hash(body), "GITLAB_MR_TASK_CREATED", "gl-",
+                "GitLab project is not linked to a Parallax project");
+    }
+
+    /** Shared acceptance path: both providers only differ in authentication and payload naming. */
+    private DeliveryResult accept(String provider, String deliveryId, String externalId, String cloneUrl,
+                                  int pullRequestNumber, String headSha, String bodyDigest, String auditAction,
+                                  String requestKeyPrefix, String notLinkedMessage) {
         if (!externalId.matches("[0-9]{1,120}")) {
             throw ApiException.badRequest("Webhook is missing a numeric repository id");
         }
@@ -148,15 +189,15 @@ public class PlatformPrService {
         if (!headSha.matches("[0-9a-fA-F]{40}|[0-9a-fA-F]{64}")) {
             throw ApiException.badRequest("Webhook must contain a fixed pull-request head commit");
         }
-        headSha = headSha.toLowerCase(Locale.ROOT);
+        String normalizedHead = headSha.toLowerCase(Locale.ROOT);
 
         var links = jdbc.query("SELECT l.id,l.project_id,p.organization_id,l.repository_id,l.provider,l.external_id,l.token_budget "
                         + "FROM platform_repository_link l JOIN platform_project p ON p.id=l.project_id "
                         + "WHERE l.provider=? AND l.external_id=?",
                 (rs, n) -> new Linked(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4),
-                        rs.getString(5), rs.getString(6), rs.getLong(7)), GITHUB, externalId);
+                        rs.getString(5), rs.getString(6), rs.getLong(7)), provider, externalId);
         Linked link = links.stream().findFirst().orElseThrow(() ->
-                new ApiException(HttpStatus.NOT_FOUND, "GitHub repository is not linked to a Parallax project"));
+                new ApiException(HttpStatus.NOT_FOUND, notLinkedMessage));
 
         String registered = jdbc.queryForObject(
                 "SELECT clone_url FROM platform_repository WHERE project_id=? AND id=?",
@@ -166,10 +207,10 @@ public class PlatformPrService {
         }
 
         identity.ensureWebhookReviewer(link.organizationId(), SYSTEM_USER_ID);
-        String digest = PlatformTaskService.hash(body);
+        String digest = bodyDigest;
         var prior = jdbc.query("SELECT task_id,payload_sha256 FROM platform_webhook_delivery "
                         + "WHERE provider=? AND delivery_id=? ORDER BY received_at DESC LIMIT 1",
-                (rs, n) -> new PriorDelivery(rs.getString(1), rs.getString(2)), GITHUB, deliveryId);
+                (rs, n) -> new PriorDelivery(rs.getString(1), rs.getString(2)), provider, deliveryId);
         if (!prior.isEmpty()) {
             PriorDelivery previous = prior.getFirst();
             if (!previous.payloadSha256().equals(digest)) {
@@ -183,15 +224,32 @@ public class PlatformPrService {
         if (link.tokenBudget() > policy.config().maxTokenBudget()) {
             throw new ApiException(HttpStatus.CONFLICT, "Linked token budget exceeds the current policy");
         }
-        var task = tasks.submit(SYSTEM_USER_ID, link.projectId(), "gh-" + deliveryId,
-                new PlatformTaskService.Submission(link.repositoryId(), policy.id(), headSha, link.tokenBudget()));
+        var task = tasks.submit(SYSTEM_USER_ID, link.projectId(), requestKeyPrefix + deliveryId,
+                new PlatformTaskService.Submission(link.repositoryId(), policy.id(), normalizedHead, link.tokenBudget()));
         jdbc.update("INSERT INTO platform_webhook_delivery "
                         + "(id,provider,delivery_id,payload_sha256,project_id,repository_id,pull_request_number,task_id,received_at) "
                         + "VALUES (?,?,?,?,?,?,?,?,?)",
-                UUID.randomUUID().toString(), GITHUB, deliveryId, digest, link.projectId(),
+                UUID.randomUUID().toString(), provider, deliveryId, digest, link.projectId(),
                 link.repositoryId(), pullRequestNumber, task.id(), Timestamp.from(Instant.now()));
-        identity.audit(SYSTEM_USER_ID, "GITHUB_PR_TASK_CREATED", task.id());
+        identity.audit(SYSTEM_USER_ID, auditAction, task.id());
         return new DeliveryResult(true, "accepted", task.id(), task.state().name(), task.commitSha());
+    }
+
+    private void requireBody(String body) {
+        if (body == null || body.getBytes(StandardCharsets.UTF_8).length > properties.getWebhooks().getMaxBodyBytes()) {
+            throw new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "Webhook body is missing or too large");
+        }
+    }
+
+    private static void requireDeliveryId(String deliveryId, String header) {
+        if (deliveryId == null || !deliveryId.matches("[A-Za-z0-9_-]{1,64}")) {
+            throw ApiException.badRequest("A valid " + header + " header is required");
+        }
+    }
+
+    private static boolean constantTimeEquals(String expected, String provided) {
+        return MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8),
+                provided.getBytes(StandardCharsets.UTF_8));
     }
 
     private JsonNode parse(String body) {

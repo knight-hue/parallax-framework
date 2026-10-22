@@ -84,6 +84,8 @@ parallax:
   webhooks:
     # Empty disables the GitHub webhook endpoint. Set it to the same secret configured in GitHub.
     github-secret: ${PARALLAX_GITHUB_WEBHOOK_SECRET:}
+    # Empty disables the GitLab endpoint. Set it to the "Secret token" configured on the GitLab hook.
+    gitlab-secret: ${PARALLAX_GITLAB_WEBHOOK_SECRET:}
     max-body-bytes: ${PARALLAX_GITHUB_WEBHOOK_MAX_BODY_BYTES:1000000}
   share:
     default-expiry-seconds: ${PARALLAX_SHARE_DEFAULT_EXPIRY_SECONDS:604800}

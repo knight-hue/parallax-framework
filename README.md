@@ -251,7 +251,7 @@ class MyValidator:                    # ③ 可选：入账否决权
 | --- | --- |
 | MySQL + Java 平台业务 | 默认 MySQL 运行档、组织/项目权限、仓库/策略、任务/预算、产物和审批已实现；MySQL 8.4 与现场备份恢复待验收 |
 | 原子预算与可靠执行 | 预占/结算/Outbox/Inbox/fencing/心跳/恢复已实现；真实 RabbitMQ、多实例故障与容量验收待完成 |
-| 研发闭环 | Java 侧审批/产物管理已实现；GitHub PR 绑定与签名 webhook 已实现，GitLab、真实 webhook、Java 缺陷样例和隔离执行器待完成 |
+| 研发闭环 | Java 侧审批/产物管理已实现；GitHub PR 与 GitLab MR 的签名/token webhook、项目绑定与 delivery 幂等已实现，真实 webhook 现场验收、容器/VM 隔离执行器待完成 |
 | 缓存、容量与诊断 | 策略只读缓存、真实 Redis IT、任务/Worker/审批/缓存/Outbox 指标、可终止子进程执行器已实现；Prometheus 采集、容器/VM 隔离、多实例故障、JVM 排障和容量验收待完善 |
 | 后置扩展与独立实验 | 报告安全分享已实现；JVM/并发/Redis/Spring/秒杀已运行验证，2PC/TCC 为 SQLite 模拟；MySQL 8.4 真库锁/MVCC 与 Seata 未运行；独立短链域名、热点容量与多实例验收待完善 |
 
@@ -320,7 +320,7 @@ docker compose --env-file backend/.env -f docker-compose.yml -f docker-compose.p
 
 Java 平台的 PR 接入为 `POST /api/v1/platform/webhooks/github`：必须先把已登记仓库绑定到 GitHub repository id，
 配置 `PARALLAX_GITHUB_WEBHOOK_SECRET` 后按 `X-GitHub-Delivery` 幂等创建 Java 任务；详见
-[平台 API](gateway/PLATFORM_API.md)。GitLab 与真实 GitHub webhook 现场验收仍未完成。
+[平台 API](gateway/PLATFORM_API.md)。GitHub PR 与 GitLab MR 共用一条受理路径；真实 webhook 现场验收仍未完成。
 
 Claim 的 `reproduction_plan.command` 是显式 argv 列表。设置 `PARALLAX_ENABLE_REPRODUCTION=true` 才会执行，
 服务使用禁止拉取镜像、无网络、非 root、只读源码/根文件系统、资源受限的 Docker 执行器。

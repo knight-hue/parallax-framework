@@ -215,8 +215,22 @@ account is the task author, and the delivery id, payload digest, PR number, repo
 and task id are persisted.
 
 This is a deployment-wide trust boundary: the shared secret authenticates the GitHub
-sender, not an individual tenant. GitLab ingress and per-tenant webhook secrets are not
-implemented yet.
+sender, not an individual tenant. Per-tenant webhook secrets are not implemented yet.
+
+## GitLab merge-request ingress
+
+Set `PARALLAX_GITLAB_WEBHOOK_SECRET` to the same value as the hook's **Secret token**.
+An empty secret disables the endpoint. The gateway accepts
+`POST /api/v1/platform/webhooks/gitlab` with `X-Gitlab-Token`,
+`X-Gitlab-Event: Merge Request Hook`, and `X-Gitlab-Event-UUID` (the idempotency key).
+
+Binding works like GitHub, with `"provider": "GITLAB"` and the numeric GitLab
+**project id** as `externalId`. The delivery must carry `object_kind=merge_request`,
+`project.git_http_url` matching the registered clone URL, `object_attributes.iid`, and a
+fixed `object_attributes.last_commit.id`; `open`, `reopen`, and `update` trigger review.
+A duplicate `X-Gitlab-Event-UUID` returns the original task, and reusing the UUID with a
+different payload is rejected. GitLab compares the token in constant time before the
+payload is parsed, because GitLab does not sign the body.
 
 ## Platform metrics
 

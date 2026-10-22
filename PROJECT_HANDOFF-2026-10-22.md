@@ -19,7 +19,7 @@
 - GitHub webhook 校验 HMAC-SHA256 原始请求体，只接受 `pull_request` 的 `opened/reopened/synchronize`。
 - 仓库外部 ID 必须绑定到项目仓库，载荷 clone URL 必须与登记仓库一致；任务固定使用 `pull_request.head.sha` 和项目最新不可变策略。
 - `X-GitHub-Delivery` 作为任务幂等键；重复投递返回原任务，同一 delivery 不同内容返回 409。
-- `PlatformPrWebhookIntegrationTest` 6 项、Java 全量 107 项通过；真实 GitHub 投递、GitLab 和目标 MySQL 8.4 验收未完成。
+- `PlatformPrWebhookIntegrationTest` 6 项、Java 全量 107 项通过；真实 GitHub 投递和目标 MySQL 8.4 验收未完成。
 
 ## 报告安全分享
 
@@ -41,7 +41,7 @@ Java 已接管身份/组织/项目权限、仓库和不可变策略、任务状�
 
 ## 尚未完成
 
-- GitLab PR 接入、真实 GitHub webhook 现场验收；GitHub 签名、项目绑定、固定 commit 与 delivery 幂等已实现。
+- 真实 GitHub/GitLab webhook 现场验收、容器/VM 级隔离执行器；签名/token 校验、项目绑定、固定 commit 与 delivery 幂等已实现。
 - RabbitMQ 真 broker、多实例故障、跨节点协调、容量压测和消息链路现场验收；当前本机没有 RabbitMQ 镜像，不能下载补齐。
 - MySQL 8.4 目标环境验收、现场备份恢复、正式镜像、TLS、公网部署和 S3 兼容产物存储。
 - Worker 专用隔离执行器的容量/强制终止验收；当前报告产物为有大小上限的 MySQL 存储。
