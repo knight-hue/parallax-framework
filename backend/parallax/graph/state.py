@@ -76,6 +76,12 @@ class ParallaxRuntime:
     output_contamination: bool = False
     """是否有 Reader 在盲读阶段观察到其他 Reader 的结论。"""
     correlation_budget_violated: bool = False
+    gap_attribution: object | None = None
+    """最近一轮的覆盖缺口归因（`core.gap_attribution.AttributionReport`）。
+
+    分区缺口与读者漏检的处置不同：前者补派，后者只能估漏检率并交还人工。
+    把两者混成一个“未覆盖”数字，补检就只是在瞎加轮次。
+    """
     budget: Budget = field(default_factory=Budget)
     usage: UsageStats = field(default_factory=UsageStats)
     arbitrator: object | None = None

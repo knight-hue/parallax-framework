@@ -39,6 +39,7 @@ from collections.abc import Mapping
 from langgraph.graph import END, START, StateGraph
 
 from parallax.core.arbitration import statement_digest
+from parallax.core.gap_attribution import attribute_gaps
 from parallax.core.independence import analyze_dependencies, evidence_overlap_rate
 from parallax.domain.enums import ClaimStatus, Polarity, RoundStopReason
 from parallax.domain.models import EvidenceUnit, RoundRecord
@@ -344,6 +345,13 @@ def build_graph(runtime: ParallaxRuntime):
             dispute_rows=_dispute_rows(runtime, evidence_by_id),
             new_fingerprints_last_round=runtime.new_fingerprints_last_round,
         )
+        attribution = attribute_gaps(
+            assignments=assignments,
+            claims=runtime.ledger.claims,
+            groups={eid: unit.group for eid, unit in evidence_by_id.items()},
+            min_support=runtime.settings.coverage_min_support,
+        )
+        runtime.gap_attribution = attribution
         if runtime.manifest.rounds:
             current = runtime.manifest.rounds[-1]
             current.coverage_fill_rate = decision.claim_cell_fill_rate
@@ -362,6 +370,9 @@ def build_graph(runtime: ParallaxRuntime):
             dispute_rate=decision.dispute_rate,
             stop_reason=decision.stop_reason.value if decision.stop_reason else None,
             focus_groups=decision.focus_groups,
+            gap_attribution=attribution.by_kind,
+            reader_miss_groups=attribution.actionable_groups,
+            detection_probability=attribution.run_estimate.detection_probability,
         )
         runtime.record_receipt(
             "coverage",
@@ -371,6 +382,13 @@ def build_graph(runtime: ParallaxRuntime):
                 "evidence_fill_rate": decision.evidence_fill_rate,
                 "claim_cell_fill_rate": decision.claim_cell_fill_rate,
                 "stop_reason": decision.stop_reason.value if decision.stop_reason else None,
+                "gap_attribution": attribution.by_kind,
+                "capture_estimate": {
+                    "observed": attribution.run_estimate.observed,
+                    "estimated_total": attribution.run_estimate.estimated_total,
+                    "detection_probability": attribution.run_estimate.detection_probability,
+                    "recapture_pairs": attribution.run_estimate.recapture_pairs,
+                },
             },
         )
 
