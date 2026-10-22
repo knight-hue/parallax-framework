@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import json
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -13,10 +11,9 @@ from uuid import uuid4
 from weakref import WeakValueDictionary
 
 from parallax.config import Settings
-from parallax.engine import ParallaxEngine
-from parallax.infra.llm_openai_compat import OpenAICompatClient
-from parallax.plugins.code_audit import CodeAuditReader, RepoAdapter
 from parallax.service.platform_client import PlatformClient, PlatformRejected, PlatformUnavailable
+from parallax.service.platform_engine import PLATFORM_QUESTION, run_engine
+from parallax.service.platform_executor import PlatformProcessExecutor
 from parallax.service.platform_sources import PlatformSources
 from parallax.service.worker_journal import JournalConflict, WorkerJournal
 from parallax.service.worker_protocol import WorkerTask
@@ -54,7 +51,16 @@ class PlatformWorkerService:
         self.client_factory = client_factory or (
             lambda current: PlatformClient(current.platform_url, current.gateway_internal_token)
         )
-        self.engine_factory = engine_factory or self.execute_default
+        self._capacity = asyncio.Semaphore(settings.platform_max_concurrent_tasks)
+        self.process_executor = (
+            PlatformProcessExecutor(settings, self.root)
+            if settings.platform_execution_mode == "process"
+            else None
+        )
+        default_engine = (
+            self.execute_process if self.process_executor is not None else self.execute_default
+        )
+        self.engine_factory = engine_factory or default_engine
         self.sources = PlatformSources(self.root / "sources", hosts)
         self._running: dict[tuple[str, int], asyncio.Task] = {}
         self._delivery_locks: WeakValueDictionary[tuple[str, int], asyncio.Lock] = (
@@ -96,12 +102,9 @@ class PlatformWorkerService:
                 logger.exception("Platform receipt replay failed")
             await asyncio.sleep(self.settings.platform_replay_seconds)
 
-    async def execute_default(self, *, task, snapshot, sources, canceled):
-        """Run the existing evidence engine under the immutable Java policy."""
+    def _settings_for(self, task, snapshot):
         policy = snapshot.policy()
-        if canceled() or datetime.now(UTC) >= task.deadline:
-            raise asyncio.CancelledError
-        settings = self.settings.model_copy(
+        return self.settings.model_copy(
             update={
                 "n_readers": policy.readers,
                 "redundancy": policy.redundancy,
@@ -112,34 +115,32 @@ class PlatformWorkerService:
                 "audit_root": "",
             }
         )
+
+    async def execute_default(self, *, task, snapshot, sources, canceled):
+        """Run the evidence engine in the worker process under the immutable policy."""
+        if canceled() or datetime.now(UTC) >= task.deadline:
+            raise asyncio.CancelledError
         source = await asyncio.to_thread(sources.resolve, snapshot.clone_url, task.commit_sha)
-        client = OpenAICompatClient(settings)
-        try:
-            engine = ParallaxEngine.build(
-                adapter=RepoAdapter(
-                    source.path, extensions=(".py", ".java", ".js", ".ts"), max_files=300
-                ),
-                plugin=CodeAuditReader(),
-                client=client,
-                settings=settings,
-            )
-            report = await engine.run(
-                "找出这个提交源码中真实存在的缺陷，并说明触发条件。",
-                run_id=task.task_id,
-            )
-            if canceled():
-                raise asyncio.CancelledError
-            payload = report.model_dump(mode="json")
-            digest = hashlib.sha256(
-                json.dumps(
-                    payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-                ).encode()
-            ).hexdigest()
-            usage = engine.usage_snapshot()
-            content = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-            return content, usage["prompt_tokens"], usage["completion_tokens"], digest
-        finally:
-            await client.aclose()
+        content, prompt, completion, digest = await run_engine(
+            self._settings_for(task, snapshot), source.path, task.task_id, PLATFORM_QUESTION
+        )
+        if canceled():
+            raise asyncio.CancelledError
+        return content, prompt, completion, digest
+
+    async def execute_process(self, *, task, snapshot, sources, canceled):
+        """Run the evidence engine in a killable child process."""
+        if canceled() or datetime.now(UTC) >= task.deadline:
+            raise asyncio.CancelledError
+        if self.process_executor is None:
+            raise RuntimeError("Platform process executor is not configured")
+        source = await asyncio.to_thread(sources.resolve, snapshot.clone_url, task.commit_sha)
+        return await self.process_executor.run(
+            task=task,
+            source_path=source.path,
+            settings=self._settings_for(task, snapshot),
+            canceled=canceled,
+        )
 
     async def dispatch(self, task: WorkerTask) -> str:
         """Register and claim once; duplicate delivery is acknowledged safely."""
@@ -184,6 +185,11 @@ class PlatformWorkerService:
         return "accepted"
 
     async def _execute(self, client: PlatformClient, task: WorkerTask, snapshot) -> None:
+        # Bound concurrent engine executions; waiting tasks still observe their Java deadline.
+        async with self._capacity:
+            await self._execute_inner(client, task, snapshot)
+
+    async def _execute_inner(self, client: PlatformClient, task: WorkerTask, snapshot) -> None:
         prompt = completion = 0
         engine = heartbeat = None
         stop_heartbeat = asyncio.Event()

@@ -358,3 +358,43 @@ async def test_shutdown_while_claim_pending_prevents_late_engine_launch(tmp_path
     with pytest.raises(PlatformUnavailable, match="shutting down"):
         await dispatch
     assert not service._running
+
+
+@pytest.mark.asyncio
+async def test_platform_execution_concurrency_is_bounded(tmp_path):
+    active = peak = 0
+    first_started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def engine(**kwargs):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        first_started.set()
+        await release.wait()
+        active -= 1
+        return "{}", 0, 0, "a" * 64
+
+    service = PlatformWorkerService(
+        Settings(
+            platform_url="http://platform",
+            gateway_internal_token="token",
+            platform_source_hosts=["github.com"],
+            platform_max_concurrent_tasks=1,
+        ),
+        tmp_path,
+        client_factory=lambda _: Client(),
+        engine_factory=engine,
+    )
+    first = task().model_copy(update={"task_id": "first"})
+    second = task().model_copy(update={"task_id": "second"})
+    assert await service.dispatch(first) == "started"
+    await asyncio.wait_for(first_started.wait(), 2)
+    assert await service.dispatch(second) == "started"
+    await asyncio.sleep(0.1)
+    assert peak == 1
+
+    running = list(service._running.values())
+    release.set()
+    await asyncio.gather(*running, return_exceptions=True)
+    assert peak == 1
