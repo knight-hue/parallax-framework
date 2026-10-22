@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: seata-lab
+  datasource:
+    url: ${PARALLAX_SEATA_DB_URL:jdbc:mysql://127.0.0.1:3307/seata_lab?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&allowPublicKeyRetrieval=true&sslMode=DISABLED}
+    username: ${PARALLAX_SEATA_DB_USER:parallax}
+    password: ${PARALLAX_SEATA_DB_PASSWORD:parallax}
+    hikari:
+      maximum-pool-size: 8
+      pool-name: seata-lab-pool
+
+seata:
+  enabled: true
+  application-id: seata-lab
+  tx-service-group: parallax_tx_group
+  # 由 Seata 代理数据源，AT 模式才能在本地事务前后写入 undo_log
+  enable-auto-data-source-proxy: true
+  client:
+    undo:
+      # 默认解析器由 SPI 探测，缺少 fastjson/fst 等实现时会失败；显式指定已引入的 Jackson。
+      log-serialization: jackson
+  service:
+    vgroup-mapping:
+      parallax_tx_group: default
+    grouplist:
+      default: ${PARALLAX_SEATA_SERVER:127.0.0.1:8091}
+  registry:
+    type: file
+  config:
+    type: file
+
+logging:
+  level:
+    org.apache.seata: info
+    dev.parallax.labs.seata: info

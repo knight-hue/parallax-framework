@@ -27,4 +27,6 @@ powershell -File .\run.ps1
 
 ## Seata
 
-本机没有 Seata Server、Seata 依赖或镜像缓存；**未运行 Seata AT/TCC**。不能用本实验的 SQLite 结果冒充 Seata 验收。真实验收需要固定兼容版本、MySQL 8.4/目标数据库、undo_log/全局锁观测和故障注入。
+本目录只是**协议级模拟**，不能当作 Seata 验收。
+
+真实的 Seata AT/TCC 实验在 `labs/seata`：对真实 Seata 2.6.0 服务端（`127.0.0.1:8091`）和真实 MySQL 8.4 运行，覆盖全局提交、AT 回滚还原库存、TCC confirm/cancel 与二阶段幂等。
