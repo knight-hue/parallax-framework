@@ -1,0 +1,48 @@
+{
+  "task_id": "seed_java",
+  "description": "小型 Java 服务片段（账户转账 / 报告导出 / 令牌桶 / 配置读取），植入 4 个真实且隐蔽的缺陷。每个缺陷都有对应的回归测试：缺陷代码上失败，参考修复后通过。",
+  "repo": ".",
+  "planted_defect_count": 4,
+  "defects": [
+    {
+      "id": "J1",
+      "file": "src/main/java/dev/parallax/corpus/java/Account.java",
+      "line_start": 24,
+      "line_end": 28,
+      "defect_class": "business_invariant",
+      "title": "转账先扣款后校验，付款方余额可以被扣成负数",
+      "marker": "balances.put(from, fromBalance - amount);",
+      "rationale": "方法直接写入 fromBalance - amount，没有任何余额充足性判断；金额大于余额时账本出现负余额，且收款方已经入账，资金凭空产生。"
+    },
+    {
+      "id": "J2",
+      "file": "src/main/java/dev/parallax/corpus/java/ReportExporter.java",
+      "line_start": 15,
+      "line_end": 19,
+      "defect_class": "atomicity",
+      "title": "导出先写目标文件再做内容校验，校验失败会把已有文件写坏",
+      "marker": "Files.writeString(target, content, StandardCharsets.UTF_8);",
+      "rationale": "写入发生在校验之前；内容被拒时目标文件已被截断或写入半成品，调用方拿到的是一份损坏的旧报告。应先写临时文件再原子替换。"
+    },
+    {
+      "id": "J3",
+      "file": "src/main/java/dev/parallax/corpus/java/TokenBucket.java",
+      "line_start": 29,
+      "line_end": 35,
+      "defect_class": "concurrency",
+      "title": "令牌桶每次调用都重置 lastRefillMillis，连续的亚秒调用会丢掉时间片导致永不补充",
+      "marker": "lastRefillMillis = now;",
+      "rationale": "补充量按整秒截断，但时间基准在每次调用后无条件推进到当前时刻，不足一秒的余量被永久丢弃。高频调用下桶实际补不回来，限流退化成永久拒绝。"
+    },
+    {
+      "id": "J4",
+      "file": "src/main/java/dev/parallax/corpus/java/ConfigLoader.java",
+      "line_start": 18,
+      "line_end": 25,
+      "defect_class": "error_handling",
+      "title": "配置缺键或格式错误时静默返回 0，调用方无法区分漏配与真实零值",
+      "marker": "return 0;",
+      "rationale": "NumberFormatException 被吞掉，getInt 对不存在的键和写错的值都返回 0；例如超时时间写成 \"30s\" 会静默变成 0，问题在更远处才暴露。"
+    }
+  ]
+}
