@@ -38,4 +38,16 @@ java -Dloader.main=dev.parallax.gateway.platform.LegacyDatabaseTransfer -cp gate
 backend/.venv/Scripts/python.exe gateway/tools/verify_native_mysql.py --mysql-home E:/mysql/mysql-8.0.19-winx64 --maven .toolchain/maven/bin/mvn.cmd --java-home .toolchain/jdk --postgres-image pgvector/pgvector:pg16 --out gateway/target/mysql-postgres-transfer
 ```
 
-覆盖真实 InnoDB/Flyway、外键和 CHECK、JPA/JDBC 时间和用量往返、PostgreSQL → MySQL 复制/校验/篡改检测。日志只放忽略的 target；验收摘要单独归档。新库备份使用现有 mysqldump 的 `--single-transaction --routines --triggers --events`，在隔离库恢复并核对 Flyway 与业务数量；不要把声明的备份命令当作已完成生产恢复演练。
+覆盖真实 InnoDB/Flyway、外键和 CHECK、JPA/JDBC 时间和用量往返、PostgreSQL → MySQL 复制/校验/篡改检测。日志只放忽略的 target；验收摘要单独归档。
+
+## 备份与恢复演练
+
+`gateway/tools/verify_backup_restore.py` 在真实 MySQL 上跑一遍可重复的恢复演练，不接触任何已有业务库：每次运行创建两个临时库（源库与恢复目标库），按序执行 `db/mysql/V*.sql`，写入含中文与 emoji 的样本数据，用 `mysqldump --single-transaction --routines --triggers --events --hex-blob` 导出，再导入第二个库并逐表比对 `CHECKSUM TABLE` 与行数，最后删除两个临时库。
+
+```powershell
+backend/.venv/Scripts/python.exe gateway/tools/verify_backup_restore.py ^
+  --mysql-home E:/tools/mysql-8.4.0-winx64 --password <root 口令> --port 3307 ^
+  --out gateway/target/backup-restore
+```
+
+结果是逻辑备份演练：覆盖 11 个迁移、22 张表的校验和与行数一致，但不能当作物理备份、binlog 时间点恢复或在线热备的证明。
