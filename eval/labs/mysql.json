@@ -1,0 +1,28 @@
+{
+  "module": "mysql-index-isolation-locking-lab",
+  "date": "2026-10-22",
+  "mysql": "8.4.0",
+  "isolation_default": "REPEATABLE-READ",
+  "innodb_deadlock_detect": true,
+  "checks": {
+    "index_access_path": {"passed": 1, "failed": 0},
+    "isolation_levels": {"passed": 3, "failed": 0},
+    "locking_and_deadlock": {"passed": 2, "failed": 0}
+  },
+  "verified_behaviors": [
+    "Without a secondary index the same equality query plans as a full table scan (type=ALL) over 20000 rows",
+    "Adding idx_email turns the plan into type=ref with a single-digit row estimate",
+    "A composite covering index produces Extra=Using index, so the query avoids table lookups",
+    "A prefix LIKE scan uses type=range",
+    "REPEATABLE READ keeps the transaction snapshot even after another session commits",
+    "READ COMMITTED observes the latest committed value on every statement",
+    "SERIALIZABLE reads take shared locks so a concurrent writer waits and times out with error 1205",
+    "Opposite update order makes InnoDB roll back one victim with deadlock error 1213 while the other commits"
+  ],
+  "limitations": [
+    "Single instance, no replication or crash recovery drill",
+    "Index conclusions come from EXPLAIN/ANALYZE rather than InnoDB page-level inspection",
+    "No EXPLAIN ANALYZE timing comparison or slow-query tuning",
+    "Only the default deadlock detection path is covered, not innodb_deadlock_detect=OFF timeouts"
+  ]
+}
