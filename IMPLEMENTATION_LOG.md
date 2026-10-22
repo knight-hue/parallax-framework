@@ -196,3 +196,13 @@
 - 创建与撤销写审计；访问只记录聚合统计，不保存访问者 IP 等个人信息。分享接口沿用 `/api/` 的现有 IP + 主体限流。
 - 验证：`PlatformShareIntegrationTest` 4 项（匿名读取、哈希存储、过期/撤销、跨项目/非成功任务拒绝、并发上限）、Java 全量 113 项通过；V11 在 H2/Flyway 上执行成功。未执行热点容量、独立短链域名或目标 MySQL 8.4 验收。脱敏摘要：`eval/java-platform/share-links.json`。
 
+## Worker 可终止子进程执行器与并发上限
+
+状态：已实现并通过 Python 单元测试；容器/VM 级隔离、恶意租户和真实平台容量验收待完成。
+
+- 新增 `platform_engine.py`，同进程和子进程模式共享同一引擎构建、报告序列化和摘要计算，避免两条执行路径漂移。
+- 新增 `platform_executor.py`：父进程写请求、拉起子 Python 进程、按 Java deadline 等待；超时或取消时先 terminate，宽限期后 kill，防止卡死的模型/解析器长期占用 Worker。
+- 子进程从继承的环境读取模型配置，请求文件只包含源码路径、任务 ID 和策略参数，不写密钥；结果文件包含内容、用量和摘要，父进程重新校验摘要。
+- `PlatformWorkerService` 增加 `platform_max_concurrent_tasks` 信号量；超出槽位的任务等待，仍受 Java deadline 约束。`PARALLAX_PLATFORM_EXECUTION_MODE=process` 启用子进程模式，默认保持 `inline` 兼容既有部署。
+- 验证：`test_platform_process_executor.py` 4 项（成功摘要、超时强杀、摘要不符、结构化子进程错误）、Worker 并发上限测试、Python 全量 386 项、Ruff/format 通过。该实现是进程级隔离，不是容器/VM 安全沙箱；未执行恶意代码或容器级容量验收。脱敏摘要：`eval/java-platform/worker-executor.json`。
+

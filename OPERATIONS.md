@@ -19,6 +19,12 @@ docker compose --env-file backend/.env -f docker-compose.yml -f docker-compose.p
 
 核心 API 的 `PARALLAX_GATEWAY_INTERNAL_TOKEN` 与网关相同，拒绝缺少内部凭据的 API 请求；探针保留。公网入口只开放 web/TLS，模型服务、数据库、Redis 均不直接暴露。
 
+## 平台 Worker 执行模式
+
+默认 `PARALLAX_PLATFORM_EXECUTION_MODE=inline`，与既有部署兼容。设为 `process` 后，平台 Worker 为每个任务启动一个子 Python 进程，父进程按 Java deadline 等待；超时或取消时先 terminate，宽限期 `PARALLAX_PLATFORM_PROCESS_TERMINATE_GRACE_SECONDS` 后 kill。`PARALLAX_PLATFORM_MAX_CONCURRENT_TASKS` 限制同时执行的引擎数量，超出槽位的任务等待且仍受 deadline 约束。
+
+这是**进程级**隔离，不是容器/VM 安全沙箱；子进程共享宿主文件系统和网络，并通过环境继承模型配置。敌对租户或不可信代码仍需专用容器/VM。子进程请求文件不包含密钥，结果由父进程重新校验 SHA-256。
+
 ## 修复闭环
 
 `PARALLAX_ENABLE_REPAIR=true` 只应在专用隔离 worker 服务实例开启。普通生产 API 默认关闭。专用 worker 必须本地安装 Docker CLI，拥有已缓存的执行镜像，并能把快照的绝对路径挂入该宿主的 Docker daemon；不要给公网 API 容器挂宿主 Docker socket。

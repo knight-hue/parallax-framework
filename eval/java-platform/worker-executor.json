@@ -1,0 +1,26 @@
+{
+  "module": "platform-worker-process-executor",
+  "date": "2026-10-22",
+  "checks": {
+    "python_full_tests": {"passed": 386, "failed": 0, "skipped": 0},
+    "process_executor_tests": {"passed": 4, "failed": 0, "skipped": 0},
+    "worker_capacity_test": {"passed": 1, "failed": 0, "skipped": 0},
+    "ruff": "passed",
+    "ruff_format": "109 files already formatted"
+  },
+  "verified_behaviors": [
+    "child process result is parsed and its content digest is verified",
+    "a child that exceeds the Java deadline is terminated and force-killed if needed",
+    "a digest mismatch is rejected instead of uploaded",
+    "structured child errors are surfaced to the worker",
+    "platform_max_concurrent_tasks bounds simultaneous engine executions",
+    "inline and child-process modes share the same engine implementation"
+  ],
+  "limitations": [
+    "This is process isolation, not a container/VM security sandbox",
+    "The child shares the host filesystem and network and inherits environment secrets",
+    "No container/VM capacity, cgroup or hostile-tenant isolation test was performed",
+    "No real model/provider call was made in this module",
+    "Java lease/deadline integration still needs real platform acceptance"
+  ]
+}
