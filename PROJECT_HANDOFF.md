@@ -27,7 +27,7 @@ Java 从网关升级为平台业务主体；平台统一使用 MySQL；Python �
 ## 2026-10-22 接手顺序
 
 1. 先运行 Java `mvn -o -q test`、Python pytest/Ruff 和前端 typecheck/lint/build，确认环境没有回归。
-2. GitHub PR 签名接入、项目绑定、固定 head commit 与 delivery 幂等已实现；补 GitLab 和真实 webhook 验收，禁止把客户端 URL 当作拉取地址。
+2. GitHub PR 签名与 GitLab MR token 接入、项目绑定、固定 head commit 与 delivery 幂等已实现；补真实 webhook 验收和容器/VM 隔离执行器，禁止把客户端 URL 当作拉取地址。
 3. 任务、Outbox、Worker、审批、缓存和分享指标已接入；补 Prometheus 采集、跨进程 trace，并为长任务执行器设置有界线程/进程资源。
 4. 在不下载镜像的前提下，若本机已有 RabbitMQ/Redis/MySQL 目标服务，运行真实 broker、多实例故障、备份恢复和容量验收；没有服务就记录为未验收，不伪造结果。
 5. 独立完成 `labs/jvm`、`labs/concurrency`、`labs/mysql`、`labs/redis`、`labs/spring`、`labs/distributed-tx`、`labs/flash-sale` 实验；实验不能接入默认生产拓扑。
@@ -35,7 +35,7 @@ Java 从网关升级为平台业务主体；平台统一使用 MySQL；Python �
 
 ## 当前明确未完成
 
-- GitLab PR 接入、真实 GitHub webhook 现场验收；GitHub 签名、项目绑定、固定 commit 与 delivery 幂等已实现。
+- 真实 GitHub/GitLab webhook 现场验收、容器/VM 级隔离执行器；签名、token 校验、项目绑定、固定 commit 与 delivery 幂等已实现。
 - RabbitMQ 真 broker、跨节点协调、多实例故障和容量压测。
 - MySQL 8.4 目标环境、现场备份恢复、正式镜像/TLS/公网部署。
 - S3 兼容产物存储；当前报告产物仍是有大小上限的 MySQL 存储。

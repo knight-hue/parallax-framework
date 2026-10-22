@@ -1,0 +1,30 @@
+{
+  "module": "platform-gitlab-mr-ingress",
+  "date": "2026-10-22",
+  "checks": {
+    "java_full_tests": {"passed": 116, "failed": 0, "skipped": 0},
+    "gitlab_mr_webhook_it": {"passed": 3, "failed": 0, "skipped": 0},
+    "github_pr_webhook_it": {"passed": 6, "failed": 0, "skipped": 0},
+    "flyway_version": 11
+  },
+  "verified_behaviors": [
+    "X-Gitlab-Token is compared in constant time against PARALLAX_GITLAB_WEBHOOK_SECRET",
+    "a missing or wrong token is rejected with 401 before the payload is parsed",
+    "an empty secret disables the endpoint with 404 instead of accepting anything",
+    "X-Gitlab-Event must be Merge Request Hook and object_kind must be merge_request",
+    "open/reopen/update actions create a review task; other actions return not-accepted",
+    "project.git_http_url must match the registered clone URL of the linked repository",
+    "the numeric GitLab project id must resolve to an explicit GITLAB repository link",
+    "the task uses the latest immutable policy and the fixed object_attributes.last_commit.id",
+    "X-Gitlab-Event-UUID provides idempotent task creation (same task on replay)",
+    "reusing an event UUID with a different payload is rejected with 409",
+    "GitHub and GitLab share one acceptance path, so both persist delivery id, payload digest, MR number, repository and task id",
+    "the disabled system.webhook account remains the task author and each delivery is audited"
+  ],
+  "limitations": [
+    "A real GitLab merge-request hook delivery has not been performed; it needs a public HTTPS endpoint",
+    "GitLab does not sign the body, so the shared token is the only sender authentication",
+    "The webhook secret is deployment-wide; per-tenant secrets are pending",
+    "Push hooks and merge-result pipelines are intentionally ignored"
+  ]
+}

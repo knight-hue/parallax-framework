@@ -33,3 +33,4 @@ parallax:
     internal-token: test-internal-token
   webhooks:
     github-secret: test-github-webhook-secret
+    gitlab-secret: test-gitlab-webhook-token

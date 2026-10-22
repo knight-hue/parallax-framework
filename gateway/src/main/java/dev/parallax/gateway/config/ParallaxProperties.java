@@ -61,10 +61,13 @@ public class ParallaxProperties {
     /** Signed repository-provider webhooks. An empty secret disables the endpoint. */
     public static class Webhooks {
         private String githubSecret = "";
+        private String gitlabSecret = "";
         private int maxBodyBytes = 1_000_000;
 
         public String getGithubSecret() { return githubSecret; }
         public void setGithubSecret(String githubSecret) { this.githubSecret = githubSecret; }
+        public String getGitlabSecret() { return gitlabSecret; }
+        public void setGitlabSecret(String gitlabSecret) { this.gitlabSecret = gitlabSecret; }
         public int getMaxBodyBytes() { return maxBodyBytes; }
         public void setMaxBodyBytes(int maxBodyBytes) { this.maxBodyBytes = maxBodyBytes; }
     }

@@ -19,7 +19,6 @@
     "PR number and payload digest are persisted for audit"
   ],
   "limitations": [
-    "GitLab ingress is not implemented",
     "A real GitHub webhook delivery has not been performed",
     "The webhook secret is deployment-wide; per-tenant secrets are pending",
     "MySQL 8.4 migration and target-environment acceptance pending",
