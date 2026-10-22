@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from parallax.config import Settings, load_settings
+from parallax.core.admission import IndependenceGate
 from parallax.core.aggregator import AggregationRules, Aggregator
 from parallax.core.coverage import CoverageMonitor
 from parallax.core.independence import build_independence_profile, build_provenance_graph
@@ -129,6 +130,12 @@ class ParallaxEngine:
             arbitrator=arbitrator if arbitrator is not None else NullArbitrator(),
             falsifier=falsifier,
             reproduction_executor=reproduction_executor,
+            gate=IndependenceGate(
+                mode=settings.independence_gate,
+                min_effective_channels=settings.min_effective_channels,
+                min_normalized_independence=settings.min_normalized_independence,
+                max_attempts=settings.max_independence_attempts,
+            ),
         )
         return cls(runtime, adapter, plugin)
 
