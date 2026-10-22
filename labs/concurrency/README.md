@@ -7,7 +7,7 @@ powershell -File .\run.ps1
 ```
 
 | 实验 | 观察点 |
-|---|---|
+| --- | --- |
 | `AqsLockLab` | `ReentrantLock` 重入、公平模式、`Condition.await/signal`、带超时 `tryLock` |
 | `ThreadPoolRejectionLab` | 2 个核心线程 + 容量 2 的队列，第 5 个任务起触发 `AbortPolicy` |
 | `InterruptCancelLab` | `Future.cancel(true)` 向阻塞任务传播中断，任务自行退出 |

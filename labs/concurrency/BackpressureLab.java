@@ -14,7 +14,7 @@ public final class BackpressureLab {
                 3, 3, 0, TimeUnit.MILLISECONDS,
                 new ArrayBlockingQueue<>(3),
                 new ThreadPoolExecutor.CallerRunsPolicy());
-        try {
+        try (pool) {
             for (int i = 0; i < 20; i++) {
                 pool.execute(() -> {
                     int now = active.incrementAndGet();
@@ -32,8 +32,6 @@ public final class BackpressureLab {
             System.out.println("completed=" + completed.get() + " peakActive=" + peak.get()
                     + " queue=" + pool.getQueue().size());
             System.out.println("CallerRunsPolicy applies backpressure by running work on the submitting thread");
-        } finally {
-            pool.shutdownNow();
         }
     }
 }

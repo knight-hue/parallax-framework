@@ -23,7 +23,7 @@ python -m venv .venv
 ## 两个入口
 
 | 命令 | 用途 |
-|---|---|
+| --- | --- |
 | `python -m parallax.cli audit <repo>` | 命令行审查一个仓库 |
 | `python -m parallax.cli experiment` | 跑对照实验（对照组 vs 实验组 + 消融） |
 | `python -m parallax.smoke` | 连通性与结构化输出自检 |
@@ -31,7 +31,7 @@ python -m venv .venv
 
 ## 目录结构
 
-```
+```text
 parallax/
 ├─ domain/    领域模型与枚举（场景无关）
 ├─ ports/     扩展点协议：EvidenceAdapter / ReaderPlugin / ClaimValidator / Falsifier / Arbitrator

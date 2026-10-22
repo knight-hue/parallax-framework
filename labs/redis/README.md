@@ -9,7 +9,7 @@ powershell -File .\run.ps1
 实验内容：
 
 | 主题 | 观察 |
-|---|---|
+| --- | --- |
 | 编码 | `int`、`embstr`、`raw`、`listpack`、`intset` |
 | 穿透 | 无负缓存 50 次回源；`SET EX` 负缓存后 0 次回源 |
 | 击穿 | 8 个并发 Reader，`SET NX PX` 单飞锁只产生 1 次数据库加载 |

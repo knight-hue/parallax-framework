@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -104,22 +105,25 @@ class PlatformShareIntegrationTest {
         }
     }
 
-    private ResponseEntity<Map> createShare(String userId, Fixture fixture, int expiresIn, Integer maxAccesses) {
+    private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =
+            new ParameterizedTypeReference<>() { };
+
+    private ResponseEntity<Map<String, Object>> createShare(String userId, Fixture fixture, int expiresIn, Integer maxAccesses) {
         Map<String, Object> body = new HashMap<>();
         body.put("expiresInSeconds", expiresIn);
         if (maxAccesses != null) body.put("maxAccesses", maxAccesses);
         return rest.exchange(base(fixture) + "/shares", HttpMethod.POST,
-                new HttpEntity<>(body, auth(userId)), Map.class);
+                new HttpEntity<>(body, auth(userId)), MAP_TYPE);
     }
 
-    private ResponseEntity<Map> listShares(Fixture fixture) {
+    private ResponseEntity<Map<String, Object>> listShares(Fixture fixture) {
         return rest.exchange(base(fixture) + "/shares", HttpMethod.GET,
-                new HttpEntity<>(auth(fixture.user)), Map.class);
+                new HttpEntity<>(auth(fixture.user)), MAP_TYPE);
     }
 
-    private ResponseEntity<Map> revoke(Fixture fixture, String shareId) {
+    private ResponseEntity<Map<String, Object>> revoke(Fixture fixture, String shareId) {
         return rest.exchange(base(fixture) + "/shares/" + shareId, HttpMethod.DELETE,
-                new HttpEntity<>(auth(fixture.user)), Map.class);
+                new HttpEntity<>(auth(fixture.user)), MAP_TYPE);
     }
 
     @Test

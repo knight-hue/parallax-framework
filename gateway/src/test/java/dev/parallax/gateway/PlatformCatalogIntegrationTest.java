@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -39,9 +40,11 @@ class PlatformCatalogIntegrationTest {
     private PlatformCatalogService.PolicyConfig config(long budget) {
         return new PlatformCatalogService.PolicyConfig(4,2,3,2,true,budget,3600);
     }
-    private ResponseEntity<Map> call(HttpMethod method, String path, String user, Object body) {
+    private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =
+            new ParameterizedTypeReference<>() { };
+    private ResponseEntity<Map<String, Object>> call(HttpMethod method, String path, String user, Object body) {
         var h=new HttpHeaders(); h.setBearerAuth(jwt.issueUserToken(user,"test"));
-        return rest.exchange(path,method,new HttpEntity<>(body,h),Map.class);
+        return rest.exchange(path,method,new HttpEntity<>(body,h),MAP_TYPE);
     }
     private String base(Fixture f) { return "/api/v1/platform/projects/"+f.project; }
 

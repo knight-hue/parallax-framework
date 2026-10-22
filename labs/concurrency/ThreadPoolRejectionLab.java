@@ -12,7 +12,7 @@ public final class ThreadPoolRejectionLab {
                 2, 2, 0, TimeUnit.MILLISECONDS,
                 new ArrayBlockingQueue<>(2),
                 new ThreadPoolExecutor.AbortPolicy());
-        try {
+        try (pool) {
             for (int i = 0; i < 10; i++) {
                 try {
                     pool.execute(() -> {
@@ -30,9 +30,6 @@ public final class ThreadPoolRejectionLab {
             if (accepted.get() != 4 || rejected.get() != 6) {
                 throw new AssertionError("unexpected rejection count");
             }
-        } finally {
-            pool.shutdown();
-            pool.awaitTermination(2, TimeUnit.SECONDS);
         }
     }
 }

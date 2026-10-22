@@ -26,13 +26,13 @@
 分工边界因此更清楚：
 
 | | 负责 |
-|---|---|
+| --- | --- |
 | **Python 编排服务** | 证据怎么装配（框架核心） |
 | **Java 网关** | 谁在用、用了多少、跑过什么（平台层） |
 
 ### 新增
 
-**Java 网关 · 身份与配额（C1）**
+#### Java 网关 · 身份与配额（C1）
 
 - API Key 签发 / 查看 / 吊销：`POST|GET /api/v1/credentials`、`DELETE /api/v1/credentials/{id}`
 - **明文 key 只在创建响应里出现一次**，服务端只存 SHA-256 摘要；
@@ -47,7 +47,7 @@
   `GET /api/v1/usage`（ADMIN，含零用量的凭据）
 - 完成回调 `POST /api/v1/internal/runs/{runId}/complete`，用 `X-Internal-Token` 校验
 
-**Java 网关 · 运行记录（C2）**
+#### Java 网关 · 运行记录（C2）
 
 - `audit_run` 表：提交时落 `queued`，完成回调补 token / 统计 / 停止原因
 - `audit_event` 表：只记网关自己观察到的 `submitted` / `completed` / `failed`。
@@ -61,7 +61,7 @@
 - `POST /api/v1/audits` 会从上游 202 响应里取出 `run_id` 回填，
   使"网关的提交记录"与"上游的运行"对得上
 
-**Java 网关 · Redis 分布式限流（C3）**
+#### Java 网关 · Redis 分布式限流（C3）
 
 - 抽出 `RateLimiter` 接口：内存桶与 Redis 桶并存，选择逻辑收在
   `ResilientRateLimiter` 里，过滤器不需要知道用的是哪个
@@ -74,7 +74,7 @@
   服务因为一个可选组件而起不来，比限流精度下降严重得多
 - 不做跨进程队列（见下文"明确不做"）
 
-**Java 网关 · 可观测性（C4）**
+#### Java 网关 · 可观测性（C4）
 
 - Micrometer：`parallax_runs_total{status}`、`parallax_tokens_total{credential}`、
   `parallax_quota_rejections_total{metric}`、`parallax_ratelimit_degraded_total`；
@@ -82,7 +82,7 @@
 - 日志格式加入 `%X{traceId}`：没有它，"两端日志能对上同一次请求"只能靠时间戳猜
 - 网关通过 `X-Parallax-Credential-Id` 把身份带给上游，供其回调时回报归属
 
-**Python 侧配合**
+#### Python 侧配合
 
 - 接收 `X-Trace-Id` 与 `X-Parallax-Credential-Id`，写进日志与 `meta.json`
 - 用 `ContextVar` 而不是线程局部变量：asyncio 下并发运行会互相覆盖 traceId
@@ -92,7 +92,7 @@
 - 只发 prompt / completion 两个分量，**不发 total**——合计由服务端算，
   不给第二个事实来源
 
-**数据库与部署**
+#### 数据库与部署
 
 - PostgreSQL + Flyway 迁移（`V1__identity_and_quota.sql`、`V2__audit_run.sql`、
   `V3__audit_event.sql`）；SQL 刻意写成 PostgreSQL 与 H2 都能执行的子集，
@@ -100,7 +100,7 @@
 - `docker-compose.yml` 新增 `postgres` 服务（与 `gateway` 同 profile）与健康检查；
   Redis 同时挂在 `gateway` profile 下——"多实例共享同一配额"正是它在这里的职责
 
-**测试**
+#### 测试
 
 - 默认测试档用 **H2（PostgreSQL 兼容模式）**：让没有 Docker 的机器也能跑完整套测试
 - 明确记录代价：**H2 不能替代真实 PostgreSQL 做验证**，因此另有
@@ -121,6 +121,7 @@
   复制一份只会造出两个可能不一致的事实来源。
 
 ### 计划中
+
 - 跨文件组合型缺陷的评测语料（检验聚合层的证据装配能力）
 - Redis / Qdrant 适配器（当前为内存实现）
 - 把有效独立通道数 K\\* 作为运行时指标对外暴露
@@ -196,7 +197,7 @@
 - 熔断（Resilience4j）：**幂等请求才重试**——重试 `POST /audits` 会创建两个运行
 - SSE 不间断透传：不缓冲、不聚合，并透传 `Last-Event-ID`
 
-**工程与治理**
+#### 工程与治理
 
 - Apache-2.0 许可证、贡献指南、行为准则、安全策略（含**显式声明的安全边界**）
 - Docker 多阶段构建 + docker-compose（api / web 核心，gateway 与 redis/qdrant 走 profile）
@@ -243,6 +244,7 @@ P0 阶段用真实模型运行、以及服务层端到端联调逼出的自身�
 > 这三条修正的共同点是：**合成语料掩盖了它们**。语料的文件大小、模块大小都过于均匀，
 > 而真实仓库的分布是长尾的。这正是"只在合成语料上验证"会漏掉的东西。
 > 每一项修正都带着一条回归测试，断言合成语料的行为**逐字节不变**。
+
 - 服务层的运行 id 与引擎自派生的 id 不一致 → 报告标题里的 id 在运行记录里查不到；
   改为引擎接受调用方传入的 run_id（不传时仍按配置派生，保证 CLI / 实验可复现）
 - 用量快照只读编排层那本账 → 报告出现"12 次调用、0 token"；改为合并模型客户端的

@@ -7,7 +7,7 @@
 ## 当前能力与后续职责
 
 | 能力 | 当前实现 | 后续升级 |
-|---|---|---|
+| --- | --- | --- |
 | 身份 | API Key、共享管理员口令换 JWT | 用户/组织/项目权限和逐资源授权 |
 | 配额 | 提交前检查、完成回调、唯一 run_id 账本 | 原子预算预占、结算/释放和对账 |
 | 任务 | 网关运行记录，Python 管执行与内部事件 | Java 状态机、可靠派发和权威事件 |
@@ -41,7 +41,7 @@ MySQL、Outbox、消息幂等和 attempt/fencing 按阶段落地。XA/TCC/Seata�
 ## 端点
 
 | 网关端点 | 说明 |
-|---|---|
+| --- | --- |
 | `GET /health`、`GET /ready` | 转发上游探针 |
 | `GET /api/v1/meta` | 转发上游能力与默认配置 |
 | `POST /api/v1/audits` | 提交审查（限流更严、**不重试**、**转发前校验配额**） |
@@ -138,7 +138,7 @@ export PARALLAX_CALLBACK_TOKEN=$PARALLAX_GATEWAY_INTERNAL_TOKEN
 ## 配置
 
 | 环境变量 | 默认 | 说明 |
-|---|---|---|
+| --- | --- | --- |
 | `PARALLAX_GATEWAY_PORT` | `8080` | 网关端口 |
 | `PARALLAX_UPSTREAM_URL` | `http://127.0.0.1:8000` | 上游编排服务地址 |
 | `PARALLAX_DB_URL` / `_USER` / `_PASSWORD` | `jdbc:postgresql://127.0.0.1:5432/parallax` | 平台数据存储 |
@@ -181,11 +181,13 @@ python tools/mutation_audit.py :: Java 关键策略变异门禁（临时副本�
 不让基础设施成为本地开发的阻塞项。
 
 > 本机没有全局 Maven / JDK 21 时，用仓内便携工具链：
+>
 > ```bat
 > set JAVA_HOME=%CD%\..\.toolchain\jdk
 > set PATH=%JAVA_HOME%\bin;%CD%\..\.toolchain\maven\bin;%PATH%
 > mvn -o -B test
 > ```
+>
 > 详见 [../../说明材料/本地构建.md](../../说明材料/本地构建.md)。
 
 MySQL 升级后需增加真实 MySQL 的迁移、锁和隔离测试；H2/历史 PG 结果不能代替。跳过的集成测试不得记为通过。

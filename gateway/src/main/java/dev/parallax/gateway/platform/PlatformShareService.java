@@ -1,6 +1,5 @@
 package dev.parallax.gateway.platform;
 
-import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.sql.ResultSet;
 import java.sql.SQLException;

@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -77,7 +78,10 @@ class PlatformPrWebhookIntegrationTest {
                 "pull_request", Map.of("number", 42, "head", Map.of("sha", headSha))));
     }
 
-    private ResponseEntity<Map> webhook(String deliveryId, String event, String body, String signature)
+    private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =
+            new ParameterizedTypeReference<>() { };
+
+    private ResponseEntity<Map<String, Object>> webhook(String deliveryId, String event, String body, String signature)
             throws Exception {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -85,10 +89,10 @@ class PlatformPrWebhookIntegrationTest {
         if (deliveryId != null) headers.set("X-GitHub-Delivery", deliveryId);
         if (signature != null) headers.set("X-Hub-Signature-256", signature);
         return rest.exchange("/api/v1/platform/webhooks/github", HttpMethod.POST,
-                new HttpEntity<>(body, headers), Map.class);
+                new HttpEntity<>(body, headers), MAP_TYPE);
     }
 
-    private ResponseEntity<Map> signedWebhook(String deliveryId, String event, String body) throws Exception {
+    private ResponseEntity<Map<String, Object>> signedWebhook(String deliveryId, String event, String body) throws Exception {
         return webhook(deliveryId, event, body, signature(body));
     }
 
@@ -98,7 +102,7 @@ class PlatformPrWebhookIntegrationTest {
         return "sha256=" + HexFormat.of().formatHex(mac.doFinal(body.getBytes(StandardCharsets.UTF_8)));
     }
 
-    private ResponseEntity<Map> linkRequest(String token, Fixture fixture, String externalId) {
+    private ResponseEntity<Map<String, Object>> linkRequest(String token, Fixture fixture, String externalId) {
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(token);
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -106,7 +110,7 @@ class PlatformPrWebhookIntegrationTest {
                 "/api/v1/platform/projects/" + fixture.project + "/repositories/" + fixture.repository + "/links",
                 HttpMethod.POST,
                 new HttpEntity<>(Map.of("provider", "GITHUB", "externalId", externalId, "tokenBudget", 100L), headers),
-                Map.class);
+                MAP_TYPE);
     }
 
     @Test

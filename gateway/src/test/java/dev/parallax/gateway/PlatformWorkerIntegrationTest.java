@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -37,6 +38,17 @@ class PlatformWorkerIntegrationTest {
     @Autowired PlatformArtifactService artifacts;
     @Autowired PlatformRepairReviewService reviews;
 
+    private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =
+            new ParameterizedTypeReference<>() { };
+
+    private ResponseEntity<Map<String, Object>> post(String path, Object body, HttpHeaders headers) {
+        return rest.exchange(path, HttpMethod.POST, new HttpEntity<>(body, headers), MAP_TYPE);
+    }
+
+    private ResponseEntity<Map<String, Object>> get(String path, HttpHeaders headers) {
+        return rest.exchange(path, HttpMethod.GET, new HttpEntity<>(headers), MAP_TYPE);
+    }
+
     @Test
     void executionSnapshotRequiresPrivateCredentialAndAnExactLeasedContract() {
         var f=fixture();
@@ -44,11 +56,11 @@ class PlatformWorkerIntegrationTest {
         dispatch(f);
         String endpoint="/api/v1/internal/platform/execution-snapshot";
         var h=new HttpHeaders();h.setContentType(MediaType.APPLICATION_JSON);
-        assertThat(rest.postForEntity(endpoint,new HttpEntity<>(f.task.dispatch(),h),Map.class).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(post(endpoint,f.task.dispatch(),h).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         h.setBearerAuth(jwt.issueUserToken(f.user,"test"));
-        assertThat(rest.postForEntity(endpoint,new HttpEntity<>(f.task.dispatch(),h),Map.class).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(post(endpoint,f.task.dispatch(),h).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         h=new HttpHeaders();h.setContentType(MediaType.APPLICATION_JSON);h.set("X-Internal-Token","test-internal-token");
-        var response=rest.postForEntity(endpoint,new HttpEntity<>(f.task.dispatch(),h),Map.class);
+        var response=post(endpoint,f.task.dispatch(),h);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).containsEntry("clone_url","https://github.com/team/api").containsEntry("cancel_requested",false);
         String json=(String)response.getBody().get("policy_json");
@@ -111,15 +123,15 @@ class PlatformWorkerIntegrationTest {
         artifact(f);coordinator.receive(event(f.task,2,WorkerEvent.Kind.SUCCEEDED,30,10));
         String endpoint="/api/v1/platform/projects/"+f.project+"/tasks/"+f.task.id()+"/result";
         var headers=new HttpHeaders();headers.setBearerAuth(jwt.issueUserToken(f.user,"test"));
-        var response=rest.exchange(endpoint,HttpMethod.GET,new HttpEntity<>(headers),Map.class);
+        var response=get(endpoint,headers);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).containsEntry("content","{}").containsEntry("sha256",digestHex("{}"));
         var stranger=fixture();
         headers.setBearerAuth(jwt.issueUserToken(stranger.user,"test"));
-        assertThat(rest.exchange(endpoint,HttpMethod.GET,new HttpEntity<>(headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(get(endpoint,headers).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         jdbc.update("DELETE FROM platform_membership WHERE organization_id=? AND user_id=?",f.org,f.user);
         headers.setBearerAuth(jwt.issueUserToken(f.user,"test"));
-        assertThat(rest.exchange(endpoint,HttpMethod.GET,new HttpEntity<>(headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(get(endpoint,headers).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         jdbc.update("INSERT INTO platform_membership(organization_id,user_id,role) VALUES (?,?,'VIEWER')",f.org,f.user);
         jdbc.update("UPDATE platform_task_artifact SET content='tampered' WHERE task_id=?",f.task.id());
         assertThatThrownBy(()->artifacts.result(f.user,f.project,f.task.id())).hasMessageContaining("integrity");
@@ -131,11 +143,11 @@ class PlatformWorkerIntegrationTest {
         String endpoint="/api/v1/internal/platform/artifacts";
         var upload=new PlatformArtifactService.Upload(f.task.id(),1,1,UUID.randomUUID().toString(),digestHex("{}"),"{}");
         var headers=new HttpHeaders();headers.setContentType(MediaType.APPLICATION_JSON);
-        assertThat(rest.postForEntity(endpoint,new HttpEntity<>(upload,headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(post(endpoint,upload,headers).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         headers.setBearerAuth(jwt.issueUserToken(f.user,"test"));
-        assertThat(rest.postForEntity(endpoint,new HttpEntity<>(upload,headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(post(endpoint,upload,headers).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         headers=new HttpHeaders();headers.setContentType(MediaType.APPLICATION_JSON);headers.set("X-Internal-Token","test-internal-token");
-        var response=rest.postForEntity(endpoint,new HttpEntity<>(upload,headers),Map.class);
+        var response=post(endpoint,upload,headers);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).containsEntry("sha256",digestHex("{}")).containsEntry("taskId",f.task.id());
     }
@@ -288,15 +300,15 @@ class PlatformWorkerIntegrationTest {
         var started=event(f.task,1,WorkerEvent.Kind.STARTED,0,0);
         var h=new HttpHeaders();h.setContentType(MediaType.APPLICATION_JSON);
         String ingress="/api/v1/internal/platform/events";
-        assertThat(rest.postForEntity(ingress,new HttpEntity<>(started,h),Map.class).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(post(ingress,started,h).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         h.set("X-Internal-Token","test-internal-token");
-        assertThat(rest.postForEntity(ingress,new HttpEntity<>(Map.of("schema_version",1,"unexpected",true),h),Map.class).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(rest.postForEntity(ingress,new HttpEntity<>(started,h),Map.class).getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(rest.postForEntity(ingress,new HttpEntity<>(started,h),Map.class).getBody()).containsEntry("accepted",false);
+        assertThat(post(ingress,Map.of("schema_version",1,"unexpected",true),h).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(post(ingress,started,h).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(post(ingress,started,h).getBody()).containsEntry("accepted",false);
         coordinator.receive(event(f.task,2,WorkerEvent.Kind.FAILED,10,1));
         String replay="/api/v1/platform/projects/"+f.project+"/tasks/"+f.task.id()+"/events";
         h=new HttpHeaders();h.setBearerAuth(jwt.issueUserToken(f.user,"test"));
-        var first=rest.exchange(replay+"?limit=2",HttpMethod.GET,new HttpEntity<>(h),Map.class);
+        var first=get(replay+"?limit=2",h);
         assertThat(first.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat((java.util.List<?>)first.getBody().get("items")).hasSize(2);
         long cursor=((Number)first.getBody().get("nextCursor")).longValue();

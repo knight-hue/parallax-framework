@@ -49,12 +49,12 @@ python -m venv .venv
 
 采用 [Conventional Commits](https://www.conventionalcommits.org/)：
 
-```
+```text
 <type>(<scope>): <subject>
 ```
 
 | type | 用途 |
-|---|---|
+| --- | --- |
 | `feat` | 新功能 |
 | `fix` | 修 bug |
 | `docs` | 只改文档 |

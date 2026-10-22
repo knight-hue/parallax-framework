@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -31,15 +32,18 @@ class PlatformIdentityIntegrationTest {
 
     private static final String PASSWORD = "correct-password-123";
 
-    private ResponseEntity<Map> call(HttpMethod method, String path, String token, Object body) {
+    private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =
+            new ParameterizedTypeReference<>() { };
+
+    private ResponseEntity<Map<String, Object>> call(HttpMethod method, String path, String token, Object body) {
         var headers = new HttpHeaders();
         if (token != null) headers.setBearerAuth(token);
-        return rest.exchange(path, method, new HttpEntity<>(body, headers), Map.class);
+        return rest.exchange(path, method, new HttpEntity<>(body, headers), MAP_TYPE);
     }
 
     private String admin() { return jwt.issueAccessToken("operator", "ADMIN"); }
 
-    private Map user() {
+    private Map<String, Object> user() {
         String name = "user-" + UUID.randomUUID();
         var response = call(HttpMethod.POST, "/api/v1/platform/users", admin(),
                 Map.of("username", name, "password", PASSWORD));
@@ -47,7 +51,7 @@ class PlatformIdentityIntegrationTest {
         return response.getBody();
     }
 
-    private String token(Map user) {
+    private String token(Map<String, Object> user) {
         var response = call(HttpMethod.POST, "/api/v1/auth/login", null,
                 Map.of("username", user.get("username"), "password", PASSWORD));
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -62,7 +66,7 @@ class PlatformIdentityIntegrationTest {
 
     @Test
     void projectResourcesAreIsolatedAndMembershipRevocationIsLive() {
-        Map owner = user(); Map outsider = user();
+        Map<String, Object> owner = user(); Map<String, Object> outsider = user();
         String ownerToken = token(owner), outsiderToken = token(outsider);
         String org = organization(ownerToken);
         var project = call(HttpMethod.POST, "/api/v1/platform/organizations/" + org + "/projects",
@@ -84,7 +88,7 @@ class PlatformIdentityIntegrationTest {
 
     @Test
     void disabledUsersCannotReuseExistingTokensOrLogin() {
-        Map user = user(); String token = token(user);
+        Map<String, Object> user = user(); String token = token(user);
         assertThat(call(HttpMethod.GET, "/api/v1/platform/me", token, null).getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(call(HttpMethod.DELETE, "/api/v1/platform/users/" + user.get("id"), admin(), null).getStatusCode())
                 .isEqualTo(HttpStatus.OK);
@@ -95,7 +99,7 @@ class PlatformIdentityIntegrationTest {
 
     @Test
     void passwordHashesAndCredentialsAreNotExposed() {
-        Map user = user();
+        Map<String, Object> user = user();
         assertThat(user).doesNotContainKeys("password", "password_hash", "passwordHash");
         String stored = jdbc.queryForObject("SELECT password_hash FROM platform_user WHERE id = ?", String.class, user.get("id"));
         assertThat(stored).startsWith("$2a$12$").isNotEqualTo(PASSWORD);
@@ -107,7 +111,7 @@ class PlatformIdentityIntegrationTest {
 
     @Test
     void normalUserCannotProvisionUsersAndOwnerCannotRemoveItself() {
-        Map user = user(); String token = token(user); String org = organization(token);
+        Map<String, Object> user = user(); String token = token(user); String org = organization(token);
         assertThat(call(HttpMethod.POST, "/api/v1/platform/users", token,
                 Map.of("username", "unauthorized", "password", PASSWORD)).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(call(HttpMethod.DELETE, "/api/v1/platform/organizations/" + org + "/members/" + user.get("id"), token, null)
@@ -117,7 +121,7 @@ class PlatformIdentityIntegrationTest {
 
     @Test
     void normalizedDuplicatesAreConflictsAndDoNotCreateAuditEntries() {
-        Map user = user();
+        Map<String, Object> user = user();
         var response = call(HttpMethod.POST, "/api/v1/platform/users", admin(),
                 Map.of("username", user.get("username").toString().toUpperCase(java.util.Locale.ROOT), "password", PASSWORD));
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);

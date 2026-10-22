@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -44,11 +45,13 @@ class PlatformTaskIntegrationTest {
         tasks.configureBudget("test-admin",org.id(),limit);
         return new Fixture(user.id(),org.id(),project.id(),new PlatformTaskService.Submission(repo.id(),policy.id(),"a".repeat(40),100));
     }
-    private ResponseEntity<Map> call(HttpMethod method,String path,String token,Object body,String key) {
+    private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =
+            new ParameterizedTypeReference<>() { };
+    private ResponseEntity<Map<String, Object>> call(HttpMethod method,String path,String token,Object body,String key) {
         var headers=new HttpHeaders(); headers.setBearerAuth(token);
         headers.set("X-Trace-Id","untrusted.trace/value");
         if(key!=null) headers.set("Idempotency-Key",key);
-        return rest.exchange(path,method,new HttpEntity<>(body,headers),Map.class);
+        return rest.exchange(path,method,new HttpEntity<>(body,headers),MAP_TYPE);
     }
     private String token(String user) { return jwt.issueUserToken(user,"test"); }
     private String base(Fixture f) { return "/api/v1/platform/projects/"+f.project+"/tasks"; }

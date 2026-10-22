@@ -1,0 +1,15 @@
+# 评测产物：模型原始输出的证据文档，必须逐字保留，不做 Markdown 规范改写
+eval/real/**
+eval/results/**
+eval/acceptance/**
+
+# 本忽略文件自身不是 Markdown 文档
+.markdownlintignore
+
+# 第三方依赖与工具链
+frontend/node_modules/**
+frontend/.next/**
+.toolchain/**
+backend/.venv/**
+backend/runs/**
+gateway/target/**

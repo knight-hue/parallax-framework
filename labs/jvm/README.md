@@ -7,7 +7,7 @@ powershell -File .\run.ps1
 ```
 
 | 实验 | 观察点 |
-|---|---|
+| --- | --- |
 | `JmmVisibilityLab` | 普通布尔读不保证观察到另一线程的写入；`volatile` 提供 happens-before |
 | `VolatileCounterRace` | `volatile++` 是读-改-写复合操作，会丢失更新；它不保证原子性 |
 | `SafePublicationLab` | `volatile` 引用 + `final` 字段的安全发布 |
