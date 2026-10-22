@@ -34,6 +34,9 @@ class WorkerHttpBridgeTest {
             calls.incrementAndGet();
             assertThat(exchange.getRequestHeaders().getFirst("Upgrade")).isNull();
             assertThat(exchange.getRequestHeaders().getFirst("X-Internal-Token")).isEqualTo("test-token");
+            assertThat(exchange.getRequestHeaders().getFirst("X-Trace-Id"))
+                    .as("下游必须收到可关联的 traceId")
+                    .matches("[A-Za-z0-9_-]{1,64}");
             assertThat(new String(exchange.getRequestBody().readAllBytes(),java.nio.charset.StandardCharsets.UTF_8)).isEqualTo(json);
             exchange.sendResponseHeaders(status.get(),-1);exchange.close();
         });server.start();
