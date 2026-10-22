@@ -12,15 +12,17 @@ Java 默认运行档和 Compose 已切为 MySQL，旧 PostgreSQL 作为显式回
 
 | 范围 | 当前差距 |
 | --- | --- |
-| MySQL 平台数据 | 默认运行档、独立迁移、真库测试与离线复制已实现；8.4、现场备份恢复与新任务表并发验收待完成 |
+| MySQL 平台数据 | 默认运行档、独立迁移、真库测试与离线复制已实现；已在 MySQL 8.4.0 上跑完 113 项单测 + 8 项真库集成，覆盖 V10/V11 新增表迁移与 19 张表离线复制；现场备份恢复与容量验收待完成 |
 | Java 业务主体 | 用户/组织/项目权限、仓库/策略、集合分页、平台任务、报告产物及修复提案/审批/回归回执已实现；工作台已接入 Java 任务与审批入口，组织/项目管理 UI 待完善 |
-| 可靠执行与额度 | 预占/结算/释放/对账、Outbox、Inbox、fencing/心跳/恢复与事件重放已实现；Java MQ 发布/消费和后台恢复已接线但默认关闭，Python/工作台切换、真 RabbitMQ 与多实例故障验收待完成 |
+| 可靠执行与额度 | 预占/结算/释放/对账、Outbox、Inbox、fencing/心跳/恢复与事件重放已实现；真实 RabbitMQ 4.1.4 上 3 项分发集成测试通过；Java MQ 发布/消费默认关闭，Python/工作台切换与多实例故障验收待完成 |
 | 缓存与可观测 | 策略只读缓存、Redisson 可选重建锁、TTL/故障回源、真实 Redis 集成测试已通过；任务/Worker/审批/缓存/Outbox 指标已接入；Worker 已有可终止子进程模式和并发上限；容器/VM 隔离、Prometheus 采集、多实例故障、跨进程诊断及容量验收待完善 |
 | 研发闭环 | Java 侧权限/审批/产物管理已实现；GitHub PR 签名、项目绑定、固定 commit 与 delivery 幂等已实现；GitLab、真实 webhook 现场验收、Java 缺陷样例和容器/VM 级隔离执行器仍待完成 |
 | 后置扩展 | 报告安全分享已实现：128 位高熵短码、哈希存储、过期、撤销、访问上限和聚合统计；独立短链域名、热点容量与多实例验收待完成 |
-| 原理与故障实验 | JVM、并发、Redis、Spring、秒杀实验已运行；2PC/TCC 已用独立 SQLite 资源模拟；MySQL 8.4 真库锁/MVCC 与 Seata AT/TCC 因本机无可用目标服务/依赖未运行 |
+| 原理与故障实验 | JVM、并发、Redis、Spring、秒杀、2PC/TCC 模拟已运行；Seata 2.6 AT/TCC 已对真实服务端与 MySQL 8.4 跑通 6 项；MySQL 原理实验（B+ 树、MVCC、隔离级别、锁与死锁、EXPLAIN）待补 |
 
 2026-10-21 Worker 增量：平台模式已接入启动自动重放、周期续租、deadline 中断和退出取消；回执按 task/attempt 加锁，慢重放不阻塞其他任务心跳。执行中断或失联不以零用量退款，由 Java 保守恢复。Java↔Python 独立进程真实 HTTP 已通过，覆盖 STARTED、心跳、产物摘要、结算、重启去重、权限拒绝和取消失联；Python 全量 381 项、gateway 离线 Maven 测试通过。尚未据此证明真实 RabbitMQ、多实例或公网生产运行。
+
+2026-10-22 基础设施验收增量：本机部署 MySQL 8.4.0、RabbitMQ 4.1.4 + Erlang OTP 27.3、Seata Server 2.6.0（均免安装于 E 盘，数据不落 C 盘）。在真 MySQL 8.4 与真 PostgreSQL 16 上跑完整 `verify`：单测 113、`MysqlPersistenceIT` 8 项全过；同时修复离线迁移表清单遗漏 V10/V11 三张表、以及 V10 种入 `system.webhook` 使空目标库判定永久失败两个缺陷。真 RabbitMQ 上 `RabbitDispatchIT` 3 项通过。`labs/seata` 6 项通过，并更正了此前“提交后 `undo_log` 不清理”的错误结论：RM 异步清理存在约 10 秒延迟。
 
 仅更新文档不会改变上述实现状态。阶段以升级方案 P0—P6、E1、L1 验收，历史数量不作为新增能力的测试结果。
 
