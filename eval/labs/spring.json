@@ -1,0 +1,23 @@
+{
+  "module": "labs-spring",
+  "date": "2026-10-22",
+  "checks": {
+    "spring_boot": "3.5.16",
+    "jdk": "21.0.12.1",
+    "spring_lab_tests": {"passed": 3, "failed": 0, "skipped": 0},
+    "offline_maven": true
+  },
+  "verified_behaviors": [
+    "auto-configuration applies when no user bean exists",
+    "a user bean overrides the auto-configured bean",
+    "BeanPostProcessor order: beforeInitialization, @PostConstruct, afterPropertiesSet, afterInitialization",
+    "destroy callback runs on context close",
+    "ProxyFactory intercepts interface calls",
+    "self-invocation bypasses the proxy"
+  ],
+  "limitations": [
+    "Minimal Spring context, not the full platform startup",
+    "No real transaction propagation, async or database proxy test in this lab",
+    "Spring AOP source reading remains a manual exercise"
+  ]
+}
