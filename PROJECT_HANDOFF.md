@@ -27,11 +27,11 @@ Java 从网关升级为平台业务主体；平台统一使用 MySQL；Python �
 ## 2026-10-22 接手顺序
 
 1. 先运行 Java `mvn -o -q test`、Python pytest/Ruff 和前端 typecheck/lint/build，确认环境没有回归。
-2. 优先补 PR 托管平台接入：至少实现 GitHub webhook/query 的签名校验、项目绑定、固定 head commit 和幂等；禁止把客户端 URL 当作拉取地址。
-3. 补平台任务、Outbox、Worker、审批验证和缓存的 Micrometer 指标与运行诊断；为长任务执行器设置有界线程/进程资源。
+2. GitHub PR 签名接入、项目绑定、固定 head commit 与 delivery 幂等已实现；补 GitLab 和真实 webhook 验收，禁止把客户端 URL 当作拉取地址。
+3. 任务、Outbox、Worker、审批、缓存和分享指标已接入；补 Prometheus 采集、跨进程 trace，并为长任务执行器设置有界线程/进程资源。
 4. 在不下载镜像的前提下，若本机已有 RabbitMQ/Redis/MySQL 目标服务，运行真实 broker、多实例故障、备份恢复和容量验收；没有服务就记录为未验收，不伪造结果。
 5. 独立完成 `labs/jvm`、`labs/concurrency`、`labs/mysql`、`labs/redis`、`labs/spring`、`labs/distributed-tx`、`labs/flash-sale` 实验；实验不能接入默认生产拓扑。
-6. 核心闭环完成后再做安全报告分享/短链：高熵短码、过期、撤销、权限、缓存失效和统计幂等。
+6. 报告安全分享已有基础实现；补独立短链域名、热点容量、多实例和统计幂等验收。
 
 ## 当前明确未完成
 
@@ -41,6 +41,6 @@ Java 从网关升级为平台业务主体；平台统一使用 MySQL；Python �
 - S3 兼容产物存储；当前报告产物仍是有大小上限的 MySQL 存储。
 - Worker 专用隔离执行器的容量和强制终止验收。
 - 全套 JVM/AQS/MySQL/Redis/Spring/分布式事务/秒杀实验。
-- 报告安全分享与短链扩展。
+- 报告安全分享已有基础实现：高熵短码、哈希存储、过期、撤销、访问上限和审计；独立短链域名、热点容量与多实例验收待完成。
 
 现场交付需要部署方提供服务器、TLS 入口、正式运行镜像及工作负载。单 API worker 是当前支持的拓扑；完整动态语义分析与跨节点协调未实现。不得将本机验收说成公网生产已上线。

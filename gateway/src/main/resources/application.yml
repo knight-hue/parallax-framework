@@ -81,6 +81,10 @@ parallax:
     # Empty disables the GitHub webhook endpoint. Set it to the same secret configured in GitHub.
     github-secret: ${PARALLAX_GITHUB_WEBHOOK_SECRET:}
     max-body-bytes: ${PARALLAX_GITHUB_WEBHOOK_MAX_BODY_BYTES:1000000}
+  share:
+    default-expiry-seconds: ${PARALLAX_SHARE_DEFAULT_EXPIRY_SECONDS:604800}
+    max-expiry-seconds: ${PARALLAX_SHARE_MAX_EXPIRY_SECONDS:2592000}
+    max-accesses: ${PARALLAX_SHARE_MAX_ACCESSES:100000}
 
 resilience4j:
   circuitbreaker:

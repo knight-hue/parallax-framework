@@ -183,3 +183,16 @@
 - 新增 `PlatformOutboxMetrics`：`parallax.outbox.pending`、`parallax.outbox.inflight` 与 `parallax.outbox.oldest.age.seconds`，在抓取时查询且异常返回 0，不阻断健康检查。
 - 验证：`PlatformMetricsTest`、`PlatformMetricsIntegrationTest`、Java 全量 109 项、真实 Redis 缓存 IT 4 项通过。未声称 Prometheus、多实例或容量验收完成。脱敏摘要：`eval/java-platform/metrics.json`。
 
+## 报告安全分享与高熵短码
+
+状态：已实现并通过集成测试；独立短链域名、热点容量、多实例和目标 MySQL 8.4 验收待完成。
+
+- V11 新增 `platform_share_link`：只保存 token 的 SHA-256，不保存原始 token；记录创建人、有效期、撤销时间、最大访问次数、累计访问次数和最后访问时间。
+- 分享创建要求项目 REVIEWER 权限，且任务已成功并存在经验证的产物；默认有效期 7 天、最大 30 天，访问次数上限受配置约束。
+- 使用 128 位 `SecureRandom` 生成 22 字符 URL-safe 短码；唯一键冲突时在独立事务中重试，最多 3 次。
+- 匿名访问 `GET /api/v1/platform/shares/{token}`；未知、过期、撤销和次数耗尽统一返回 404，避免泄漏分享状态。
+- 访问上限通过条件更新原子执行；并发请求不会超过 `max_accesses`；访问成功才提交计数和最后访问时间。
+- 响应设置 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`、`X-Content-Type-Options: nosniff` 和 `X-Robots-Tag: noindex`；因不使用缓存，撤销和过期立即生效。
+- 创建与撤销写审计；访问只记录聚合统计，不保存访问者 IP 等个人信息。分享接口沿用 `/api/` 的现有 IP + 主体限流。
+- 验证：`PlatformShareIntegrationTest` 4 项（匿名读取、哈希存储、过期/撤销、跨项目/非成功任务拒绝、并发上限）、Java 全量 113 项通过；V11 在 H2/Flyway 上执行成功。未执行热点容量、独立短链域名或目标 MySQL 8.4 验收。脱敏摘要：`eval/java-platform/share-links.json`。
+

@@ -14,6 +14,7 @@ public class ParallaxProperties {
     private final Identity identity = new Identity();
     private final Cache cache = new Cache();
     private final Webhooks webhooks = new Webhooks();
+    private final Share share = new Share();
 
     public Gateway getGateway() {
         return gateway;
@@ -37,6 +38,24 @@ public class ParallaxProperties {
 
     public Webhooks getWebhooks() {
         return webhooks;
+    }
+
+    public Share getShare() {
+        return share;
+    }
+
+    /** Secure report share links. Tokens are random and stored only as SHA-256 hashes. */
+    public static class Share {
+        private int defaultExpirySeconds = 604_800;
+        private int maxExpirySeconds = 2_592_000;
+        private int maxAccesses = 100_000;
+
+        public int getDefaultExpirySeconds() { return defaultExpirySeconds; }
+        public void setDefaultExpirySeconds(int defaultExpirySeconds) { this.defaultExpirySeconds = defaultExpirySeconds; }
+        public int getMaxExpirySeconds() { return maxExpirySeconds; }
+        public void setMaxExpirySeconds(int maxExpirySeconds) { this.maxExpirySeconds = maxExpirySeconds; }
+        public int getMaxAccesses() { return maxAccesses; }
+        public void setMaxAccesses(int maxAccesses) { this.maxAccesses = maxAccesses; }
     }
 
     /** Signed repository-provider webhooks. An empty secret disables the endpoint. */

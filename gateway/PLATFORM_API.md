@@ -231,3 +231,34 @@ implemented yet.
 Project, repository, delivery and credential identifiers are never metric tags. The
 outbox gauges query MySQL at scrape time and return zero on query failure so a metrics
 problem cannot take down health probes.
+
+## Secure report shares
+
+Create a share for a successful task result with project REVIEWER permission:
+
+```text
+POST /api/v1/platform/projects/{projectId}/tasks/{taskId}/shares
+{
+  "expiresInSeconds": 604800,
+  "maxAccesses": 100
+}
+```
+
+`expiresInSeconds` defaults to 7 days and is bounded by `PARALLAX_SHARE_MAX_EXPIRY_SECONDS`
+(default 30 days). `maxAccesses` is optional and bounded by `PARALLAX_SHARE_MAX_ACCESSES`.
+The response contains the raw token and path exactly once. Only a SHA-256 hash is stored.
+
+```text
+GET /api/v1/platform/shares/{token}
+```
+
+This endpoint is anonymous and returns the verified report artifact with `Cache-Control:
+no-store`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff` and
+`X-Robots-Tag: noindex, nofollow`. Unknown, expired, revoked and exhausted tokens all
+return the same 404. Access counting is atomic, so concurrent requests cannot exceed
+`maxAccesses`. Shares are not cached, so revocation and expiry take effect immediately.
+
+Revoke with `DELETE /api/v1/platform/projects/{projectId}/tasks/{taskId}/shares/{shareId}`.
+The creator or a maintainer may revoke. Listing shares never returns the raw token.
+The share endpoint uses the existing `/api/` IP plus subject rate limiter; a dedicated
+short-domain redirect service and per-tenant share quotas are not implemented.

@@ -253,7 +253,7 @@ class MyValidator:                    # ③ 可选：入账否决权
 | 原子预算与可靠执行 | 预占/结算/Outbox/Inbox/fencing/心跳/恢复已实现；真实 RabbitMQ、多实例故障与容量验收待完成 |
 | 研发闭环 | Java 侧审批/产物管理已实现；GitHub PR 绑定与签名 webhook 已实现，GitLab、真实 webhook、Java 缺陷样例和隔离执行器待完成 |
 | 缓存、容量与诊断 | 策略只读缓存、真实 Redis IT、任务/Worker/审批/缓存/Outbox 指标已实现；Prometheus 采集、多实例故障、JVM 排障和容量验收待完善 |
-| 后置扩展与独立实验 | 安全分享后置；JVM/AQS/MySQL/Redis/Spring、XA/TCC/Seata 和秒杀实验分别验收 |
+| 后置扩展与独立实验 | 报告安全分享已实现（高熵短码、过期、撤销、访问上限）；独立短链域名、热点容量与多实例验收待完善；JVM/AQS/MySQL/Redis/Spring、XA/TCC/Seata 和秒杀实验分别验收 |
 
 当前文件租约按单 API worker 使用，不承诺跨节点协调或 exactly-once。AST 上下文只是有限语法近似；声明血缘不能发现所有未知共同来源；high_confidence 不是正确性证明，指定回归通过不等于完整无缺陷。
 
