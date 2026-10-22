@@ -25,6 +25,18 @@ docker compose --env-file backend/.env -f docker-compose.yml -f docker-compose.p
 
 这是**进程级**隔离，不是容器/VM 安全沙箱；子进程共享宿主文件系统和网络，并通过环境继承模型配置。敌对租户或不可信代码仍需专用容器/VM。子进程请求文件不包含密钥，结果由父进程重新校验 SHA-256。
 
+### 容器模式（`container`）
+
+需要更强边界时设 `PARALLAX_PLATFORM_EXECUTION_MODE=container`。先在 `backend/` 下构建镜像（不拉取外部镜像）：
+
+```powershell
+docker build -f docker/sandbox.Dockerfile -t parallax-engine-sandbox:local .
+```
+
+每个任务起一个一次性容器：`--network none`、`--read-only` + `/tmp` tmpfs、源码只读挂到 `/src`、唯一可写的 `/work`、`--cap-drop ALL`、`no-new-privileges`、非 root（65534:65534）、PID/CPU/内存上限。超时或取消时容器被强制删除，结果仍要过 SHA-256 校验。引擎看到的只有 `/src`，拿不到宿主路径。
+
+两个边界必须说清：它**共享宿主内核**（不是 VM），且本次只验证了执行器与边界行为，生产镜像的构建与部署需在目标环境另行验收。限额参数：`PARALLAX_PLATFORM_CONTAINER_IMAGE` / `_MEMORY_MB` / `_CPUS` / `_PIDS` / `_TMPFS_MB`。
+
 ## 修复闭环
 
 `PARALLAX_ENABLE_REPAIR=true` 只应在专用隔离 worker 服务实例开启。普通生产 API 默认关闭。专用 worker 必须本地安装 Docker CLI，拥有已缓存的执行镜像，并能把快照的绝对路径挂入该宿主的 Docker daemon；不要给公网 API 容器挂宿主 Docker socket。
