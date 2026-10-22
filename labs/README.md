@@ -3,7 +3,7 @@
 这些实验用于原理验证和故障排查训练，**独立启动、独立数据，不接入平台默认生产拓扑**。
 
 | 实验 | 状态 | 运行方式 |
-|---|---|---|
+| --- | --- | --- |
 | `labs/jvm` | 已运行验证 | `powershell -File labs/jvm/run.ps1` |
 | `labs/concurrency` | 已运行验证 | `powershell -File labs/concurrency/run.ps1` |
 | `labs/mysql` | 待补 | 需要目标 MySQL 8.4 / 本机 MySQL 服务 |

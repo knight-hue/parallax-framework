@@ -25,7 +25,7 @@
 ## 2. 本轮代码审查结论
 
 | 用户要求 | 当前证据 | 结论 |
-|---|---|---|
+| --- | --- | --- |
 | JVM/JMM、类加载、G1/ZGC、OOM | Java 21；gateway/Dockerfile 默认 UseSerialGC，未发现完整诊断配置和实验 | 未覆盖要求深度 |
 | AQS、线程池原理 | 有 synchronized、volatile、AtomicLong 和 SSE 流式转发；未发现专门的 AQS 实验和业务线程池治理配置 | 部分使用并发工具，不等于源码级掌握 |
 | MySQL 索引/MVCC/锁/慢查询 | gateway/pom.xml、application.yml 和迁移使用 PostgreSQL | 未实现 MySQL 体系 |
@@ -214,7 +214,7 @@ Redis 连接与命令统一配置。接入 Redisson 后评估替换当前限流�
 为完整覆盖要求，增加独立的“双资源预占”实验：额度服务与隔离执行槽位服务各有独立数据库/事务资源。仅用于分布式事务研究，不伪装成生产必需的微服务拆分。
 
 | 模式 | 实验与必须解释的问题 |
-|---|---|
+| --- | --- |
 | XA/2PC | 使用真实 XA 资源和协调器演示 prepare/commit，观察协调器故障、prepared 状态、锁占用及恢复；不把手写两次 HTTP 请求称作 2PC |
 | TCC | Try 预占、Confirm 确认、Cancel 释放；事务分支表及唯一键，覆盖重复调用、空回滚、防悬挂和超时竞争 |
 | Seata | 固定与 Boot/JDK/MySQL 兼容的版本，完成至少 AT 与 TCC 对照；AT 观察 undo_log、全局锁、回滚及冲突，不等同于 XA 实现 |
@@ -253,7 +253,7 @@ Redis 成功仅代表预受理，不能立即声称领取成功；以持久结�
 ## 11. 分阶段交付
 
 | 阶段 | 产品与基础设施交付 | 配套实验/验收 |
-|---|---|---|
+| --- | --- | --- |
 | P0 契约与基线 | 模块边界、资源授权、任务状态机、MySQL 迁移和回退预演 | 原有回归基线；真实 MySQL schema/查询测试 |
 | P1 Java 核心 | 用户/组织/项目/策略、任务与报告、原子额度预占 | MySQL 索引/MVCC/锁；Spring 生命周期/AOP |
 | P2 可靠执行 | Outbox/Inbox、RabbitMQ、attempt/fencing、心跳、取消、事件重放 | 线程池/AQS；重复消息、失联、乱序和恢复 |

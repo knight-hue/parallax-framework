@@ -130,6 +130,7 @@
 - 开工确认返回取消时不启动引擎；任务 deadline、失联、过期拒绝及服务退出停止执行。已发起模型工作且用量不明时不伪报零用量终态，由 Java 租约恢复保守结算。心跳当前仅用于续租，最终用量在成功完成时上报，不宣称实时精确计费。
 - 新增 11 项测试覆盖长任务续租、失联/拒绝、取消、deadline、重启精确重放、退出及迟到开工、跨任务隔离和 FastAPI lifespan。Python 全量 381 项通过，Ruff/format 通过。
 - 源码归档线程受自身网络和大小超时约束，asyncio 取消不能强制杀死已经运行的线程；专用执行器、容量和跨节点验收仍待补齐。
+
 ## Java ↔ Python 独立进程 HTTP 联调
 
 状态：已实现并通过本机确定性跨进程验收；RabbitMQ、多实例和公网部署仍按限制项保留。
@@ -205,4 +206,3 @@
 - 子进程从继承的环境读取模型配置，请求文件只包含源码路径、任务 ID 和策略参数，不写密钥；结果文件包含内容、用量和摘要，父进程重新校验摘要。
 - `PlatformWorkerService` 增加 `platform_max_concurrent_tasks` 信号量；超出槽位的任务等待，仍受 Java deadline 约束。`PARALLAX_PLATFORM_EXECUTION_MODE=process` 启用子进程模式，默认保持 `inline` 兼容既有部署。
 - 验证：`test_platform_process_executor.py` 4 项（成功摘要、超时强杀、摘要不符、结构化子进程错误）、Worker 并发上限测试、Python 全量 386 项、Ruff/format 通过。该实现是进程级隔离，不是容器/VM 安全沙箱；未执行恶意代码或容器级容量验收。脱敏摘要：`eval/java-platform/worker-executor.json`。
-
