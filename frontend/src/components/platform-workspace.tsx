@@ -17,8 +17,10 @@ const taskTone: Record<PlatformTask['state'], 'neutral' | 'accent' | 'ok' | 'war
   SUCCEEDED: 'ok', FAILED: 'danger', CANCELED: 'neutral',
 };
 
-export function PlatformWorkspace() {
-  const [projectId, setProjectId] = useState('');
+export function PlatformWorkspace({ projectId: controlledProjectId, onProjectIdChange }: { projectId?: string; onProjectIdChange?: (value: string) => void }) {
+  const [manualProjectId, setManualProjectId] = useState('');
+  const projectId = controlledProjectId ?? manualProjectId;
+  const setProjectId = onProjectIdChange ?? setManualProjectId;
   const [repositoryId, setRepositoryId] = useState('');
   const [policyVersion, setPolicyVersion] = useState('');
   const [commitSha, setCommitSha] = useState('');

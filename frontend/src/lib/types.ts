@@ -203,3 +203,45 @@ export const CELL_SEPARATOR = '\u001f';
 export function cellKey(row: string, col: string): string {
   return `${row}${CELL_SEPARATOR}${col}`;
 }
+
+export interface PlatformCursorPage<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
+export interface PlatformOrganization {
+  id: string;
+  name: string;
+  role: string;
+}
+
+export interface PlatformProject {
+  id: string;
+  organizationId: string;
+  name: string;
+}
+
+export interface PlatformRepository {
+  id: string;
+  projectId: string;
+  name: string;
+  cloneUrl: string;
+}
+
+export interface PlatformPolicyConfig {
+  readers: number;
+  redundancy: number;
+  maxRounds: number;
+  minIndependentSupport: number;
+  falsifierEnabled: boolean;
+  maxTokenBudget: number;
+  deadlineSeconds: number;
+}
+
+export interface PlatformPolicy {
+  id: string;
+  projectId: string;
+  versionNumber: number;
+  config: PlatformPolicyConfig;
+  configSha256: string;
+}

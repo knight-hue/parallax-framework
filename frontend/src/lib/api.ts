@@ -6,6 +6,11 @@ import type {
   PlatformTask,
   PlatformTaskPage,
   PlatformRepairReview,
+  PlatformOrganization,
+  PlatformProject,
+  PlatformRepository,
+  PlatformPolicy,
+  PlatformCursorPage,
 } from './types';
 
 /**
@@ -130,5 +135,29 @@ export const api = {
 
   approvePlatformRepair: (projectId: string, taskId: string, reviewId: string, approvalDigest: string) =>
     request<PlatformRepairReview>(`/api/v1/platform/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/repairs/${encodeURIComponent(reviewId)}/approve`, { method: 'POST', body: JSON.stringify({ approvalDigest }) }),
+
+  platformOrganizations: () =>
+    request<PlatformCursorPage<PlatformOrganization>>('/api/v1/platform/organizations'),
+
+  createPlatformOrganization: (name: string) =>
+    request<PlatformOrganization>('/api/v1/platform/organizations', { method: 'POST', body: JSON.stringify({ name }) }),
+
+  platformProjects: (organizationId: string) =>
+    request<PlatformCursorPage<PlatformProject>>(`/api/v1/platform/organizations/${encodeURIComponent(organizationId)}/projects`),
+
+  createPlatformProject: (organizationId: string, name: string) =>
+    request<PlatformProject>(`/api/v1/platform/organizations/${encodeURIComponent(organizationId)}/projects`, { method: 'POST', body: JSON.stringify({ name }) }),
+
+  platformRepositories: (projectId: string) =>
+    request<PlatformCursorPage<PlatformRepository>>(`/api/v1/platform/projects/${encodeURIComponent(projectId)}/repositories`),
+
+  registerPlatformRepository: (projectId: string, payload: { name: string; cloneUrl: string }) =>
+    request<PlatformRepository>(`/api/v1/platform/projects/${encodeURIComponent(projectId)}/repositories`, { method: 'POST', body: JSON.stringify(payload) }),
+
+  platformPolicies: (projectId: string) =>
+    request<PlatformCursorPage<PlatformPolicy>>(`/api/v1/platform/projects/${encodeURIComponent(projectId)}/policies`),
+
+  publishPlatformPolicy: (projectId: string, config: PlatformPolicy['config']) =>
+    request<PlatformPolicy>(`/api/v1/platform/projects/${encodeURIComponent(projectId)}/policies`, { method: 'POST', body: JSON.stringify(config) }),
 
 };
