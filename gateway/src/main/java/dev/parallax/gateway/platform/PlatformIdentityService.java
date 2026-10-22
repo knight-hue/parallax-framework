@@ -169,6 +169,35 @@ public class PlatformIdentityService {
         return principal.userId();
     }
 
+    /**
+     * Ensure the disabled automation account can submit platform tasks for an
+     * organization. The account is created by Flyway and cannot log in because it
+     * is disabled; this method only manages its reviewer membership.
+     */
+    @Transactional
+    public void ensureWebhookReviewer(String organizationId, String userId) {
+        // Serialize the first membership insert for this organization so concurrent
+        // link requests cannot both observe "no membership" and race the unique key.
+        var organization = jdbc.queryForList("SELECT id FROM platform_organization WHERE id=? FOR UPDATE",
+                String.class, organizationId);
+        if (organization.isEmpty()) throw notFound();
+        int inserted = jdbc.update(
+                "INSERT INTO platform_membership (organization_id, user_id, role) "
+                        + "SELECT candidate.organization_id, candidate.user_id, candidate.role FROM "
+                        + "(SELECT CAST(? AS VARCHAR(36)) AS organization_id, CAST(? AS VARCHAR(36)) AS user_id, "
+                        + "CAST(? AS VARCHAR(16)) AS role) AS candidate "
+                        + "WHERE NOT EXISTS (SELECT 1 FROM platform_membership WHERE organization_id=? AND user_id=?)",
+                organizationId, userId, ProjectRole.REVIEWER.name(), organizationId, userId);
+        if (inserted == 0) {
+            var roles = jdbc.query("SELECT role FROM platform_membership WHERE organization_id=? AND user_id=?",
+                    (rs, n) -> ProjectRole.valueOf(rs.getString(1)), organizationId, userId);
+            if (roles.isEmpty() || !roles.getFirst().permits(ProjectRole.REVIEWER)) {
+                jdbc.update("UPDATE platform_membership SET role=? WHERE organization_id=? AND user_id=?",
+                        ProjectRole.REVIEWER.name(), organizationId, userId);
+            }
+        }
+    }
+
     void audit(String actor, String action, String resource) {
         jdbc.update("INSERT INTO platform_access_audit (id, actor, action, resource_id, at) VALUES (?, ?, ?, ?, ?)",
                 UUID.randomUUID().toString(), actor, action, resource, Timestamp.from(Instant.now()));

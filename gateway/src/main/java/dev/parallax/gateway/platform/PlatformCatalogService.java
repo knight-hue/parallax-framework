@@ -105,6 +105,19 @@ public class PlatformCatalogService {
                 (rs,n) -> policy(rs), projectId, id).stream().findFirst().orElseThrow(PlatformCatalogService::notFound));
     }
 
+    /**
+     * Latest immutable policy for a project-level automation binding.
+     *
+     * The caller must already have established the binding (for example a signed
+     * repository webhook). This method intentionally does not accept an actor and
+     * must not be exposed as a user-facing read endpoint.
+     */
+    Policy latestPolicyForAutomation(String projectId) {
+        return jdbc.query(
+                "SELECT id,project_id,version_number,config_json,config_sha256 FROM platform_policy_version WHERE project_id=? ORDER BY version_number DESC LIMIT 1",
+                (rs,n) -> policy(rs), projectId).stream().findFirst().orElseThrow(PlatformCatalogService::notFound);
+    }
+
     /** Only called after the internal worker boundary checks the authoritative task. */
     ExecutionPolicy executionPolicy(String projectId,String repositoryId,String policyId) {
         String url=jdbc.queryForList("SELECT clone_url FROM platform_repository WHERE project_id=? AND id=?",String.class,projectId,repositoryId)

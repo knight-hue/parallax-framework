@@ -249,10 +249,10 @@ class MyValidator:                    # ③ 可选：入账否决权
 
 | 最终目标 | 当前差距 |
 |---|---|
-| MySQL + Java 平台业务 | MySQL 运行档、迁移工具和组织项目权限已实现；策略与任务协调待完成 |
-| 原子预算与可靠执行 | 待实现预占/结算/释放、Outbox/Inbox、RabbitMQ、attempt/fencing、心跳和跨实例事件 |
-| 研发闭环 | 补齐 Java 侧审批/产物管理、PR 集成与 Java 缺陷样例 |
-| 缓存、容量与诊断 | Redisson 缓存治理、多实例故障、JVM 排障和实际环境验收待完善 |
+| MySQL + Java 平台业务 | 默认 MySQL 运行档、组织/项目权限、仓库/策略、任务/预算、产物和审批已实现；MySQL 8.4 与现场备份恢复待验收 |
+| 原子预算与可靠执行 | 预占/结算/Outbox/Inbox/fencing/心跳/恢复已实现；真实 RabbitMQ、多实例故障与容量验收待完成 |
+| 研发闭环 | Java 侧审批/产物管理已实现；GitHub PR 绑定与签名 webhook 已实现，GitLab、真实 webhook、Java 缺陷样例和隔离执行器待完成 |
+| 缓存、容量与诊断 | 策略只读缓存与真实 Redis IT 已通过；多实例故障、JVM 排障和容量验收待完善 |
 | 后置扩展与独立实验 | 安全分享后置；JVM/AQS/MySQL/Redis/Spring、XA/TCC/Seata 和秒杀实验分别验收 |
 
 当前文件租约按单 API worker 使用，不承诺跨节点协调或 exactly-once。AST 上下文只是有限语法近似；声明血缘不能发现所有未知共同来源；high_confidence 不是正确性证明，指定回归通过不等于完整无缺陷。
@@ -279,10 +279,10 @@ backend/                        Python 编排核心（唯一包含机制的部�
 │   ├─ engine.py    装配与执行
 │   ├─ reporting.py 报告渲染
 │   └─ cli.py       命令行入口
-└─ tests/           290 项（以 pytest 实际收集数为准）
+└─ tests/           381 项（以 pytest 实际收集数为准）
 
-frontend/                       Next.js 工作台（提交 / 实时事件流 / 账本 / 覆盖率矩阵）
-gateway/                        当前 Java 平台网关，后续扩展为平台业务后端
+frontend/                       Next.js 工作台（提交 / 实时事件流 / 账本 / 覆盖率矩阵 / Java 平台任务）
+gateway/                        Java 平台业务后端（身份、项目、任务、预算、Worker 协调、审批与 webhook）
 ├─ src/main/resources/db/migration/   Flyway 迁移（PG 与 H2 都可执行）
 ├─ src/test/java/.../support/         测试用的上游 HTTP 服务桩
 └─ README.md                          网关自身的说明与取舍
@@ -314,9 +314,13 @@ docker compose --env-file backend/.env -f docker-compose.yml -f docker-compose.p
 ### Git/PR 来源与复现验证
 
 提交接口除了 `repo_path` 还接受 `repo_url` 与 `commit_sha`。远程来源只允许 HTTPS，服务会浅克隆并以 detached HEAD
-检出指定提交；本地来源提供 `commit_sha` 时也会校验当前 HEAD，避免审查漂移代码。GitHub PR webhook 为
+检出指定提交；本地来源提供 `commit_sha` 时也会校验当前 HEAD，避免审查漂移代码。旧 Python 流程的 GitHub PR webhook 为
 `POST /api/v1/webhooks/github`，配置 `PARALLAX_WEBHOOK_SECRET` 后，服务只接受 HMAC-SHA256 签名的
 `opened`、`reopened`、`synchronize` 事件，并固定 PR head SHA。
+
+Java 平台的 PR 接入为 `POST /api/v1/platform/webhooks/github`：必须先把已登记仓库绑定到 GitHub repository id，
+配置 `PARALLAX_GITHUB_WEBHOOK_SECRET` 后按 `X-GitHub-Delivery` 幂等创建 Java 任务；详见
+[平台 API](gateway/PLATFORM_API.md)。GitLab 与真实 GitHub webhook 现场验收仍未完成。
 
 Claim 的 `reproduction_plan.command` 是显式 argv 列表。设置 `PARALLAX_ENABLE_REPRODUCTION=true` 才会执行，
 服务使用禁止拉取镜像、无网络、非 root、只读源码/根文件系统、资源受限的 Docker 执行器。
@@ -324,8 +328,8 @@ Claim 的 `reproduction_plan.command` 是显式 argv 列表。设置 `PARALLAX_E
 
 ### 平台升级边界
 
-- 用户、组织与项目资源权限属于核心目标，当前单租户共享管理员入口只是基线。
-- 当前任务租约与内部事件在 Python；升级后 Java/MySQL 维护平台权威状态，通过版本化协议连接 Worker。
+- 用户、组织与项目资源权限已由 Java 平台实现；旧管理员/API Key 入口仅作兼容。
+- Java/MySQL 维护平台任务、租约、预算和事件权威状态；Python 保留独立证据装配和 Worker 执行。
 - 秒杀与分布式事务组件只在独立实验中启动；安全分享后置，默认平台依赖与实验依赖分别管理。
 
 ---

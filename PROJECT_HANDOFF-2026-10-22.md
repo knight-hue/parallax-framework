@@ -13,13 +13,21 @@
 - 增加真实 Redis 集成测试 4 项（命中/驱逐、损坏条目重建、毫秒级锁等待、loader 异常只调用一次），使用本机 `redis:latest`，未拉取镜像。
 - 增加缓存单元测试；Java 全量离线 Maven 测试 101 项通过；Python 381 项、Ruff/format、前端 typecheck/lint 通过；提交前执行 `git diff --check`。
 
+## GitHub PR 接入
+
+- 新增 `platform_repository_link`、`platform_webhook_delivery` 和禁用的 `system.webhook` 账号（V10）。
+- GitHub webhook 校验 HMAC-SHA256 原始请求体，只接受 `pull_request` 的 `opened/reopened/synchronize`。
+- 仓库外部 ID 必须绑定到项目仓库，载荷 clone URL 必须与登记仓库一致；任务固定使用 `pull_request.head.sha` 和项目最新不可变策略。
+- `X-GitHub-Delivery` 作为任务幂等键；重复投递返回原任务，同一 delivery 不同内容返回 409。
+- `PlatformPrWebhookIntegrationTest` 6 项、Java 全量 107 项通过；真实 GitHub 投递、GitLab 和目标 MySQL 8.4 验收未完成。
+
 ## 已完成主线
 
 Java 已接管身份/组织/项目权限、仓库和不可变策略、任务状态机、MySQL 预算预占/结算、Outbox/Inbox、attempt/fencing、心跳与恢复、产物完整性、修复提案审批和 Worker 回归回执。Python 保留独立证据装配和隔离执行；前端已接入 Java 工作台。Java↔Python 本机独立进程 HTTP 联调已通过，Python 381 项测试通过。
 
 ## 尚未完成
 
-- GitHub/GitLab PR 接入：签名校验、项目绑定、固定 commit、幂等和真实 webhook 验收。
+- GitLab PR 接入、真实 GitHub webhook 现场验收；GitHub 签名、项目绑定、固定 commit 与 delivery 幂等已实现。
 - RabbitMQ 真 broker、多实例故障、跨节点协调、容量压测和消息链路现场验收；当前本机没有 RabbitMQ 镜像，不能下载补齐。
 - MySQL 8.4 目标环境验收、现场备份恢复、正式镜像、TLS、公网部署和 S3 兼容产物存储。
 - Worker 专用隔离执行器的容量/强制终止验收；当前报告产物为有大小上限的 MySQL 存储。
@@ -28,7 +36,7 @@ Java 已接管身份/组织/项目权限、仓库和不可变策略、任务状�
 
 ## 下一步
 
-先补 GitHub PR 安全适配，再补平台任务/Outbox/Worker/审批/缓存指标和运行诊断；随后在已有服务条件下做 RabbitMQ、多实例、备份恢复和容量验收。所有未实际运行的环境和性能数据必须保持“未验收”状态。
+先补平台任务/Outbox/Worker/审批/缓存指标和运行诊断；随后在已有服务条件下做 RabbitMQ、多实例、备份恢复和容量验收。所有未实际运行的环境和性能数据必须保持“未验收”状态。
 
 ## 约束
 

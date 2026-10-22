@@ -162,3 +162,14 @@
 - 不配置 Redis 时每次都回到权威数据库，不保留可能绕过摘要校验的进程内缓存；配置 Redisson 后才启用 TTL 读缓存和短租约重建锁。限流继续沿用 Lettuce/Bucket4j 及既有降级语义，未把 Redis 故障伪装成严格全局限流。
 - 验证：`PlatformPolicyCacheTest`、`PlatformPolicyCacheRedisIT`（真实 `redis:latest`，4 项：命中/驱逐、损坏条目重建、毫秒级锁等待、loader 异常只调用一次）、Java 全量 101 项、Python 381 项、Ruff/format、前端 typecheck/lint 通过。未把未运行的多实例故障或容量结果写成生产验收。脱敏摘要：`eval/java-platform/policy-cache.json`。
 
+## GitHub PR 签名接入与项目绑定
+
+状态：已实现并通过 H2/Flyway 集成测试；真实 GitHub webhook、GitLab 与目标 MySQL 8.4 现场验收待完成。
+
+- V10 新增 `platform_repository_link`、`platform_webhook_delivery` 和禁用的 `system.webhook` 账号；仓库外部 ID 全局唯一，投递记录保存 PR 编号、载荷摘要和任务 ID。
+- 新增 `PlatformPrService`/`PlatformPrController`：GitHub webhook 使用 HMAC-SHA256 校验原始请求体，只接受 `pull_request` 的 `opened/reopened/synchronize`。
+- 客户端不能自报 clone URL、策略或 commit：仓库 ID 必须解析到显式项目绑定，载荷 clone URL 必须与登记仓库一致，任务固定使用 `pull_request.head.sha` 和项目最新不可变策略。
+- `X-GitHub-Delivery` 作为任务幂等键；重复投递返回原任务，不重复预占预算；同一 delivery 使用不同内容返回 409。
+- `system.webhook` 是禁用账号，不能登录；首次绑定或投递前确保其组织 REVIEWER 成员资格，组织行锁避免并发首次插入竞态。
+- 验证：`PlatformPrWebhookIntegrationTest` 6 项、Java 全量 107 项通过；V10 在 H2/Flyway 上执行成功。未执行真实 GitHub 投递、GitLab 和目标 MySQL 8.4 验收。脱敏摘要：`eval/java-platform/github-pr.json`。
+

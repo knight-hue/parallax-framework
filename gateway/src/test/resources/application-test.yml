@@ -31,3 +31,5 @@ parallax:
     enabled: true
   gateway:
     internal-token: test-internal-token
+  webhooks:
+    github-secret: test-github-webhook-secret
