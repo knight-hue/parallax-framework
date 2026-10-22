@@ -37,6 +37,25 @@ docker build -f docker/sandbox.Dockerfile -t parallax-engine-sandbox:local .
 
 两个边界必须说清：它**共享宿主内核**（不是 VM），且本次只验证了执行器与边界行为，生产镜像的构建与部署需在目标环境另行验收。限额参数：`PARALLAX_PLATFORM_CONTAINER_IMAGE` / `_MEMORY_MB` / `_CPUS` / `_PIDS` / `_TMPFS_MB`。
 
+## 抗从众控制面
+
+三个开关默认都不改变既有行为，可以按需启用：
+
+| 配置 | 默认 | 作用 |
+| --- | --- | --- |
+| `PARALLAX_INDEPENDENCE_GATE` | `observe` | `off` 只记录；`observe` 报告本应如何处置；`enforce` 真正重分区并在用尽尝试后把高置信降为待验证 |
+| `PARALLAX_MIN_EFFECTIVE_CHANNELS` | `0` | 有效独立通道数下限；`0` 表示不要求 |
+| `PARALLAX_MIN_NORMALIZED_INDEPENDENCE` | `0` | 归一化独立性下限；`0` 表示不要求 |
+| `PARALLAX_MAX_INDEPENDENCE_ATTEMPTS` | `1` | 为提高独立性最多重分区几次 |
+
+只有同时设置了阈值，`enforce` 才可能触发；触发后停止原因记为 `independence_below_budget`，
+报告中的结论均为待验证，不得当作高置信采信。整改方向是自适应的：证据重叠超过
+`PARALLAX_MAX_EVIDENCE_OVERLAP_RATE` 时降冗余，否则加 Reader；两者都到顶时不再空转，下一轮直接降级。
+
+仲裁是可选扩展点。不注入仲裁器时争议组原样保留为 `disputed`；注入 `core.arbitration.BlindArbitrator`
+后，仲裁输入不含任何一方的结论文本，只给指针、引用与可证伪条件，并与原始证据重新核对。
+回执里的 `statement_digests` 只能在事后验证“当时账本确实是这句话”，不能反推出被剥离的结论。
+
 ## 修复闭环
 
 `PARALLAX_ENABLE_REPAIR=true` 只应在专用隔离 worker 服务实例开启。普通生产 API 默认关闭。专用 worker 必须本地安装 Docker CLI，拥有已缓存的执行镜像，并能把快照的绝对路径挂入该宿主的 Docker daemon；不要给公网 API 容器挂宿主 Docker socket。
