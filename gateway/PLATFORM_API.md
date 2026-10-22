@@ -176,3 +176,14 @@ evidence names the exact review/task/commit/patch/command, proves a marked basel
 failure and a zero exit regression, and makes the terminal receipt idempotent. Public
 users can read a proposal or page proposals with current project membership; they
 cannot submit a verification receipt.
+
+## Cache behavior
+
+Policy-version reads may use a Redis/Redisson read-through cache when
+`PARALLAX_CACHE_REDIS_URL` (or the rate-limit Redis URL) is configured. The gateway
+checks live project membership before every policy lookup, so a cached value never
+authorizes a request. Cache entries are immutable policy snapshots with a bounded TTL;
+database rows remain authoritative for policy integrity and all task, quota, artifact,
+and approval decisions; cached policy JSON is also schema- and digest-checked before use. A Redis timeout, lock timeout, malformed value, or unavailable
+server falls back to MySQL. A short Redisson rebuild lease reduces a thundering herd,
+but it is not used as a correctness lock or as a replacement for database constraints.

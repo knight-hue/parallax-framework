@@ -149,3 +149,16 @@
 - 状态只允许等待批准→批准→通过/失败，所有变更写入平台审计；跨项目、错误源码版本、错误摘要、重复终态均拒绝。
 - H2/Flyway 迁移和 `PlatformWorkerIntegrationTest` 审批回归测试通过。该模块不把审批记录伪装成隔离执行成功，真实 Worker 回归证据仍需通过回执接口提交。
 
+## Redis 缓存治理与 Redisson 协调
+
+状态：已实现并通过真实 Redis 集成测试；多实例故障演练待在目标环境验收。
+
+- 新增可选 Redisson 3.52.0 客户端，仅在 `parallax.cache.redis-url` 非空时创建；Redis 未配置或不可用不会阻止 Java 网关启动。
+- 策略版本读取先实时校验项目权限，再使用项目/策略双重作用域的只读缓存；缓存不承担授权、预算、任务状态或结果完整性事实。
+- 缓存回源使用 Redisson 短租约锁抑制击穿，锁获取失败直接回源 MySQL；读取、序列化、解锁和删除异常均回退数据库并保留诊断日志。
+- 缓存条目在返回前重新校验配置边界和 SHA-256；损坏条目会被删除并从权威数据库重建，不会长期阻隔后续读取。
+- 数据库 loader 异常不再被缓存层吞掉或重复调用；只有 Redis 读写失败才回退 loader。
+- 锁等待参数按毫秒解释，租约按秒换算为毫秒后统一传入 `tryLock`，避免默认 100 毫秒被误当成 100 秒。
+- 不配置 Redis 时每次都回到权威数据库，不保留可能绕过摘要校验的进程内缓存；配置 Redisson 后才启用 TTL 读缓存和短租约重建锁。限流继续沿用 Lettuce/Bucket4j 及既有降级语义，未把 Redis 故障伪装成严格全局限流。
+- 验证：`PlatformPolicyCacheTest`、`PlatformPolicyCacheRedisIT`（真实 `redis:latest`，4 项：命中/驱逐、损坏条目重建、毫秒级锁等待、loader 异常只调用一次）、Java 全量 101 项、Python 381 项、Ruff/format、前端 typecheck/lint 通过。未把未运行的多实例故障或容量结果写成生产验收。脱敏摘要：`eval/java-platform/policy-cache.json`。
+

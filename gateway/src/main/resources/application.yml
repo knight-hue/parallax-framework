@@ -71,6 +71,12 @@ parallax:
     redis-url: ${PARALLAX_RATELIMIT_REDIS_URL:}
     redis-timeout-ms: ${PARALLAX_RATELIMIT_REDIS_TIMEOUT_MS:250}
     degraded-cooldown-seconds: ${PARALLAX_RATELIMIT_DEGRADED_COOLDOWN_SECONDS:30}
+  cache:
+    # Read-through caches are optional. Authorization and task state always come from MySQL.
+    redis-url: ${PARALLAX_CACHE_REDIS_URL:${PARALLAX_RATELIMIT_REDIS_URL:}}
+    ttl-seconds: ${PARALLAX_CACHE_TTL_SECONDS:300}
+    lock-wait-ms: ${PARALLAX_CACHE_LOCK_WAIT_MS:100}
+    lock-lease-seconds: ${PARALLAX_CACHE_LOCK_LEASE_SECONDS:10}
 
 resilience4j:
   circuitbreaker:
