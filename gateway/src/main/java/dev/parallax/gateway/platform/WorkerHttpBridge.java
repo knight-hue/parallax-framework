@@ -30,7 +30,7 @@ public final class WorkerHttpBridge {
             } else if(!kind.equals("CANCEL")) return Delivery.DEAD_LETTER;
             URI target=kind.equals("DISPATCH")?execute:cancel;
             var request=HttpRequest.newBuilder(target).timeout(Duration.ofSeconds(5))
-                    .header("Content-Type","application/json").header("X-Internal-Token",token)
+                    .header("Content-Type","application/json").header("X-Internal-Token",token).header("X-Trace-Id",traceId())
                     .POST(HttpRequest.BodyPublishers.ofString(payload)).build();
             int status=client.send(request,HttpResponse.BodyHandlers.discarding()).statusCode();
             if((status>=200 && status<300) || status==409 || status==410) return Delivery.ACK;
@@ -38,5 +38,12 @@ public final class WorkerHttpBridge {
             return Delivery.DEAD_LETTER;
         } catch(java.io.IOException ex) { return Delivery.RETRY; }
         catch(IllegalArgumentException ex) { return Delivery.DEAD_LETTER; }
+    }
+
+    /** 调度线程上没有 Web 请求的 MDC，缺 traceId 时生成一个，保证下游日志仍能串联。 */
+    static String traceId() {
+        String current=dev.parallax.gateway.common.TraceFilter.currentTraceId();
+        if(current!=null && !current.isBlank()) return current;
+        return java.util.UUID.randomUUID().toString().replace("-","").substring(0,16);
     }
 }
