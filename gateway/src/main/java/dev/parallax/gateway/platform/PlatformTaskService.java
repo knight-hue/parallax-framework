@@ -40,9 +40,10 @@ public class PlatformTaskService {
     private final PlatformCatalogService catalog;
     private final ObjectMapper mapper;
     private final PlatformEventStore events;
+    private final PlatformMetrics metrics;
 
-    public PlatformTaskService(JdbcTemplate jdbc, PlatformIdentityService identity, PlatformCatalogService catalog, ObjectMapper mapper, PlatformEventStore events) {
-        this.jdbc=jdbc; this.identity=identity; this.catalog=catalog; this.mapper=mapper;this.events=events;
+    public PlatformTaskService(JdbcTemplate jdbc, PlatformIdentityService identity, PlatformCatalogService catalog, ObjectMapper mapper, PlatformEventStore events, PlatformMetrics metrics) {
+        this.jdbc=jdbc; this.identity=identity; this.catalog=catalog; this.mapper=mapper;this.events=events;this.metrics=metrics;
     }
 
     @Transactional
@@ -110,6 +111,7 @@ public class PlatformTaskService {
         identity.audit(actor,"TASK_SUBMITTED",id);
         var task=current(id,false);
         events.system(task,"QUEUED",java.util.Map.of("state","QUEUED"),created);
+        metrics.taskTransition(task.state().name());
         return task;
     }
 
@@ -141,6 +143,7 @@ public class PlatformTaskService {
             identity.audit(actor,"TASK_CANCEL_REQUESTED",id);
             var canceled=current(id,true);
             events.system(canceled,"CANCEL_REQUESTED",java.util.Map.of("state","CANCEL_REQUESTED"),Instant.now());
+            metrics.taskTransition(canceled.state().name());
             return canceled;
         }
         jdbc.update("UPDATE platform_task SET state='CANCELED',fencing_token=fencing_token+1,updated_at=? WHERE id=?",now(),id);
@@ -149,6 +152,7 @@ public class PlatformTaskService {
         identity.audit(actor,"TASK_CANCELED",id);
         var canceled=current(id,true);
         events.system(canceled,"CANCELED",java.util.Map.of("state","CANCELED"),Instant.now());
+        metrics.taskTransition(canceled.state().name());
         return canceled;
     }
 

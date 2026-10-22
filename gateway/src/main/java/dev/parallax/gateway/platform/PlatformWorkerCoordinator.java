@@ -31,12 +31,13 @@ public class PlatformWorkerCoordinator {
     private final int maxAttempts;
     private final PlatformEventStore store;
     private final PlatformArtifactService artifacts;
+    private final PlatformMetrics metrics;
 
-    public PlatformWorkerCoordinator(JdbcTemplate jdbc, PlatformTaskService tasks, ObjectMapper mapper, Clock clock, PlatformEventStore store, PlatformArtifactService artifacts,
+    public PlatformWorkerCoordinator(JdbcTemplate jdbc, PlatformTaskService tasks, ObjectMapper mapper, Clock clock, PlatformEventStore store, PlatformArtifactService artifacts, PlatformMetrics metrics,
             @Value("${parallax.worker.lease-seconds:120}") int leaseSeconds,
             @Value("${parallax.worker.max-attempts:3}") int maxAttempts) {
         if(leaseSeconds<10 || leaseSeconds>3600 || maxAttempts<1 || maxAttempts>10) throw new IllegalArgumentException("Invalid worker lease/retry configuration");
-        this.jdbc=jdbc;this.tasks=tasks;this.mapper=mapper;this.clock=clock;this.store=store;this.artifacts=artifacts;this.leaseSeconds=leaseSeconds;this.maxAttempts=maxAttempts;
+        this.jdbc=jdbc;this.tasks=tasks;this.mapper=mapper;this.clock=clock;this.store=store;this.artifacts=artifacts;this.metrics=metrics;this.leaseSeconds=leaseSeconds;this.maxAttempts=maxAttempts;
     }
 
     @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
@@ -92,6 +93,8 @@ public class PlatformWorkerCoordinator {
             }
         };
         task.state().transitionTo(next);
+        metrics.taskTransition(next.name());
+        metrics.workerEvent(event.kind().name(), true);
         Instant lease=task.state()==TaskState.CANCEL_REQUESTED ? task.leaseUntil() : lease(now,task.deadline());
         jdbc.update("UPDATE platform_task SET state=?,last_sequence=?,prompt_tokens=?,completion_tokens=?,result_sha256=?,lease_until=?,updated_at=? WHERE id=?",
                 next.name(),event.sequence(),event.promptTokens(),event.completionTokens(),event.resultSha256(),next.terminal()?null:Timestamp.from(lease),Timestamp.from(now),task.id());

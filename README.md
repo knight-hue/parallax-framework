@@ -252,7 +252,7 @@ class MyValidator:                    # ③ 可选：入账否决权
 | MySQL + Java 平台业务 | 默认 MySQL 运行档、组织/项目权限、仓库/策略、任务/预算、产物和审批已实现；MySQL 8.4 与现场备份恢复待验收 |
 | 原子预算与可靠执行 | 预占/结算/Outbox/Inbox/fencing/心跳/恢复已实现；真实 RabbitMQ、多实例故障与容量验收待完成 |
 | 研发闭环 | Java 侧审批/产物管理已实现；GitHub PR 绑定与签名 webhook 已实现，GitLab、真实 webhook、Java 缺陷样例和隔离执行器待完成 |
-| 缓存、容量与诊断 | 策略只读缓存与真实 Redis IT 已通过；多实例故障、JVM 排障和容量验收待完善 |
+| 缓存、容量与诊断 | 策略只读缓存、真实 Redis IT、任务/Worker/审批/缓存/Outbox 指标已实现；Prometheus 采集、多实例故障、JVM 排障和容量验收待完善 |
 | 后置扩展与独立实验 | 安全分享后置；JVM/AQS/MySQL/Redis/Spring、XA/TCC/Seata 和秒杀实验分别验收 |
 
 当前文件租约按单 API worker 使用，不承诺跨节点协调或 exactly-once。AST 上下文只是有限语法近似；声明血缘不能发现所有未知共同来源；high_confidence 不是正确性证明，指定回归通过不等于完整无缺陷。

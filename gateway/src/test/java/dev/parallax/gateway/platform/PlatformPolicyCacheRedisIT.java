@@ -8,6 +8,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.parallax.gateway.config.ParallaxProperties;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -58,22 +60,27 @@ class PlatformPolicyCacheRedisIT {
 
     @Test
     void cachesAndEvictsWithRealRedis() {
-        var cache = cache(client);
+        var registry = new SimpleMeterRegistry();
+        var cache = cache(client, registry);
         var loads = new AtomicInteger();
         var policy = policy("project-1", "policy-1");
 
         assertThat(cache.get("project-1", "policy-1", load(loads, policy))).isEqualTo(policy);
         assertThat(cache.get("project-1", "policy-1", load(loads, policy))).isEqualTo(policy);
         assertThat(loads).as("second read must be a cache hit").hasValue(1);
+        assertThat(cacheOutcome(registry, "rebuild")).isEqualTo(1);
+        assertThat(cacheOutcome(registry, "hit")).isEqualTo(1);
 
         cache.evict("project-1", "policy-1");
         assertThat(cache.get("project-1", "policy-1", load(loads, policy))).isEqualTo(policy);
         assertThat(loads).as("eviction must force an authoritative reload").hasValue(2);
+        assertThat(cacheOutcome(registry, "rebuild")).isEqualTo(2);
     }
 
     @Test
     void corruptEntryIsDiscardedAndRebuilt() {
-        var cache = cache(client);
+        var registry = new SimpleMeterRegistry();
+        var cache = cache(client, registry);
         var loads = new AtomicInteger();
         var policy = policy("project-1", "policy-2");
         client.<String>getBucket(PlatformPolicyCache.key("project-1", "policy-2"))
@@ -81,6 +88,8 @@ class PlatformPolicyCacheRedisIT {
 
         assertThat(cache.get("project-1", "policy-2", load(loads, policy))).isEqualTo(policy);
         assertThat(loads).hasValue(1);
+        assertThat(cacheOutcome(registry, "invalid")).isEqualTo(1);
+        assertThat(cacheOutcome(registry, "rebuild")).isEqualTo(1);
         assertThat(client.<String>getBucket(PlatformPolicyCache.key("project-1", "policy-2")).get())
                 .contains(policy.configSha256());
 
@@ -91,7 +100,7 @@ class PlatformPolicyCacheRedisIT {
     @Test
     @Timeout(10)
     void lockWaitUsesMillisecondsAndDoesNotBlockForSeconds() {
-        var cache = cache(client);
+        var cache = cache(client, new SimpleMeterRegistry());
         var key = PlatformPolicyCache.key("project-1", "policy-3");
         RedissonClient other = newClient();
         RLock held = other.getLock(key + ":rebuild");
@@ -112,7 +121,7 @@ class PlatformPolicyCacheRedisIT {
 
     @Test
     void loaderFailurePropagatesAndIsCalledOnce() {
-        var cache = cache(client);
+        var cache = cache(client, new SimpleMeterRegistry());
         var calls = new AtomicInteger();
 
         assertThatThrownBy(() -> cache.get("project-1", "policy-4", () -> {
@@ -129,12 +138,16 @@ class PlatformPolicyCacheRedisIT {
         return Redisson.create(config);
     }
 
-    private static PlatformPolicyCache cache(RedissonClient client) {
+    private static PlatformPolicyCache cache(RedissonClient client, MeterRegistry registry) {
         var props = new ParallaxProperties();
         props.getCache().setTtlSeconds(60);
         props.getCache().setLockWaitMs(100);
         props.getCache().setLockLeaseSeconds(10);
-        return new PlatformPolicyCache(MAPPER, provider(client), props);
+        return new PlatformPolicyCache(MAPPER, provider(client), props, new PlatformMetrics(registry));
+    }
+
+    private static double cacheOutcome(MeterRegistry registry, String outcome) {
+        return registry.get(PlatformMetrics.CACHE_OUTCOME).tag("outcome", outcome).counter().count();
     }
 
     private static ObjectProvider<RedissonClient> provider(RedissonClient client) {

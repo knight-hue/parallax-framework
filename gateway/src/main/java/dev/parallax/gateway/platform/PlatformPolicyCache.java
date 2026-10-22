@@ -27,31 +27,40 @@ public final class PlatformPolicyCache {
     private final ObjectMapper mapper;
     private final ObjectProvider<RedissonClient> redisson;
     private final ParallaxProperties properties;
+    private final PlatformMetrics metrics;
 
     public PlatformPolicyCache(ObjectMapper mapper, ObjectProvider<RedissonClient> redisson,
-            ParallaxProperties properties) {
+            ParallaxProperties properties, PlatformMetrics metrics) {
         this.mapper = mapper;
         this.redisson = redisson;
         this.properties = properties;
+        this.metrics = metrics;
     }
 
     public PlatformCatalogService.Policy get(String projectId, String policyId,
             Supplier<PlatformCatalogService.Policy> loader) {
         String key = key(projectId, policyId);
         RedissonClient client = redisson.getIfAvailable();
-        if (client == null) return loader.get();
+        if (client == null) {
+            metrics.cache("bypass");
+            return loader.get();
+        }
         String encoded;
         try {
             encoded = client.<String>getBucket(key).get();
         } catch (Exception ex) {
             log.debug("policy cache read failed; using database", ex);
+            metrics.cache("fallback");
             return loader.get();
         }
         if (encoded == null) return rebuild(client, key, loader);
         try {
-            return decode(encoded);
+            var value = decode(encoded);
+            metrics.cache("hit");
+            return value;
         } catch (Exception ex) {
             log.warn("discarding invalid policy cache entry key={}", key, ex);
+            metrics.cache("invalid");
             deleteQuietly(client, key);
             return rebuild(client, key, loader);
         }
@@ -82,34 +91,44 @@ public final class PlatformPolicyCache {
             acquired = lock.tryLock(waitMs, leaseMs, TimeUnit.MILLISECONDS);
         } catch (Exception ex) {
             log.debug("policy cache rebuild lock failed; using database", ex);
+            metrics.cache("fallback");
             return loader.get();
         }
         try {
-            if (!acquired) return loader.get();
+            if (!acquired) {
+                metrics.cache("miss");
+                return loader.get();
+            }
             String encoded;
             try {
                 encoded = client.<String>getBucket(key).get();
             } catch (Exception ex) {
                 log.debug("policy cache re-read failed; using database", ex);
+                metrics.cache("fallback");
                 return loader.get();
             }
             if (encoded != null) {
                 try {
-                    return decode(encoded);
+                    var value = decode(encoded);
+                    metrics.cache("hit");
+                    return value;
                 } catch (Exception ex) {
                     log.warn("discarding invalid policy cache entry key={}", key, ex);
+                    metrics.cache("invalid");
                     deleteQuietly(client, key);
                 }
             }
             // Loader failures must propagate: the database remains authoritative and a
             // second invocation could turn one transient error into surprising behavior.
             PlatformCatalogService.Policy value = loader.get();
+            metrics.cache("rebuild");
             try {
                 var cache = properties.getCache();
                 client.<String>getBucket(key).set(mapper.writeValueAsString(value),
                         Duration.ofSeconds(Math.max(1, cache.getTtlSeconds())));
             } catch (Exception ex) {
                 log.debug("policy cache write failed; database value is still authoritative", ex);
+                metrics.cache("write_error");
             }
             return value;
         } finally {
