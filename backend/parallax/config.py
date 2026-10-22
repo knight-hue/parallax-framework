@@ -125,6 +125,19 @@ class Settings(BaseSettings):
     """允许的 Reader 证据重叠率上限（0..1）。超过后运行会标记约束违例。"""
     min_independent_support: int = 0
     """每条 Claim 允许进入高置信前所需的最小独立支持数；0 表示沿用 support_threshold。"""
+    independence_gate: Literal["off", "observe", "enforce"] = "observe"
+    """独立性准入闸门。
+
+    `off` 只记录；`observe` 报告本应如何处置（默认，安全）；
+    `enforce` 在独立度不足时先提高冗余重分区，用尽尝试后把高置信结论降级。
+    闸门只在显式设置了阈值时才真正可能触发，因此默认配置不会改变现有行为。
+    """
+    min_effective_channels: float = Field(default=0.0, ge=0.0)
+    """有效独立通道数下限（0 = 不要求）。"""
+    min_normalized_independence: float = Field(default=0.0, ge=0.0, le=1.0)
+    """归一化独立性下限（0 = 不要求）。"""
+    max_independence_attempts: int = Field(default=1, ge=0, le=3)
+    """为提高独立性最多重分区几次。"""
 
     # ---- 覆盖率 ----
     min_evidence_fill_rate: float = 1.0

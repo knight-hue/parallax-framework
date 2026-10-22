@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import TypedDict
 
 from parallax.config import Settings
+from parallax.core.admission import IndependenceGate
 from parallax.core.aggregator import Aggregator
 from parallax.core.coverage import CoverageDecision, CoverageMonitor
 from parallax.core.ledger import ClaimLedger
@@ -82,11 +83,19 @@ class ParallaxRuntime:
     分区缺口与读者漏检的处置不同：前者补派，后者只能估漏检率并交还人工。
     把两者混成一个“未覆盖”数字，补检就只是在瞎加轮次。
     """
+    independence_profile: object | None = None
+    """最近一轮的独立性画像（`domain.models.IndependenceProfile`）。"""
+    gate_decision: object | None = None
+    """独立性闸门判定（`core.admission.GateDecision`）。"""
+    gate_attempts: int = 0
+    """已为提高独立性重分区的次数。"""
     budget: Budget = field(default_factory=Budget)
     usage: UsageStats = field(default_factory=UsageStats)
     arbitrator: object | None = None
     """可选的争议仲裁器（实现 ports.arbitrator.Arbitrator）。
     为 None 时争议组原样保留为 DISPUTED——不猜、不投票、不静默丢弃。"""
+    gate: IndependenceGate = field(default_factory=IndependenceGate)
+    """独立性准入闸门：度量→重分区→仍不达标则降级。"""
     falsifier: Falsifier | None = None
     reproduction_executor: ReproductionExecutor | None = None
 

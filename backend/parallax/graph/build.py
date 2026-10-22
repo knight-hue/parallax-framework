@@ -38,9 +38,15 @@ from collections.abc import Mapping
 
 from langgraph.graph import END, START, StateGraph
 
+from parallax.core.admission import blocked_fingerprints, suggest_remedy
 from parallax.core.arbitration import statement_digest
+from parallax.core.coverage import CoverageDecision
 from parallax.core.gap_attribution import attribute_gaps
-from parallax.core.independence import analyze_dependencies, evidence_overlap_rate
+from parallax.core.independence import (
+    analyze_dependencies,
+    build_independence_profile,
+    evidence_overlap_rate,
+)
 from parallax.domain.enums import ClaimStatus, Polarity, RoundStopReason
 from parallax.domain.models import EvidenceUnit, RoundRecord
 from parallax.graph.state import ParallaxRuntime, ParallaxState
@@ -300,6 +306,8 @@ def build_graph(runtime: ParallaxRuntime):
             groups = runtime.aggregator.sweep()
             _downgrade_budget_violations(runtime, groups)
 
+        groups = _apply_independence_gate(runtime, groups)
+
         current_fingerprints = {g.fingerprint for g in groups}
         runtime.new_fingerprints_last_round = len(current_fingerprints - runtime.fingerprints_seen)
         runtime.fingerprints_seen = current_fingerprints
@@ -393,6 +401,8 @@ def build_graph(runtime: ParallaxRuntime):
         )
 
         if not decision.should_retrieve:
+            decision = _gate_repartition(runtime, decision, rows)
+        if not decision.should_retrieve:
             return {"decision": decision, "stop_reason": decision.stop_reason}
         # 继续补检：轮次 +1，让 partitioner 生成全新的 Reader 身份
         return {
@@ -481,10 +491,113 @@ def build_graph(runtime: ParallaxRuntime):
 def _resolve_stop_reason(
     runtime: ParallaxRuntime, fallback: RoundStopReason | None
 ) -> RoundStopReason:
-    """把「预算耗尽」的判定也反映到停止原因上，便于实验归因。"""
+    """把「预算耗尽」与「独立性降级」的判定也反映到停止原因上，便于实验归因。"""
     if runtime.budget_exhausted():
         return RoundStopReason.BUDGET_EXHAUSTED
+    gate = getattr(runtime, "gate_decision", None)
+    if gate is not None and getattr(gate, "action", None) == "downgrade":
+        return RoundStopReason.INDEPENDENCE_BELOW_BUDGET
     return fallback or RoundStopReason.COVERAGE_SATISFIED
+
+
+def _apply_independence_gate(runtime: ParallaxRuntime, groups: list) -> list:
+    """评估独立性闸门；enforce 且判定降级时改写结论。
+
+    这里刻意在**每轮聚合**都评估，而不是只在最后一轮：若前几轮就发现独立性不足，
+    早一点降级可以避免后面的补检把预算花在一个不可信的结论上。
+    """
+    profile = build_independence_profile(
+        runtime.ledger.claims,
+        runtime.manifest.all_assignments(),
+        output_contamination=runtime.output_contamination,
+        max_evidence_overlap_rate=runtime.settings.max_evidence_overlap_rate,
+        min_independent_support=runtime.settings.effective_min_independent_support(),
+        evidence=runtime.evidence,
+    )
+    runtime.independence_profile = profile
+    decision = runtime.gate.evaluate(profile, attempts=runtime.gate_attempts)
+    runtime.gate_decision = decision
+    runtime.emit(
+        "independence_gate",
+        action=decision.action,
+        reason=decision.reason,
+        effective_channels=decision.effective_channels,
+        normalized_independence=decision.normalized_independence,
+        attempts=decision.attempts,
+    )
+    runtime.record_receipt(
+        "coverage",
+        round_index=len(runtime.manifest.rounds) - 1 if runtime.manifest.rounds else 0,
+        payload={
+            "kind": "independence_gate",
+            "action": decision.action,
+            "reason": decision.reason,
+            "effective_channels": decision.effective_channels,
+            "normalized_independence": decision.normalized_independence,
+            "attempts": decision.attempts,
+        },
+    )
+    if decision.action != "downgrade":
+        # 放行或重分区：解除上一轮的阻断，让重分区后的充分证据能恢复高置信。
+        runtime.aggregator.independence_blocked = set()
+        return runtime.aggregator.sweep()
+
+    blocked = blocked_fingerprints(groups)
+    runtime.aggregator.independence_blocked = blocked
+    groups = runtime.aggregator.sweep()
+    for group in groups:
+        if group.fingerprint not in blocked:
+            continue
+        for claim_id in group.claim_ids:
+            claim = runtime.ledger.claim(claim_id)
+            if claim is not None:
+                claim.metadata["independence_downgrade"] = decision.reason
+    if blocked:
+        logger.warning(
+            "独立性闸门：%d 个高置信结论降级为待验证（%s）", len(blocked), decision.reason
+        )
+    return groups
+
+
+def _gate_repartition(runtime: ParallaxRuntime, decision, rows: list[str]):
+    """闸门要求提高独立性时，把「本轮可停」改成「再跑一轮更独立的分区」。"""
+    gate = getattr(runtime, "gate_decision", None)
+    if gate is None or getattr(gate, "action", None) != "repartition":
+        return decision
+    if decision.stop_reason in {
+        RoundStopReason.MAX_ROUNDS_REACHED,
+        RoundStopReason.BUDGET_EXHAUSTED,
+    }:
+        return decision
+    partitioner = runtime.partitioner
+    n_readers = int(getattr(partitioner, "n_readers", 1))
+    redundancy = int(getattr(partitioner, "redundancy", 1))
+    remedy, note = suggest_remedy(
+        runtime.independence_profile,
+        overlap_budget=runtime.settings.max_evidence_overlap_rate,
+        n_readers=n_readers,
+        redundancy=redundancy,
+    )
+    if remedy == "none":
+        # 已经无法用分区手段提高独立性：交给下一轮聚合去降级，不空转。
+        logger.info("独立性闸门：%s", note)
+        return decision
+    if remedy == "reduce_redundancy":
+        partitioner.redundancy = redundancy - 1
+    else:
+        partitioner.n_readers = n_readers + 1
+    runtime.gate_attempts += 1
+    logger.info("独立性闸门：%s，强制重分区", note)
+    return CoverageDecision(
+        should_retrieve=True,
+        focus_groups=list(rows),
+        stop_reason=None,
+        evidence_fill_rate=decision.evidence_fill_rate,
+        claim_cell_fill_rate=decision.claim_cell_fill_rate,
+        uncovered_rows=decision.uncovered_rows,
+        sparse_cells=decision.sparse_cells,
+        dispute_rate=decision.dispute_rate,
+    )
 
 
 def _downgrade_budget_violations(runtime: ParallaxRuntime, groups: list) -> None:

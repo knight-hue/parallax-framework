@@ -70,6 +70,13 @@ class Aggregator:
         self.ledger = ledger
         self.rules = rules or AggregationRules()
         self.rules.validate_rules()
+        self.independence_blocked: set[str] = set()
+        """被独立性闸门阻断的指纹集。
+
+        必须存在聚合器里而不是直接改 `group.status`：`sweep()` 每轮都会按规则重算，
+        外部写的状态会被算回去（和账本仲裁裁决必须落地是同一个道理）。
+        闸门下一次判定放行时清空，因此重分区后仍然可以恢复高置信。
+        """
 
     def sweep(self) -> list[LedgerGroup]:
         """重算全部结论并回填到 claim 上。幂等，每轮补检后调用一次。"""
@@ -93,12 +100,14 @@ class Aggregator:
         return groups
 
     def decide_status(self, group: LedgerGroup) -> ClaimStatus:
-        """规则优先级：仲裁裁决 > 争议 > 交叉验证达标 > 孤证。"""
+        """规则优先级：仲裁裁决 > 争议 > 独立性闸门 > 交叉验证达标 > 孤证。"""
         verdict = self.ledger.verdict_for(group.fingerprint)
         if verdict is not None:
             return verdict
         if group.is_disputed:
             return ClaimStatus.DISPUTED
+        if group.fingerprint in self.independence_blocked:
+            return ClaimStatus.PENDING
         if group.cross_validation_count >= self.rules.support_threshold:
             return ClaimStatus.HIGH_CONFIDENCE
         return ClaimStatus.PENDING

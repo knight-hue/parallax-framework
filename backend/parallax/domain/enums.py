@@ -38,3 +38,5 @@ class RoundStopReason(StrEnum):
     MAX_ROUNDS_REACHED = "max_rounds_reached"
     NO_NEW_EVIDENCE = "no_new_evidence"
     BUDGET_EXHAUSTED = "budget_exhausted"
+    INDEPENDENCE_BELOW_BUDGET = "independence_below_budget"
+    """独立性闸门降级了结论：结果可用，但不得当作高置信采信。"""
