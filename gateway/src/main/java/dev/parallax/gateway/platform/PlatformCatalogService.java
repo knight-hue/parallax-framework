@@ -40,11 +40,13 @@ public class PlatformCatalogService {
     private final JdbcTemplate jdbc;
     private final PlatformIdentityService identity;
     private final ObjectMapper mapper;
+    private final PlatformPolicyCache policyCache;
     private final Set<String> allowedHosts;
 
     public PlatformCatalogService(JdbcTemplate jdbc, PlatformIdentityService identity, ObjectMapper mapper,
+            PlatformPolicyCache policyCache,
             @Value("${parallax.repositories.allowed-hosts:github.com,gitlab.com,gitee.com}") String allowedHosts) {
-        this.jdbc = jdbc; this.identity = identity; this.mapper = mapper;
+        this.jdbc = jdbc; this.identity = identity; this.mapper = mapper; this.policyCache = policyCache;
         this.allowedHosts = Arrays.stream(allowedHosts.split(",")).map(String::strip)
                 .map(s -> s.toLowerCase(Locale.ROOT)).filter(s -> !s.isEmpty()).collect(Collectors.toUnmodifiableSet());
     }
@@ -98,8 +100,9 @@ public class PlatformCatalogService {
 
     public Policy policy(String actor, String projectId, String id) {
         identity.project(actor, projectId, ProjectRole.VIEWER);
-        return jdbc.query("SELECT id,project_id,version_number,config_json,config_sha256 FROM platform_policy_version WHERE project_id=? AND id=?",
-                (rs,n) -> policy(rs), projectId, id).stream().findFirst().orElseThrow(PlatformCatalogService::notFound);
+        return policyCache.get(projectId, id, () -> jdbc.query(
+                "SELECT id,project_id,version_number,config_json,config_sha256 FROM platform_policy_version WHERE project_id=? AND id=?",
+                (rs,n) -> policy(rs), projectId, id).stream().findFirst().orElseThrow(PlatformCatalogService::notFound));
     }
 
     /** Only called after the internal worker boundary checks the authoritative task. */

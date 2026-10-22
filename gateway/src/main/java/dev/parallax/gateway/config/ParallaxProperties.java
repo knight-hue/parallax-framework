@@ -12,6 +12,7 @@ public class ParallaxProperties {
     private final Jwt jwt = new Jwt();
     private final Ratelimit ratelimit = new Ratelimit();
     private final Identity identity = new Identity();
+    private final Cache cache = new Cache();
 
     public Gateway getGateway() {
         return gateway;
@@ -27,6 +28,27 @@ public class ParallaxProperties {
 
     public Identity getIdentity() {
         return identity;
+    }
+
+    public Cache getCache() {
+        return cache;
+    }
+
+    /** Redis-backed read cache settings. Cache is advisory and never an authorization source. */
+    public static class Cache {
+        private String redisUrl = "";
+        private int ttlSeconds = 300;
+        private int lockWaitMs = 100;
+        private int lockLeaseSeconds = 10;
+
+        public String getRedisUrl() { return redisUrl; }
+        public void setRedisUrl(String redisUrl) { this.redisUrl = redisUrl; }
+        public int getTtlSeconds() { return ttlSeconds; }
+        public void setTtlSeconds(int ttlSeconds) { this.ttlSeconds = ttlSeconds; }
+        public int getLockWaitMs() { return lockWaitMs; }
+        public void setLockWaitMs(int lockWaitMs) { this.lockWaitMs = lockWaitMs; }
+        public int getLockLeaseSeconds() { return lockLeaseSeconds; }
+        public void setLockLeaseSeconds(int lockLeaseSeconds) { this.lockLeaseSeconds = lockLeaseSeconds; }
     }
 
     /**
