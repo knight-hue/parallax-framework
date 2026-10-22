@@ -22,7 +22,7 @@ Java 默认运行档和 Compose 已切为 MySQL，旧 PostgreSQL 作为显式回
 
 2026-10-21 Worker 增量：平台模式已接入启动自动重放、周期续租、deadline 中断和退出取消；回执按 task/attempt 加锁，慢重放不阻塞其他任务心跳。执行中断或失联不以零用量退款，由 Java 保守恢复。Java↔Python 独立进程真实 HTTP 已通过，覆盖 STARTED、心跳、产物摘要、结算、重启去重、权限拒绝和取消失联；Python 全量 381 项、gateway 离线 Maven 测试通过。尚未据此证明真实 RabbitMQ、多实例或公网生产运行。
 
-2026-10-22 基础设施验收增量：本机部署 MySQL 8.4.0、RabbitMQ 4.1.4 + Erlang OTP 27.3、Seata Server 2.6.0（均免安装于 E 盘，数据不落 C 盘）。在真 MySQL 8.4 与真 PostgreSQL 16 上跑完整 `verify`：单测 113、`MysqlPersistenceIT` 8 项全过；同时修复离线迁移表清单遗漏 V10/V11 三张表、以及 V10 种入 `system.webhook` 使空目标库判定永久失败两个缺陷。真 RabbitMQ 上 `RabbitDispatchIT` 3 项通过。`labs/seata` 6 项通过，并更正了此前“提交后 `undo_log` 不清理”的错误结论：RM 异步清理存在约 10 秒延迟。
+2026-10-22 基础设施验收增量：本机部署 MySQL 8.4.0、RabbitMQ 4.1.4 + Erlang OTP 27.3、Seata Server 2.6.0（均免安装于 E 盘，数据不落 C 盘）。在真 MySQL 8.4 与真 PostgreSQL 16 上跑完整 `verify`：单测 113、`MysqlPersistenceIT` 8 项全过；同时修复离线迁移表清单遗漏 V10/V11 三张表、以及 V10 种入 `system.webhook` 使空目标库判定永久失败两个缺陷。真 RabbitMQ 上 `RabbitDispatchIT` 3 项通过。`labs/seata` 6 项通过，并更正了此前“提交后 `undo_log` 不清理”的错误结论：RM 异步清理存在约 10 秒延迟。新增 `labs/mysql` 6 项（执行计划、MVCC 隔离级别、行锁超时 1205、死锁 1213）。新增 `gateway/tools/verify_backup_restore.py`，在真 MySQL 上完成 11 个迁移、22 张表的逻辑备份与恢复校验和比对。以上仍不构成多实例、容量或公网部署验收。
 
 仅更新文档不会改变上述实现状态。阶段以升级方案 P0—P6、E1、L1 验收，历史数量不作为新增能力的测试结果。
 
