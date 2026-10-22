@@ -16,7 +16,7 @@ Java 默认运行档和 Compose 已切为 MySQL，旧 PostgreSQL 作为显式回
 | Java 业务主体 | 用户/组织/项目权限、仓库/策略、集合分页、平台任务、报告产物及修复提案/审批/回归回执已实现；工作台已接入 Java 任务与审批入口，组织/项目管理 UI 待完善 |
 | 可靠执行与额度 | 预占/结算/释放/对账、Outbox、Inbox、fencing/心跳/恢复与事件重放已实现；真实 RabbitMQ 4.1.4 上 3 项分发集成测试通过；Java MQ 发布/消费默认关闭，Python/工作台切换与多实例故障验收待完成 |
 | 缓存与可观测 | 策略只读缓存、Redisson 可选重建锁、TTL/故障回源、真实 Redis 集成测试已通过；任务/Worker/审批/缓存/Outbox 指标已接入；Worker 已有可终止子进程模式和并发上限；容器/VM 隔离、Prometheus 采集、多实例故障、跨进程诊断及容量验收待完善 |
-| 研发闭环 | Java 侧权限/审批/产物管理已实现；GitHub PR 签名、项目绑定、固定 commit 与 delivery 幂等已实现；Java 缺陷与回归样例已落地（`eval/corpus/seed_java`，4 个植入缺陷在缺陷版本上全部被测试捉到、打参考修复后 10/10 通过）；GitLab、真实 webhook 现场验收、容器/VM 级隔离执行器与组织/项目管理 UI 仍待完成 |
+| 研发闭环 | Java 侧权限/审批/产物管理已实现；GitHub PR 签名、项目绑定、固定 commit 与 delivery 幂等已实现；Java 缺陷与回归样例已落地（`eval/corpus/seed_java`，4 个植入缺陷在缺陷版本上全部被测试捉到、打参考修复后 10/10 通过）；前端已补组织/项目/仓库/策略管理面板，并与平台工作台按项目 ID 联动；GitLab、真实 webhook 现场验收与容器/VM 级隔离执行器仍待完成 |
 | 后置扩展 | 报告安全分享已实现：128 位高熵短码、哈希存储、过期、撤销、访问上限和聚合统计；独立短链域名、热点容量与多实例验收待完成 |
 | 原理与故障实验 | JVM、并发、Redis、Spring、秒杀、2PC/TCC 模拟已运行；Seata 2.6 AT/TCC 已对真实服务端与 MySQL 8.4 跑通 6 项；MySQL 原理实验（B+ 树、MVCC、隔离级别、锁与死锁、EXPLAIN）待补 |
 
