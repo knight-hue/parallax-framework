@@ -32,7 +32,9 @@
     {
       "fault": "mysql down",
       "action": "kill the mysqld process on port 3307",
-      "observed": "authenticated read did not respond within a 15s client timeout, and /actuator/health was equally unresponsive; no fail-fast",
+      "observed_before_fix": "authenticated read and /actuator/health both hung past a 15s client timeout",
+      "observed_after_fix": "authenticated read returned 500 after 3.12s and /actuator/health returned 503 after 3.17s",
+      "fix": "spring.datasource.hikari.connection-timeout=3000ms (PARALLAX_DB_CONNECTION_TIMEOUT_MS) and validation-timeout=2000ms",
       "recovery": "restart mysqld, next request 200 without restarting the gateway"
     }
   ],
@@ -40,7 +42,7 @@
     "Both instances and every dependency share one workstation; numbers are not a production capacity claim",
     "Short burst only: no soak test, no ramp, no percentiles over a warmed JVM (p99 includes cold-start effects)",
     "No load balancer or ingress in front; the probe alternates between instances itself",
-    "MySQL outage has no fail-fast or dedicated readiness signal, which is a real operational gap worth fixing",
+    "MySQL outage now fails fast (500 / 503 within ~3s) after lowering the Hikari connection timeout; before the fix it hung",
     "Data set is a single API key with a small ledger, so the query cost is not representative of a large tenant"
   ]
 }
