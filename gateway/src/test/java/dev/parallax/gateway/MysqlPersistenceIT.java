@@ -177,10 +177,14 @@ class MysqlPersistenceIT {
     }
 
     @Test
-    void usesRealMysqlInnoDBAndValidatesFlyway() {
+    void usesRealMysqlInnoDBAndValidatesFlyway() throws Exception {
         assertThat(jdbc.queryForObject("SELECT VERSION()", String.class)).startsWith("8.");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'platform_project' AND engine = 'InnoDB'", Integer.class)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE", Integer.class)).isEqualTo(8);
+        // 迁移脚本增加时这条断言自动跟随，避免每次加 V*.sql 都要改测试。
+        int migrations = new org.springframework.core.io.support.PathMatchingResourcePatternResolver()
+                .getResources("classpath:db/mysql/V*.sql").length;
+        assertThat(migrations).isPositive();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE", Integer.class)).isEqualTo(migrations);
     }
 
     @Test
@@ -248,21 +252,25 @@ class MysqlPersistenceIT {
                 seed.executeUpdate("INSERT INTO platform_access_audit (id,actor,action,resource_id,at) VALUES ('access-source','user-source','CREATE_PROJECT','project-source',CURRENT_TIMESTAMP)");
                 seed.executeUpdate("INSERT INTO platform_repository (id,project_id,name,clone_url,created_by,created_at) VALUES ('repository-source','project-source','example','https://github.com/example/repo','user-source',CURRENT_TIMESTAMP)");
                 seed.executeUpdate("INSERT INTO platform_policy_version (id,project_id,version_number,config_json,config_sha256,created_by,created_at) VALUES ('policy-source','project-source',1,'{}','not-a-real-policy-digest','user-source',CURRENT_TIMESTAMP)");
+                seed.executeUpdate("INSERT INTO platform_repository_link (id,project_id,repository_id,provider,external_id,token_budget,created_by,created_at) VALUES ('link-source','project-source','repository-source','GITHUB','1001',100,'user-source',CURRENT_TIMESTAMP)");
                 seed.executeUpdate("INSERT INTO platform_budget_account (organization_id,token_limit,reserved_tokens,used_tokens,updated_at) VALUES ('org-source',200,0,25,CURRENT_TIMESTAMP)");
                 seed.executeUpdate("INSERT INTO platform_task (id,organization_id,project_id,repository_id,policy_version,created_by,request_key,request_sha256,commit_sha,token_budget,deadline,state,attempt,fencing_token,last_sequence,prompt_tokens,completion_tokens,settled,created_at,updated_at) VALUES ('task-source','org-source','project-source','repository-source','policy-source','user-source','request-source','test-request-hash','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',100,CURRENT_TIMESTAMP,'FAILED',1,1,2,20,5,TRUE,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)");
                 seed.executeUpdate("INSERT INTO platform_budget_ledger (id,organization_id,task_id,kind,tokens,at) VALUES ('reserve-source','org-source','task-source','RESERVE',100,CURRENT_TIMESTAMP)");
                 seed.executeUpdate("INSERT INTO platform_budget_ledger (id,organization_id,task_id,kind,tokens,at) VALUES ('settle-source','org-source','task-source','SETTLE',25,CURRENT_TIMESTAMP)");
                 seed.executeUpdate("INSERT INTO platform_outbox (id,task_id,attempt,kind,payload,status,available_at,created_at,published_at) VALUES ('outbox-source','task-source',1,'DISPATCH','{}','PUBLISHED',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)");
                 seed.executeUpdate("INSERT INTO platform_task_event (id,event_id,task_id,attempt,fencing_token,sequence_number,kind,payload,payload_sha256,received_at) VALUES (42,'event-source','task-source',1,1,2,'FAILED','{}','test-digest',CURRENT_TIMESTAMP)");
+                seed.executeUpdate("INSERT INTO platform_webhook_delivery (id,provider,delivery_id,payload_sha256,project_id,repository_id,pull_request_number,task_id,received_at) VALUES ('webhook-source','GITHUB','delivery-source','test-payload-digest','project-source','repository-source',42,'task-source',TIMESTAMP '2026-10-20 10:00:00')");
+                seed.executeUpdate("INSERT INTO platform_share_link (id,project_id,task_id,token_hash,created_by,created_at,expires_at,revoked_at,max_accesses,access_count,last_accessed_at) VALUES ('share-source','project-source','task-source','test-token-hash','user-source',TIMESTAMP '2026-10-20 10:00:00',TIMESTAMP '2026-10-21 10:00:00',NULL,5,0,NULL)");
             }
             assertThatThrownBy(() -> LegacyDatabaseTransfer.copy(source, target, false)).isInstanceOf(IllegalArgumentException.class);
             try(var seed=source.createStatement()) {
                 seed.executeUpdate("INSERT INTO platform_task_artifact (id,artifact_id,task_id,attempt,fencing_token,sha256,content,created_at) VALUES (42,'artifact-source','task-source',1,1,'test-digest','报告 😀',CURRENT_TIMESTAMP)");
+                seed.executeUpdate("INSERT INTO platform_repair_review (id,task_id,project_id,created_by,source_commit_sha,patch_sha256,patch_content,test_command,approval_digest,status,approved_by,approved_at,verification_id,verification_sha256,verification_detail,created_at,updated_at) VALUES ('repair-source','task-source','project-source','user-source','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','test-patch-digest','diff --git a/x b/x','mvn -q test','test-approval-digest','AWAITING_APPROVAL',NULL,NULL,NULL,NULL,NULL,TIMESTAMP '2026-10-20 10:00:00',TIMESTAMP '2026-10-20 10:00:00')");
             }
-            assertThat(LegacyDatabaseTransfer.copy(source, target, true)).hasSize(18).allSatisfy(row -> assertThat(row.rows()).isPositive());
-            assertThat(LegacyDatabaseTransfer.verify(source, target)).hasSize(18);
+            assertThat(LegacyDatabaseTransfer.copy(source, target, true)).hasSize(LegacyDatabaseTransfer.tableCount()).allSatisfy(row -> assertThat(row.rows()).isPositive());
+            assertThat(LegacyDatabaseTransfer.verify(source, target)).hasSize(LegacyDatabaseTransfer.tableCount());
             assertThatThrownBy(() -> LegacyDatabaseTransfer.copy(source, target, true)).hasMessageContaining("Destination must be empty");
-            try (var change = target.createStatement()) { change.executeUpdate("UPDATE platform_user SET username = 'tampered'"); }
+            try (var change = target.createStatement()) { change.executeUpdate("UPDATE platform_user SET username = 'tampered' WHERE id = 'user-source'"); }
             assertThatThrownBy(() -> LegacyDatabaseTransfer.verify(source, target)).hasMessageContaining("verification mismatch");
         }
     }

@@ -32,16 +32,34 @@ public final class LegacyDatabaseTransfer {
             new Table("platform_access_audit", "id", "id,actor,action,resource_id,at"),
             new Table("platform_repository", "id", "id,project_id,name,clone_url,created_by,created_at"),
             new Table("platform_policy_version", "id", "id,project_id,version_number,config_json,config_sha256,created_by,created_at"),
+            new Table("platform_repository_link", "id", "id,project_id,repository_id,provider,external_id,token_budget,created_by,created_at"),
             new Table("platform_budget_account", "organization_id", "organization_id,token_limit,reserved_tokens,used_tokens,updated_at"),
             new Table("platform_task", "id", "id,organization_id,project_id,repository_id,policy_version,created_by,request_key,request_sha256,commit_sha,token_budget,deadline,state,attempt,fencing_token,last_sequence,prompt_tokens,completion_tokens,settled,lease_until,result_sha256,created_at,updated_at,recovery_reason"),
             new Table("platform_budget_ledger", "id", "id,organization_id,task_id,kind,tokens,at"),
             new Table("platform_outbox", "id", "id,task_id,attempt,kind,payload,status,available_at,claim_token,claim_until,publish_attempts,created_at,published_at"),
             new Table("platform_task_event", "id", "id,event_id,task_id,attempt,fencing_token,sequence_number,kind,payload,payload_sha256,received_at"),
+            new Table("platform_webhook_delivery", "id", "id,provider,delivery_id,payload_sha256,project_id,repository_id,pull_request_number,task_id,received_at"),
+            new Table("platform_share_link", "id", "id,project_id,task_id,token_hash,created_by,created_at,expires_at,revoked_at,max_accesses,access_count,last_accessed_at"),
             new Table("platform_task_artifact", "id", "id,artifact_id,task_id,attempt,fencing_token,sha256,content,created_at"),
             new Table("platform_repair_review", "id", "id,task_id,project_id,created_by,source_commit_sha,patch_sha256,patch_content,test_command,approval_digest,status,approved_by,approved_at,verification_id,verification_sha256,verification_detail,created_at,updated_at"));
 
     public record Verification(String table, long rows, String sha256) { }
     private static Calendar utc() { return Calendar.getInstance(TimeZone.getTimeZone("UTC")); }
+
+    /** V10 迁移种入的禁用系统账号；目标库只含它时仍视为空库。 */
+    private static final String SYSTEM_ACTOR_ID = "00000000-0000-0000-0000-000000000001";
+
+    /** 参与离线迁移的表数量，供验收断言跟随表清单变化。 */
+    public static int tableCount() { return TABLES.size(); }
+
+    private static boolean seedOnly(Connection target, String table) throws SQLException {
+        if (!"platform_user".equals(table)) return false;
+        try (var statement = target.createStatement();
+             var rows = statement.executeQuery("SELECT COUNT(*) FROM platform_user WHERE id <> '" + SYSTEM_ACTOR_ID + "' OR username <> 'system.webhook'")) {
+            rows.next();
+            return rows.getLong(1) == 0;
+        }
+    }
 
     public static List<Verification> verify(Connection source, Connection target) throws Exception {
         List<Verification> results = new ArrayList<>();
@@ -64,7 +82,7 @@ public final class LegacyDatabaseTransfer {
             for (var table : TABLES) {
                 try (var statement = target.createStatement(); var rows = statement.executeQuery("SELECT COUNT(*) FROM " + table.name)) {
                     rows.next();
-                    if (rows.getLong(1) != 0 && !table.name.equals("quota_policy")) {
+                    if (rows.getLong(1) != 0 && !table.name.equals("quota_policy") && !seedOnly(target, table.name)) {
                         throw new SQLException("Destination must be empty: " + table.name);
                     }
                 }
@@ -74,7 +92,11 @@ public final class LegacyDatabaseTransfer {
                 rows.next();
                 if (rows.getLong(1) != 0) throw new SQLException("Destination quota seed was modified");
             }
-            try (var statement = target.createStatement()) { statement.executeUpdate("DELETE FROM quota_policy"); }
+            try (var statement = target.createStatement()) {
+                statement.executeUpdate("DELETE FROM quota_policy");
+                // V10 迁移会种入禁用的 system.webhook 账号，它属于迁移自身，不算目标库已有业务数据。
+                statement.executeUpdate("DELETE FROM platform_user WHERE id = '" + SYSTEM_ACTOR_ID + "' AND username = 'system.webhook'");
+            }
             for (var table : TABLES) {
                 String[] columns = table.columns.split(",");
                 String placeholders = String.join(",", java.util.Collections.nCopies(columns.length, "?"));
