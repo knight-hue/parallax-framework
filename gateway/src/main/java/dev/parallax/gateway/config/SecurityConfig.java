@@ -58,6 +58,9 @@ public class SecurityConfig {
                     registry.requestMatchers("/api/v1/auth/**").permitAll();
                     // The webhook service verifies the HMAC signature over the raw body.
                     registry.requestMatchers("/api/v1/platform/webhooks/**").permitAll();
+                    // Share tokens are bearer capabilities; the share service enforces
+                    // expiry, revocation and optional access limits on every read.
+                    registry.requestMatchers("/api/v1/platform/shares/**").permitAll();
                     // 完成回调由 X-Internal-Token 自行校验：它来自编排服务，
                     // 拿不到 JWT 也不该被要求拿
                     registry.requestMatchers("/api/v1/internal/**").permitAll();

@@ -57,6 +57,14 @@ public class PlatformArtifactService {
             throw new ApiException(HttpStatus.CONFLICT,"Successful result has no verified artifact");
     }
 
+    /** Share creation needs a successful, verified artifact but not its full content. */
+    public void requireShareable(String actor, String projectId, String taskId) {
+        var task = tasks.get(actor, projectId, taskId);
+        if (task.state() != TaskState.SUCCEEDED || task.resultSha256() == null)
+            throw new ApiException(HttpStatus.CONFLICT, "Task has no shareable successful result");
+        require(task, task.resultSha256());
+    }
+
     public Artifact result(String actor, String projectId, String taskId) {
         var task=tasks.get(actor,projectId,taskId);
         if(task.state()!=TaskState.SUCCEEDED || task.resultSha256()==null)

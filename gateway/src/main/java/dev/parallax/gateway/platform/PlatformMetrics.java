@@ -20,6 +20,7 @@ public class PlatformMetrics {
     public static final String WORKER_EVENT = "parallax.platform.worker.event";
     public static final String REPAIR_ACTION = "parallax.platform.repair.action";
     public static final String CACHE_OUTCOME = "parallax.policy.cache";
+    public static final String SHARE_ACTION = "parallax.platform.share";
 
     private final MeterRegistry registry;
 
@@ -41,6 +42,9 @@ public class PlatformMetrics {
         for (String outcome : List.of("hit", "miss", "rebuild", "invalid", "fallback", "bypass", "write_error")) {
             Counter.builder(CACHE_OUTCOME).tag("outcome", outcome).register(registry);
         }
+        for (String action : List.of("create", "access", "revoke", "denied")) {
+            Counter.builder(SHARE_ACTION).tag("action", action).register(registry);
+        }
     }
 
     public void taskTransition(String state) {
@@ -59,5 +63,9 @@ public class PlatformMetrics {
 
     public void cache(String outcome) {
         Counter.builder(CACHE_OUTCOME).tag("outcome", outcome).register(registry).increment();
+    }
+
+    public void shareAction(String action) {
+        Counter.builder(SHARE_ACTION).tag("action", action).register(registry).increment();
     }
 }
