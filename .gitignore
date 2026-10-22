@@ -40,6 +40,9 @@ dist/
 target/
 *.class
 
+# labs：Java 语言服务器把工程输出写到 bin/，属于构建产物
+labs/*/bin/
+
 # 编辑器 / 系统
 .vscode/
 .idea/
