@@ -56,6 +56,8 @@ public class SecurityConfig {
                             jakarta.servlet.DispatcherType.ERROR).permitAll();
                     registry.requestMatchers("/actuator/health/**", "/actuator/info").permitAll();
                     registry.requestMatchers("/api/v1/auth/**").permitAll();
+                    // The webhook service verifies the HMAC signature over the raw body.
+                    registry.requestMatchers("/api/v1/platform/webhooks/**").permitAll();
                     // 完成回调由 X-Internal-Token 自行校验：它来自编排服务，
                     // 拿不到 JWT 也不该被要求拿
                     registry.requestMatchers("/api/v1/internal/**").permitAll();

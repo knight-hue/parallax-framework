@@ -1,0 +1,28 @@
+{
+  "module": "platform-github-pr-ingress",
+  "date": "2026-10-22",
+  "checks": {
+    "java_full_tests": {"passed": 107, "failed": 0, "skipped": 0},
+    "github_pr_webhook_it": {"passed": 6, "failed": 0, "skipped": 0},
+    "flyway_version": 10
+  },
+  "verified_behaviors": [
+    "HMAC-SHA256 signature is checked over the exact raw request body",
+    "repository id must resolve to an explicit project/repository link",
+    "payload clone URL must match the registered repository",
+    "task uses the latest immutable project policy and a bounded token budget",
+    "pull-request head commit is fixed and lower-cased before task creation",
+    "X-GitHub-Delivery provides idempotent task creation",
+    "reusing a delivery id with different content is rejected",
+    "non-triggering actions return without creating a task",
+    "the disabled system.webhook account is the task author and is audited",
+    "PR number and payload digest are persisted for audit"
+  ],
+  "limitations": [
+    "GitLab ingress is not implemented",
+    "A real GitHub webhook delivery has not been performed",
+    "The webhook secret is deployment-wide; per-tenant secrets are pending",
+    "MySQL 8.4 migration and target-environment acceptance pending",
+    "Task deduplication is based on delivery id, not on PR number plus head SHA"
+  ]
+}

@@ -13,6 +13,7 @@ public class ParallaxProperties {
     private final Ratelimit ratelimit = new Ratelimit();
     private final Identity identity = new Identity();
     private final Cache cache = new Cache();
+    private final Webhooks webhooks = new Webhooks();
 
     public Gateway getGateway() {
         return gateway;
@@ -32,6 +33,21 @@ public class ParallaxProperties {
 
     public Cache getCache() {
         return cache;
+    }
+
+    public Webhooks getWebhooks() {
+        return webhooks;
+    }
+
+    /** Signed repository-provider webhooks. An empty secret disables the endpoint. */
+    public static class Webhooks {
+        private String githubSecret = "";
+        private int maxBodyBytes = 1_000_000;
+
+        public String getGithubSecret() { return githubSecret; }
+        public void setGithubSecret(String githubSecret) { this.githubSecret = githubSecret; }
+        public int getMaxBodyBytes() { return maxBodyBytes; }
+        public void setMaxBodyBytes(int maxBodyBytes) { this.maxBodyBytes = maxBodyBytes; }
     }
 
     /** Redis-backed read cache settings. Cache is advisory and never an authorization source. */

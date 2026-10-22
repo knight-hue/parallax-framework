@@ -187,3 +187,33 @@ database rows remain authoritative for policy integrity and all task, quota, art
 and approval decisions; cached policy JSON is also schema- and digest-checked before use. A Redis timeout, lock timeout, malformed value, or unavailable
 server falls back to MySQL. A short Redisson rebuild lease reduces a thundering herd,
 but it is not used as a correctness lock or as a replacement for database constraints.
+
+## GitHub pull-request ingress
+
+Set `PARALLAX_GITHUB_WEBHOOK_SECRET` to the same secret configured in GitHub. An empty
+secret disables the endpoint. The gateway accepts `POST /api/v1/platform/webhooks/github`
+with `X-Hub-Signature-256`, `X-GitHub-Event: pull_request`, and `X-GitHub-Delivery`.
+
+Before a webhook can create work, a project maintainer binds the registered repository
+to its GitHub repository id:
+
+```text
+POST /api/v1/platform/projects/{projectId}/repositories/{repositoryId}/links
+{
+  "provider": "GITHUB",
+  "externalId": "123456789",
+  "tokenBudget": 1000
+}
+```
+
+`tokenBudget` is optional and defaults to the latest policy maximum. The task uses the
+latest immutable policy at delivery time and the fixed `pull_request.head.sha`; the
+client cannot supply a clone URL, policy, or commit. `opened`, `reopened`, and
+`synchronize` trigger review. A duplicate `X-GitHub-Delivery` returns the original task;
+reusing a delivery id with different content is rejected. The disabled `system.webhook`
+account is the task author, and the delivery id, payload digest, PR number, repository,
+and task id are persisted.
+
+This is a deployment-wide trust boundary: the shared secret authenticates the GitHub
+sender, not an individual tenant. GitLab ingress and per-tenant webhook secrets are not
+implemented yet.
