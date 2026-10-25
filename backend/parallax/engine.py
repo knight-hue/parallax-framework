@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
+from dataclasses import asdict
 from datetime import UTC, datetime
 
 from parallax.config import Settings, load_settings
 from parallax.core.admission import IndependenceGate
 from parallax.core.aggregator import AggregationRules, Aggregator
+from parallax.core.arbitration import BlindArbitrator
 from parallax.core.coverage import CoverageMonitor
 from parallax.core.independence import build_independence_profile, build_provenance_graph
 from parallax.core.ledger import ClaimLedger, LedgerGroup
@@ -71,6 +73,9 @@ class ParallaxEngine:
             falsifier = LLMFalsifier(
                 client, max_evidence_chars=settings.falsifier_max_evidence_chars
             )
+
+        if arbitrator is None:
+            arbitrator = BlindArbitrator() if settings.arbitrator == "blind" else NullArbitrator()
 
         ledger = ClaimLedger(validators=validators)
         aggregator = Aggregator(
@@ -212,6 +217,8 @@ class ParallaxEngine:
             coverage=matrix,
             manifest=runtime.manifest,
             independence=independence,
+            gap_attribution=runtime.gap_attribution.to_dict() if runtime.gap_attribution else {},
+            gate=asdict(runtime.gate_decision) if runtime.gate_decision else {},
             provenance=build_provenance_graph(
                 all_claims, assignments, runtime.manifest.receipts, evidence=runtime.evidence
             ),

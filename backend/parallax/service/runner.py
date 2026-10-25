@@ -544,6 +544,8 @@ def _summary_payload(report, engine) -> dict:
             "receipts": len(report.manifest.receipts),
             "correlation_budget": report.manifest.correlation_budget,
             "independence": report.independence.model_dump(mode="json"),
+            "gap_attribution": report.gap_attribution,
+            "gate": report.gate,
             "rounds": [
                 {
                     "round": r.round_index,

@@ -173,6 +173,33 @@ class AttributionReport:
                 groups.append(item.group)
         return groups
 
+    def to_dict(self) -> dict[str, object]:
+        """报告与回执用的可序列化快照。"""
+        return {
+            "min_support": self.min_support,
+            "by_kind": dict(self.by_kind),
+            "actionable_groups": self.actionable_groups,
+            "run_estimate": {
+                "observed": self.run_estimate.observed,
+                "estimated_total": self.run_estimate.estimated_total,
+                "detection_probability": self.run_estimate.detection_probability,
+                "recapture_pairs": self.run_estimate.recapture_pairs,
+                "method": self.run_estimate.method,
+            },
+            "items": [
+                {
+                    "evidence_id": item.evidence_id,
+                    "group": item.group,
+                    "readers": item.readers,
+                    "claims": item.claims,
+                    "kind": item.kind,
+                    "reason": item.reason,
+                    "missing_probability": item.missing_probability,
+                }
+                for item in self.items
+            ],
+        }
+
 
 def attribute_gaps(
     *,

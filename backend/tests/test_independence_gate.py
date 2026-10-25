@@ -210,3 +210,33 @@ async def test_observe_mode_keeps_high_confidence(demo_repo, defects):
     assert report.manifest.stop_reason.value == "coverage_satisfied"
     assert report.high_confidence
     assert engine.runtime.gate_decision.action == "observe"
+
+
+async def test_report_carries_gap_attribution_and_gate(demo_repo, defects):
+    """产品面可见性：结构化结果必须带上归因与闸门，而不是只进事件流。"""
+    engine = _engine(demo_repo, defects)
+
+    report = await engine.run("审查")
+
+    assert report.gap_attribution, "归因快照不能为空"
+    assert set(report.gap_attribution["by_kind"]) <= {
+        "partition_gap",
+        "reader_miss",
+        "healthy",
+        "unresolved",
+    }
+    assert "run_estimate" in report.gap_attribution
+    assert report.gate["action"] in {"accept", "observe", "repartition", "downgrade"}
+    assert "reason" in report.gate
+
+
+async def test_blind_arbitrator_is_reachable_from_settings(demo_repo, defects):
+    """`PARALLAX_ARBITRATOR=blind` 必须在产品路径上真的注入仲裁器。"""
+    engine = _engine(demo_repo, defects, arbitrator="blind")
+
+    assert getattr(engine.runtime.arbitrator, "name", "") == "blind-evidence"
+
+    report = await engine.run("审查")
+
+    assert report is not None
+    assert engine.runtime.arbitrator.name == "blind-evidence"

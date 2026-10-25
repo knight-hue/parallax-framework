@@ -325,6 +325,8 @@ export default function Page() {
               </div>
 
               <IndependencePanel result={result} />
+              <GapAttributionPanel result={result} />
+              <GatePanel result={result} />
             </>
           ) : activeRun?.status === 'done' || viewRunId === null ? null : (
             <Card>
@@ -391,6 +393,93 @@ function IndependencePanel({ result }: { result: RunResult }) {
         <Field label="去共同上游后的通道" value={String(profile.dependency_channel_count ?? '—')} />
         <Field label="共同推理上游" value={String(profile.common_upstreams?.length ?? 0)} />
         <Field label="未解析血缘" value={String(profile.unresolved_lineage?.length ?? 0)} />
+      </CardBody>
+    </Card>
+  );
+}
+
+function GapAttributionPanel({ result }: { result: RunResult }) {
+  const gap = result.manifest.gap_attribution;
+  const byKind = gap.by_kind ?? {};
+  const estimate = gap.run_estimate;
+  const candidates = (gap.items ?? []).filter((item) =>
+    item.kind === 'partition_gap' || item.kind === 'reader_miss',
+  );
+  return (
+    <Card>
+      <CardHeader
+        title="覆盖缺口归因"
+        hint="漏派与漏报是两件事：前者补派，后者只能估漏检并交还人工"
+      />
+      <CardBody className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+        <Field label="漏派证据" value={String(byKind.partition_gap ?? 0)} />
+        <Field label="漏检候选" value={String(byKind.reader_miss ?? 0)} />
+        <Field label="覆盖正常" value={String(byKind.healthy ?? 0)} />
+        <Field label="无法判定" value={String(byKind.unresolved ?? 0)} />
+        <Field
+          label="单 Reader 检出率"
+          value={
+            estimate?.detection_probability == null
+              ? '无法估计（无重捕）'
+              : formatPercent(estimate.detection_probability)
+          }
+        />
+        <Field
+          label="估计总体 / 已观测"
+          value={
+            estimate?.estimated_total == null
+              ? '—'
+              : `${estimate.estimated_total.toFixed(1)} / ${estimate.observed}`
+          }
+        />
+        <Field label="重捕对数" value={String(estimate?.recapture_pairs ?? 0)} />
+        <Field label="待补检分组" value={String(gap.actionable_groups?.length ?? 0)} />
+      </CardBody>
+      {candidates.length > 0 ? (
+        <CardBody className="space-y-1 text-xs">
+          {candidates.slice(0, 5).map((item) => (
+            <AuditRow
+              key={item.evidence_id}
+              label={`${item.kind === 'partition_gap' ? '漏派' : '漏检'} · ${item.evidence_id}`}
+              value={`${item.readers} 个 Reader / ${item.claims} 条 claim`}
+              mono
+            />
+          ))}
+        </CardBody>
+      ) : null}
+    </Card>
+  );
+}
+
+function GatePanel({ result }: { result: RunResult }) {
+  const gate = result.manifest.gate;
+  const action = gate.action;
+  const tone = action === 'downgrade' ? 'danger' : action === 'accept' ? 'ok' : 'warn';
+  return (
+    <Card>
+      <CardHeader
+        title="独立性准入闸门"
+        hint="指标不参与控制就只是报表"
+        right={<Badge tone={tone}>{action ?? '未评估'}</Badge>}
+      />
+      <CardBody className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+        <Field
+          label="有效通道"
+          value={gate.effective_channels == null ? '—' : gate.effective_channels.toFixed(2)}
+        />
+        <Field
+          label="归一化独立性"
+          value={
+            gate.normalized_independence == null
+              ? '—'
+              : formatPercent(gate.normalized_independence)
+          }
+        />
+        <Field label="重分区次数" value={String(gate.attempts ?? 0)} />
+        <Field label="停止原因" value={result.manifest.stop_reason ?? '—'} />
+        <div className="col-span-2 sm:col-span-4 text-[var(--color-muted)]">
+          {gate.reason ?? '本运行未产生闸门判定'}
+        </div>
       </CardBody>
     </Card>
   );

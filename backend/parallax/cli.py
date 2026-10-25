@@ -77,6 +77,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="启用缺口优先的确定性补检调度（默认跟随 PARALLAX_ADAPTIVE_SCHEDULING）",
     )
 
+    audit.add_argument(
+        "--arbitrator",
+        choices=["null", "blind"],
+        default=None,
+        help="争议仲裁器：null=不仲裁（默认），blind=结论剥离仲裁（只读证据，不读结论）",
+    )
     audit.add_argument("--json", action="store_true", help="输出 JSON 而非 Markdown")
     audit.add_argument("--out", default=None, help="把报告写入文件")
     audit.add_argument(
@@ -180,6 +186,7 @@ def _overrides(args: argparse.Namespace) -> dict:
         "enable_llm_falsifier": getattr(args, "llm_falsifier", None),
         "adaptive_scheduling": getattr(args, "adaptive_scheduling", None),
         "semantic_partitioning": getattr(args, "semantic_partitioning", None),
+        "arbitrator": getattr(args, "arbitrator", None),
     }
     return {k: v for k, v in pairs.items() if v is not None}
 

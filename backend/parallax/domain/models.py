@@ -406,6 +406,10 @@ class Report(BaseModel):
     manifest: RunManifest
     independence: IndependenceProfile = Field(default_factory=IndependenceProfile)
     provenance: ProvenanceGraph = Field(default_factory=ProvenanceGraph)
+    gap_attribution: dict[str, Any] = Field(default_factory=dict)
+    """覆盖缺口归因快照：分区缺口 / 读者漏检 / 干净 / 未决的计数与运行级估计。"""
+    gate: dict[str, Any] = Field(default_factory=dict)
+    """独立性闸门的最终判定（action / reason / 有效通道 / 尝试次数）。"""
 
     @property
     def lineage(self) -> EvidenceLineage:

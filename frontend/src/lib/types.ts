@@ -81,6 +81,8 @@ export interface RunResult {
     receipts: number;
     correlation_budget: Record<string, number>;
     independence: IndependenceProfile;
+    gap_attribution: GapAttribution;
+    gate: GateDecision;
     rounds: RoundRow[];
   };
   coverage: CoverageMatrix;
@@ -109,6 +111,38 @@ export interface IndependenceProfile {
   common_upstreams?: string[];
   unresolved_lineage?: string[];
   dependency_channel_count?: number;
+}
+
+export interface GapAttributionItem {
+  evidence_id: string;
+  group: string;
+  readers: number;
+  claims: number;
+  kind: 'partition_gap' | 'reader_miss' | 'healthy' | 'unresolved';
+  reason: string;
+  missing_probability: number | null;
+}
+
+export interface GapAttribution {
+  min_support?: number;
+  by_kind?: Record<string, number>;
+  actionable_groups?: string[];
+  run_estimate?: {
+    observed: number;
+    estimated_total: number | null;
+    detection_probability: number | null;
+    recapture_pairs: number;
+    method: string;
+  };
+  items?: GapAttributionItem[];
+}
+
+export interface GateDecision {
+  action?: 'accept' | 'observe' | 'repartition' | 'downgrade';
+  reason?: string;
+  attempts?: number;
+  effective_channels?: number;
+  normalized_independence?: number;
 }
 
 export interface RepairExecution {
