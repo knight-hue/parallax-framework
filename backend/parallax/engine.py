@@ -75,7 +75,18 @@ class ParallaxEngine:
             )
 
         if arbitrator is None:
-            arbitrator = BlindArbitrator() if settings.arbitrator == "blind" else NullArbitrator()
+            if settings.arbitrator == "blind":
+                arbitrator = BlindArbitrator()
+            elif settings.arbitrator in {"llm", "llm-blind"}:
+                from parallax.infra.arbitrator_llm import LLMArbitrator
+
+                if not settings.is_llm_configured():
+                    raise ValueError("arbitrator=llm 需要配置模型 API Key")
+                arbitrator = LLMArbitrator(
+                    client, redact_statements=settings.arbitrator == "llm-blind"
+                )
+            else:
+                arbitrator = NullArbitrator()
 
         ledger = ClaimLedger(validators=validators)
         aggregator = Aggregator(

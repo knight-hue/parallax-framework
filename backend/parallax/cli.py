@@ -79,9 +79,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     audit.add_argument(
         "--arbitrator",
-        choices=["null", "blind"],
+        choices=["null", "blind", "llm", "llm-blind"],
         default=None,
-        help="争议仲裁器：null=不仲裁（默认），blind=结论剥离仲裁（只读证据，不读结论）",
+        help=(
+            "争议仲裁器：null=不仲裁（默认）；blind=规则型结论剥离；"
+            "llm=模型仲裁；llm-blind=模型仲裁但不把结论交给模型"
+        ),
     )
     audit.add_argument("--json", action="store_true", help="输出 JSON 而非 Markdown")
     audit.add_argument("--out", default=None, help="把报告写入文件")

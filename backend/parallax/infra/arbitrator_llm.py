@@ -39,15 +39,26 @@ _ARB_SCHEMA = ArbitrationVerdict
 
 
 class LLMArbitrator:
-    """用模型做仲裁。"""
+    """用模型做仲裁。
+
+    `redact_statements=True` 时**不把双方的自然语言结论交给模型**，只给立场、
+    证据指针与引用片段。这是对 `Audit Without Verification`（arXiv 2609.07680）的直接应用：
+    删掉「结论字段」能让审计层从「转发」回到「核查」。
+    """
 
     name = "llm"
 
-    def __init__(self, client: LLMClient) -> None:
+    def __init__(self, client: LLMClient, *, redact_statements: bool = False) -> None:
         self.client = client
+        self.redact_statements = redact_statements
+        self.name = "llm-redacted" if redact_statements else "llm"
 
     async def arbitrate(self, group: LedgerGroup, claims: list[Claim]) -> ClaimStatus:
-        payload = "\n\n".join(self._render(claim) for claim in claims if claim is not None)
+        payload = "\n\n".join(
+            self._render(claim, redact=self.redact_statements)
+            for claim in claims
+            if claim is not None
+        )
         messages = [
             ChatMessage(role="system", content=_SYSTEM),
             ChatMessage(
@@ -73,11 +84,14 @@ class LLMArbitrator:
         return ClaimStatus.PENDING
 
     @staticmethod
-    def _render(claim: Claim) -> str:
+    def _render(claim: Claim, *, redact: bool = False) -> str:
         stance = "主张问题存在" if claim.polarity == 1 else "主张问题不存在"
         refs = "\n".join(
             f"  - [{ref.adapter}] {ref.locator}"
             + (f"\n    摘录：{ref.quote[:300]}" if ref.quote else "")
             for ref in claim.source_refs
         )
-        return f"[{claim.extracted_by}] {stance}：{claim.statement}\n  证据：\n{refs}"
+        head = f"[{claim.extracted_by}] {stance}"
+        if not redact:
+            head += f"：{claim.statement}"
+        return f"{head}\n  证据：\n{refs}"

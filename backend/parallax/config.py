@@ -138,12 +138,14 @@ class Settings(BaseSettings):
     """归一化独立性下限（0 = 不要求）。"""
     max_independence_attempts: int = Field(default=1, ge=0, le=3)
     """为提高独立性最多重分区几次。"""
-    arbitrator: Literal["null", "blind"] = "null"
+    arbitrator: Literal["null", "blind", "llm", "llm-blind"] = "null"
     """争议仲裁器。
 
     `null`：不仲裁，争议原样保留为 disputed（默认，最诚实）；
-    `blind`：结论剥离仲裁，只拿指针/引用/可证伪条件回证据重推，不读任何一方的措辞。
-    命令行 `--arbitrator blind` 与此等价。
+    `blind`：规则型结论剥离仲裁，只拿指针/引用/可证伪条件回证据重推；
+    `llm`：模型仲裁，会把双方结论一并发给模型；
+    `llm-blind`：模型仲裁但**不把结论交给模型**，只给立场与证据。
+    命令行 `--arbitrator` 与此等价。
     """
 
     # ---- 覆盖率 ----

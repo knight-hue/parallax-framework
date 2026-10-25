@@ -292,3 +292,23 @@ async def test_sticky_arbitrator_endpoints_match_blind_and_relay():
 def test_sticky_arbitrator_rejects_out_of_range():
     with pytest.raises(ValueError):
         StickyArbitrator(stickiness=1.5)
+
+
+def test_llm_arbitrator_render_can_hide_the_conclusion():
+    """真实模型仲裁也必须能剥结论：redact=True 时提示里不得出现 statement。"""
+    from parallax.infra.arbitrator_llm import LLMArbitrator
+
+    claim = _claim(
+        polarity=Polarity.ASSERT,
+        claim_type="concurrency",
+        agent="r1",
+        statement="这里有明确的竞态条件",
+    )
+
+    visible = LLMArbitrator._render(claim, redact=False)
+    hidden = LLMArbitrator._render(claim, redact=True)
+
+    assert "这里有明确的竞态条件" in visible
+    assert "这里有明确的竞态条件" not in hidden
+    assert "主张问题存在" in hidden
+    assert "Sample.java:1-20" in hidden
