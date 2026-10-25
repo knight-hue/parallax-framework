@@ -1,0 +1,19 @@
+# Prometheus 抓取配置（可选组件，profile: observability）
+#
+# 只抓取已经存在的端点：
+#   gateway  /actuator/prometheus   平台业务指标（任务、审批、缓存、Outbox、限流）
+#
+# Python 审查服务目前**没有** /metrics 路由，因此不列在这里——
+# 宁可少抓一个目标，也不写一条永远 down 的 job。
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: parallax-gateway
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["gateway:8080"]
+        labels:
+          service: parallax-gateway

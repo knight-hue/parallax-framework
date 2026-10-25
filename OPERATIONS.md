@@ -56,6 +56,26 @@ docker build -f docker/sandbox.Dockerfile -t parallax-engine-sandbox:local .
 后，仲裁输入不含任何一方的结论文本，只给指针、引用与可证伪条件，并与原始证据重新核对。
 回执里的 `statement_digests` 只能在事后验证“当时账本确实是这句话”，不能反推出被剥离的结论。
 
+## 可选监控栈
+
+默认不启动。镜像需在工作环境自行准备，本仓库不代你拉取：
+
+```powershell
+docker compose --env-file backend/.env --profile gateway --profile observability up -d --pull never
+```
+
+- Prometheus 只绑定 `127.0.0.1:${PARALLAX_PROMETHEUS_PORT:-9090}`，按 `observability/prometheus.yml` 抓
+  `gateway:8080/actuator/prometheus`；`gateway` 服务属于 `gateway` profile，所以两个 profile 要一起启用。
+- Grafana 只绑定 `127.0.0.1:${PARALLAX_GRAFANA_PORT:-3001}`，管理员口令取 `PARALLAX_GRAFANA_PASSWORD`。
+- **Python 审查服务目前没有 `/metrics` 路由**，因此抓取配置里不列它。不写一个永远 down 的 job
+  比写一个好看的目标列表更诚实；需要时先在服务端加导出器，再加 job。
+
+仅校验配置而不启动：
+
+```powershell
+docker compose --env-file backend/.env --profile observability --profile gateway config --quiet
+```
+
 ## 修复闭环
 
 `PARALLAX_ENABLE_REPAIR=true` 只应在专用隔离 worker 服务实例开启。普通生产 API 默认关闭。专用 worker 必须本地安装 Docker CLI，拥有已缓存的执行镜像，并能把快照的绝对路径挂入该宿主的 Docker daemon；不要给公网 API 容器挂宿主 Docker socket。
