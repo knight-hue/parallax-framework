@@ -1,32 +1,33 @@
-{
-  "name": "parallax-console",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Parallax 控制台：提交审查、实时观测盲读进度、查看 Claim 账本与覆盖率矩阵",
-  "scripts": {
-    "dev": "next dev -p 3000",
-    "build": "next build",
-    "start": "next start -p 3000",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "test:sse": "node --test tools/verify-sse.mjs"
-  },
-  "dependencies": {
-    "next": "16.1.1",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "clsx": "^2.1.1",
-    "tailwind-merge": "^2.6.0",
-    "lucide-react": "^0.468.0"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.1.1",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  }
+﻿{
+    "name":  "parallax-console",
+    "version":  "0.1.0",
+    "private":  true,
+    "description":  "Parallax 控制台：提交审查、实时观测盲读进度、查看 Claim 账本与覆盖率矩阵",
+    "scripts":  {
+                    "dev":  "next dev -p 3000",
+                    "build":  "next build",
+                    "start":  "next start -p 3000",
+                    "lint":  "eslint .",
+                    "typecheck":  "tsc --noEmit",
+                    "test:sse":  "node --test tools/verify-sse.mjs",
+                    "test:panels":  "tsc tools/panels.test.ts src/lib/panels.ts --outDir .tmp-test --module commonjs --target es2020 --moduleResolution node --skipLibCheck --esModuleInterop \u0026\u0026 node --test .tmp-test/tools/panels.test.js"
+                },
+    "dependencies":  {
+                         "next":  "16.1.1",
+                         "react":  "19.2.3",
+                         "react-dom":  "19.2.3",
+                         "clsx":  "^2.1.1",
+                         "tailwind-merge":  "^2.6.0",
+                         "lucide-react":  "^0.468.0"
+                     },
+    "devDependencies":  {
+                            "@tailwindcss/postcss":  "^4",
+                            "@types/node":  "^20",
+                            "@types/react":  "^19",
+                            "@types/react-dom":  "^19",
+                            "eslint":  "^9",
+                            "eslint-config-next":  "16.1.1",
+                            "tailwindcss":  "^4",
+                            "typescript":  "^5"
+                        }
 }

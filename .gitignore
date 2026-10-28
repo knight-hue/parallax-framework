@@ -1,6 +1,5 @@
 # Python
-__pycache__/
-*.py[cod]
+__pycache__/*.py[cod]
 .venv/
 venv/
 *.egg-info/
@@ -28,6 +27,7 @@ venv/
 # Node / 前端
 node_modules/
 .next/
+.tmp-test/
 out/
 dist/
 

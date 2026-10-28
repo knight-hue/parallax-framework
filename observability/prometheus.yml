@@ -2,9 +2,10 @@
 #
 # 只抓取已经存在的端点：
 #   gateway  /actuator/prometheus   平台业务指标（任务、审批、缓存、Outbox、限流）
+#   api      /metrics               Python 服务自身指标（运行数、租约数、构建信息）
 #
-# Python 审查服务目前**没有** /metrics 路由，因此不列在这里——
-# 宁可少抓一个目标，也不写一条永远 down 的 job。
+# `/metrics` 不在 `/api/` 下，因此不经过内部令牌中间件；它只能绑内网，
+# 不要经公网反向代理暴露。
 
 global:
   scrape_interval: 15s
@@ -17,3 +18,10 @@ scrape_configs:
       - targets: ["gateway:8080"]
         labels:
           service: parallax-gateway
+
+  - job_name: parallax-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:8000"]
+        labels:
+          service: parallax-api

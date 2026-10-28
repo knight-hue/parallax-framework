@@ -4,6 +4,7 @@
 
     GET  /health                          存活探针
     GET  /ready                           就绪探针（含模型凭据检查）
+    GET  /metrics                         Prometheus 文本指标（只绑内部网络）
     GET  /api/v1/meta                     服务能力与当前默认配置
     POST /api/v1/audits                   提交审查 → run_id
     GET  /api/v1/audits                   列出历史运行
@@ -35,6 +36,7 @@ from parallax.config import Settings, load_settings
 from parallax.domain.errors import ConfigurationError
 from parallax.plugins.code_audit import DEFECT_CLASSES
 from parallax.service.events import RunEventBus
+from parallax.service.metrics import render_prometheus
 from parallax.service.platform_client import PlatformRejected, PlatformUnavailable
 from parallax.service.platform_worker import PlatformWorkerService
 from parallax.service.repair import RepairPlan, RepairService, safe_relative
@@ -187,6 +189,29 @@ def create_app(
         if not store.root.exists():
             reasons.append(f"runs 目录不可用：{store.root}")
         return ReadyResponse(ready=not reasons, reasons=reasons)
+
+    @app.get("/metrics", include_in_schema=False)
+    async def metrics() -> PlainTextResponse:
+        """Prometheus 文本指标。
+
+        刻意不挂在 `/api/` 下：内部边界中间件只守 `/api/`，而抓取端通常不携带
+        网关凭据。因此这个端点**必须只绑定内部网络**，不要经公网反向代理暴露。
+        具体口径见 OPERATIONS.md。
+        """
+        records = store.list(limit=1000)
+        active = sum(
+            1
+            for record in records
+            if store.lease_active(record.run_id, lease_seconds=resolved.worker_lease_seconds)
+        )
+        return PlainTextResponse(
+            render_prometheus(
+                [record.status for record in records],
+                version=__version__,
+                active_leases=active,
+            ),
+            media_type="text/plain; version=0.0.4; charset=utf-8",
+        )
 
     @app.get("/api/v1/meta")
     async def meta() -> dict:

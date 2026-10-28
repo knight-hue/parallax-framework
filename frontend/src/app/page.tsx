@@ -14,6 +14,7 @@ import { PlatformWorkspace } from '@/components/platform-workspace';
 import { PlatformAdmin } from '@/components/platform-admin';
 import { Badge, Button, Card, CardBody, CardHeader, EmptyState } from '@/components/ui/primitives';
 import { formatPercent } from '@/lib/utils';
+import { gapHighlights, gapKindLabel, gateLabel, gateTone, percentOr } from '@/lib/panels';
 
 interface Health {
   status: string;
@@ -402,9 +403,7 @@ function GapAttributionPanel({ result }: { result: RunResult }) {
   const gap = result.manifest.gap_attribution;
   const byKind = gap.by_kind ?? {};
   const estimate = gap.run_estimate;
-  const candidates = (gap.items ?? []).filter((item) =>
-    item.kind === 'partition_gap' || item.kind === 'reader_miss',
-  );
+  const candidates = gapHighlights(gap);
   return (
     <Card>
       <CardHeader
@@ -418,11 +417,7 @@ function GapAttributionPanel({ result }: { result: RunResult }) {
         <Field label="无法判定" value={String(byKind.unresolved ?? 0)} />
         <Field
           label="单 Reader 检出率"
-          value={
-            estimate?.detection_probability == null
-              ? '无法估计（无重捕）'
-              : formatPercent(estimate.detection_probability)
-          }
+          value={percentOr(estimate?.detection_probability, '无法估计（无重捕）')}
         />
         <Field
           label="估计总体 / 已观测"
@@ -437,10 +432,10 @@ function GapAttributionPanel({ result }: { result: RunResult }) {
       </CardBody>
       {candidates.length > 0 ? (
         <CardBody className="space-y-1 text-xs">
-          {candidates.slice(0, 5).map((item) => (
+          {candidates.map((item) => (
             <AuditRow
               key={item.evidence_id}
-              label={`${item.kind === 'partition_gap' ? '漏派' : '漏检'} · ${item.evidence_id}`}
+              label={`${gapKindLabel(item.kind)} · ${item.evidence_id}`}
               value={`${item.readers} 个 Reader / ${item.claims} 条 claim`}
               mono
             />
@@ -454,13 +449,13 @@ function GapAttributionPanel({ result }: { result: RunResult }) {
 function GatePanel({ result }: { result: RunResult }) {
   const gate = result.manifest.gate;
   const action = gate.action;
-  const tone = action === 'downgrade' ? 'danger' : action === 'accept' ? 'ok' : 'warn';
+  const tone = gateTone(action);
   return (
     <Card>
       <CardHeader
         title="独立性准入闸门"
         hint="指标不参与控制就只是报表"
-        right={<Badge tone={tone}>{action ?? '未评估'}</Badge>}
+        right={<Badge tone={tone}>{gateLabel(action)}</Badge>}
       />
       <CardBody className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
         <Field

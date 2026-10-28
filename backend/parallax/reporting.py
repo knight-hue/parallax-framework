@@ -72,8 +72,85 @@ def render_markdown(report: Report, *, max_items: int = 40) -> str:
     lines.extend(_render_claims("高置信结论", report.high_confidence, max_items))
     lines.extend(_render_claims("待验证（孤证）", report.pending, max_items))
     lines.extend(_render_claims("争议（需裁决）", report.disputed, max_items))
+    lines.extend(_render_gate(report.gate))
+    lines.extend(_render_gap_attribution(report.gap_attribution))
     lines.extend(_render_coverage(report.coverage))
     return "\n".join(lines)
+
+
+def _render_gate(gate: dict) -> list[str]:
+    """独立性闸门判定。"""
+    if not gate:
+        return []
+    lines = ["## 独立性准入闸门", ""]
+    action = gate.get("action", "unknown")
+    label = {
+        "accept": "放行",
+        "observe": "仅报告（observe）",
+        "repartition": "要求重分区",
+        "downgrade": "结论已降级为待验证",
+    }.get(action, action)
+    lines.append(f"- 判定：`{action}`（{label}）")
+    if gate.get("reason"):
+        lines.append(f"- 原因：{gate['reason']}")
+    if gate.get("effective_channels") is not None:
+        lines.append(
+            f"- 有效通道：{gate['effective_channels']:.2f}｜"
+            f"归一化 {gate.get('normalized_independence', 0.0):.1%}｜"
+            f"重分区尝试 {gate.get('attempts', 0)} 次"
+        )
+    if action == "downgrade":
+        lines.append("- 注意：本次高置信结论不得当作高置信采信，需人工复核。")
+    lines.append("")
+    return lines
+
+
+def _render_gap_attribution(gap: dict) -> list[str]:
+    """覆盖缺口归因：把「没覆盖到」拆成漏派与漏报。"""
+    if not gap:
+        return []
+    lines = ["## 覆盖缺口归因", ""]
+    by_kind = gap.get("by_kind", {}) or {}
+    lines.append(
+        f"- 漏派（系统层）：{by_kind.get('partition_gap', 0)}｜"
+        f"漏检候选（读者层）：{by_kind.get('reader_miss', 0)}｜"
+        f"覆盖正常：{by_kind.get('healthy', 0)}｜"
+        f"无法判定：{by_kind.get('unresolved', 0)}"
+    )
+    estimate = gap.get("run_estimate", {}) or {}
+    probability = estimate.get("detection_probability")
+    if probability is None:
+        lines.append("- 单 Reader 检出率：无法估计（无重捕，不给伪精度）")
+    else:
+        lines.append(
+            f"- 单 Reader 检出率：{probability:.1%}（重捕对 {estimate.get('recapture_pairs', 0)}，"
+            f"已观测 {estimate.get('observed', 0)}，估计总体 "
+            f"{estimate.get('estimated_total')}"
+        )
+    groups = gap.get("actionable_groups") or []
+    if groups:
+        lines.append(f"- 待补检分组：{', '.join(groups)}")
+    lines.append("")
+
+    items = [item for item in (gap.get("items") or []) if item.get("kind") != "healthy"]
+    if not items:
+        lines.append("（无缺口）")
+        lines.append("")
+        return lines
+    lines.append("| 证据 | Reader 数 | claim 数 | 归因 | 全员漏检概率 |")
+    lines.append("| --- | ---: | ---: | --- | ---: |")
+    for item in items[:10]:
+        missing = item.get("missing_probability")
+        lines.append(
+            f"| `{item.get('evidence_id')}` | {item.get('readers', 0)} | {item.get('claims', 0)} | "
+            f"`{item.get('kind')}` | {'—' if missing is None else f'{missing:.1%}'} |"
+        )
+    if len(items) > 10:
+        lines.append(f"| …另有 {len(items) - 10} 条未列出 | | | | |")
+    lines.append("")
+    lines.append("> `reader_miss` 是漏检候选，不是缺陷结论；零检出同样可能是证据真的干净。")
+    lines.append("")
+    return lines
 
 
 def _render_claims(title: str, claims: list[Claim], max_items: int) -> list[str]:
