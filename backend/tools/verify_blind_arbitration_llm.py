@@ -36,7 +36,11 @@ def _dispute_rows(samples: list[dict[str, Any]], *, dissenter: int) -> list[dict
     for position, sample in enumerate(samples):
         case = sample["case"]
         lines = sample["unit"].content.splitlines()
-        quote = lines[case["span"][0] - 1].strip()
+        start, end = case["span"]
+        # 两种条件必须看到**完全相同**的代码摘录，唯一差别是是否附带结论文本。
+        # 早期版本只把方法签名当摘录，等于让「结论剥离」一侧在更少的信息下判案，
+        # 那样测出来的差异是信息量差异，而不是结论可见性差异。
+        quote = "\n".join(line.rstrip() for line in lines[start - 1 : end]).strip()
         majority_wrong = position % 2 == 0
         truth = Polarity.ASSERT if case["truth_defect"] else Polarity.DENY
         wrong = Polarity.DENY if truth == Polarity.ASSERT else Polarity.ASSERT
