@@ -71,3 +71,5 @@ Java 默认运行档和 Compose 已切为 MySQL，旧 PostgreSQL 作为显式回
 创新定位是代码审查的系统组合创新；信息分区、先独立后共识、K* 不是本项目理论首创。
 
 2026-10-28 派发全链路增量：gateway/tools/verify_cached_rabbit.py 新增 --python，一条命令在临时 rabbitmq 4.1.8 容器上同时跑 6 项 broker 语义与 2 项全链路进程用例（eval/java-platform/platform-dispatch-chain.json）。全链路 = Outbox → 真 broker → Java 消费 → HTTP 桥 → 真实 Python Worker 进程 → 事件入库与结算：任务 1 首次投递即成功、只有 1 条 SETTLE；杀掉进程并在同一固定端点起第二个进程后，任务 2 同样成功且各自只结算一次；无 Worker 监听时消息进死信，attempt/fence 递增且不写结算，直到新进程启动后由协调器重投才成功。过程中修掉两个真实缺陷：PlatformSources 在 Windows 上被 git 的只读 pack 文件卡住清理（成功抓取被误判为失败），以及 Worker 进程夹具只替换了 platform_worker 的模型绑定、引擎实际仍调真实模型。Java 116 项、Python 474 项全绿。仍不构成多机、集群故障转移或容量验收。
+
+2026-10-28 评测方法增量：新增 parallax stats（McNemar 精确检验 + 配对自助法区间 + Holm 校正），从已落的 metrics.json 直接出结论，**零模型调用**；parallax experiment 支持 --repeat 与 --budget-calls/--budget-tokens（真实预算维度，不再用维度数量代理）。对现有产物重算的结果：udget_shared vs udget_blind 为 40:0 不一致对，风险差 +83.3%、95% CI [+72.9%, +93.8%]、p=1.8e-12（单任务，标为乐观下界）；而 aseline_shared vs lind_full 在三份历史运行上 p 均为 1（不显著），其中 p0-seedc 两臂均 100% 属饱和。结论：当前唯一显著对照来自「同预算、只差证据分配」，其余不显著是语料规模与天花板所致，需要扩语料后重跑。产物见 eval/analysis/20261028-stats/，后端 495 项测试与 Ruff 全绿。

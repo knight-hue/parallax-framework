@@ -41,7 +41,7 @@ import json
 import logging
 import subprocess
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -59,7 +59,12 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class Arm:
-    """一个实验配置。"""
+    """一个实验配置。
+
+    后两个字段是**真实预算**，不是“维度数量”代理：
+    成本-质量前沿必须能横铺多个预算档，而 `initial_focus_count` 只能调首轮维度数，
+    两者算出的是不同东西。为 None 时沿用全局配置。
+    """
 
     name: str
     description: str
@@ -68,6 +73,10 @@ class Arm:
     max_rounds: int
     initial_focus_count: int = 0
     """首轮限制为前 K 个维度（0 = 不限）。用于固定预算对照。"""
+    max_llm_calls: int | None = None
+    """调用次数上限；None = 沿用全局设置。"""
+    max_tokens: int | None = None
+    """总 token 预算；None = 沿用全局设置。"""
 
     def redundancy(self, n_readers: int) -> int:
         if self.redundancy_factor == "one":
@@ -213,7 +222,47 @@ def make_settings(base: Settings, arm: Arm) -> Settings:
             "initial_focus_count": arm.initial_focus_count,
         }
     )
+    # 预算只在臂里显式给出时才覆盖全局值——否则会把全局设置默默改掉。
+    if arm.max_llm_calls is not None:
+        overrides["max_llm_calls"] = arm.max_llm_calls
+    if arm.max_tokens is not None:
+        overrides["max_tokens"] = arm.max_tokens
     return Settings(**overrides)
+
+
+def expand_budgets(
+    arms: list[Arm],
+    *,
+    calls: list[int] | None = None,
+    tokens: list[int] | None = None,
+) -> list[Arm]:
+    """把预算档与实验臂做笛卡尔积，名字后缀带档位。
+
+    预算作为独立维度而不写死在 `ARMS` 里：前沿需要 3 档以上，
+    固定枚举会让臂表膨胀，也会与已有的 8 个臂名混淆。
+    """
+    call_levels: list[int | None] = list(calls) if calls else [None]
+    token_levels: list[int | None] = list(tokens) if tokens else [None]
+    if call_levels == [None] and token_levels == [None]:
+        return list(arms)
+    expanded: list[Arm] = []
+    for arm in arms:
+        for call_level in call_levels:
+            for token_level in token_levels:
+                suffix = ""
+                if call_level is not None:
+                    suffix += f"@calls{call_level}"
+                if token_level is not None:
+                    suffix += f"@tokens{token_level}"
+                expanded.append(
+                    replace(
+                        arm,
+                        name=arm.name + suffix,
+                        max_llm_calls=call_level,
+                        max_tokens=token_level,
+                    )
+                )
+    return expanded
 
 
 async def run_arm(

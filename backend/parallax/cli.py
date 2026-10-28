@@ -114,6 +114,26 @@ def build_parser() -> argparse.ArgumentParser:
     experiment.add_argument("--readers", type=int, default=None, help="Reader 数量")
     experiment.add_argument("--tasks", default=None, help="逗号分隔的任务 id，默认全部")
     experiment.add_argument("--list-arms", action="store_true", help="只列出可用实验臂后退出")
+    experiment.add_argument(
+        "--repeat",
+        type=int,
+        default=1,
+        help="重复次数。>1 时每次重复独立成子目录，并另出 variance.md（稳定性统计）",
+    )
+    experiment.add_argument(
+        "--budget-calls",
+        default=None,
+        help="调用次数预算档，逗号分隔（如 8,24）；与所选实验臂做笛卡尔积，臂名带后缀",
+    )
+    experiment.add_argument(
+        "--budget-tokens",
+        default=None,
+        help="token 预算档，逗号分隔（如 20000,60000）；与所选实验臂做笛卡尔积",
+    )
+    experiment.add_argument(
+        "--variance-control", default=None, help="variance.md 里的对照臂名（默认用函数内置默认值）"
+    )
+    experiment.add_argument("--variance-treatment", default=None, help="variance.md 里的实验臂名")
 
     real = sub.add_parser(
         "real",
@@ -170,7 +190,42 @@ def build_parser() -> argparse.ArgumentParser:
     receipt = sub.add_parser("receipts", help="导入并审计外部编排器的 Receipt bundle JSON")
     receipt.add_argument("bundle", type=Path)
     receipt.add_argument("--out", type=Path)
+
+    stats = sub.add_parser(
+        "stats",
+        help="对已有 metrics.json 做配对统计（McNemar、自助法区间、Holm），不调模型",
+    )
+    stats.add_argument(
+        "runs",
+        nargs="+",
+        help="一个或多个 metrics.json（也接受包含 metrics.json 的目录）",
+    )
+    stats.add_argument("--control", default="baseline_shared", help="对照组臂名")
+    stats.add_argument("--treatment", default="blind_full", help="实验组臂名")
+    stats.add_argument("--alpha", type=float, default=0.05, help="显著性水平")
+    stats.add_argument("--resamples", type=int, default=20000, help="自助法重采样次数")
+    stats.add_argument("--seed", type=int, default=20261028, help="随机种子（保证可复算）")
+    stats.add_argument("--out", type=Path, default=None, help="报告与 JSON 输出目录")
     return parser
+
+
+def _int_list(raw: str | None) -> list[int] | None:
+    """解析逗号分隔的预算档；空值返回 None，非法值直接报错而不是静默忽略。"""
+    if not raw:
+        return None
+    values: list[int] = []
+    for part in raw.split(","):
+        text = part.strip()
+        if not text:
+            continue
+        try:
+            value = int(text)
+        except ValueError as exc:
+            raise SystemExit(f"预算档必须是整数：{text}") from exc
+        if value <= 0:
+            raise SystemExit(f"预算档必须为正数：{value}")
+        values.append(value)
+    return values or None
 
 
 def _overrides(args: argparse.Namespace) -> dict:
@@ -252,6 +307,7 @@ async def _run_experiment_cli(args: argparse.Namespace) -> int:
     from parallax.eval.experiment import (
         ARMS,
         default_out_dir,
+        expand_budgets,
         render_summary,
         run_experiment,
         save_results,
@@ -290,6 +346,10 @@ async def _run_experiment_cli(args: argparse.Namespace) -> int:
         if not arms:
             raise SystemExit(f"没有匹配的实验臂：{sorted(wanted)}")
 
+    calls = _int_list(args.budget_calls)
+    tokens = _int_list(args.budget_tokens)
+    arms = expand_budgets(arms, calls=calls, tokens=tokens)
+
     overrides = _overrides(args)
     settings = load_settings(**overrides)
     if not settings.is_llm_configured():
@@ -298,7 +358,12 @@ async def _run_experiment_cli(args: argparse.Namespace) -> int:
         )
 
     print(f"语料目录：{corpus_dir}")
-    print(f"任务数量：{len(tasks)}｜实验臂：{len(arms)}｜总运行数：{len(tasks) * len(arms)}")
+    print(
+        f"任务数量：{len(tasks)}｜实验臂：{len(arms)}｜重复：{args.repeat} 次"
+        f"｜总运行数：{len(tasks) * len(arms) * args.repeat}"
+    )
+    if calls or tokens:
+        print(f"预算档：调用 {calls or '—'}｜token {tokens or '—'}")
     print(f"Reader 数：{settings.n_readers}｜模型：{settings.llm_model}")
     print()
 
@@ -310,16 +375,40 @@ async def _run_experiment_cli(args: argparse.Namespace) -> int:
             f"｜轮次 {m.rounds}｜{result.elapsed_s}s"
         )
 
-    results = await run_experiment(tasks, settings, arms=arms, on_arm_done=on_done)
-
     base = Path(args.out) if args.out else _framework_root() / "eval" / "results"
     out_dir = base if args.out else default_out_dir(base)
-    summary_path = save_results(results, out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    print()
-    print(render_summary(results, arms))
-    print(f"\n结果已写入：{out_dir}")
-    print(f"摘要：{summary_path}")
+    # 每次重复独立成目录，产物可逐次核对，而不是只留一个被平均过的总表。
+    repetitions: list[list] = []
+    for rep_index in range(1, args.repeat + 1):
+        rep_dir = out_dir if args.repeat == 1 else out_dir / f"rep{rep_index}"
+        rep_dir.mkdir(parents=True, exist_ok=True)
+        if args.repeat > 1:
+            print(f"══ 第 {rep_index}/{args.repeat} 次重复 ══")
+
+        results = await run_experiment(tasks, settings, arms=arms, on_arm_done=on_done)
+        if not results:
+            raise SystemExit("没有任何成功的实验臂")
+
+        summary_path = save_results(results, rep_dir)
+        print(render_summary(results, arms))
+        print(f"\n第 {rep_index} 次结果已写入：{rep_dir}")
+        print(f"摘要：{summary_path}")
+        repetitions.append(results)
+
+    if args.repeat > 1:
+        from parallax.eval.variance import render_variance
+
+        variance_kwargs = {"repo": ", ".join(task.task_id for task in tasks)}
+        if args.variance_control:
+            variance_kwargs["control"] = args.variance_control
+        if args.variance_treatment:
+            variance_kwargs["treatment"] = args.variance_treatment
+        (out_dir / "variance.md").write_text(
+            render_variance(repetitions, **variance_kwargs), encoding="utf-8"
+        )
+        print(f"\n稳定性统计：{out_dir / 'variance.md'}")
     return 0
 
 
@@ -442,6 +531,69 @@ def _run_rerender_cli(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_stats_cli(args: argparse.Namespace) -> int:
+    """对已有产物做配对统计。不调模型、不重跑实验。"""
+    import json as _json
+
+    from parallax.eval.stats import (
+        collect_comparisons,
+        comparison_payload,
+        render_report,
+    )
+
+    paths: list[Path] = []
+    for raw in args.runs:
+        path = Path(raw).expanduser()
+        if path.is_dir():
+            candidate = path / "metrics.json"
+            if not candidate.exists():
+                raise SystemExit(f"{path} 下没有 metrics.json")
+            paths.append(candidate)
+        elif path.is_file():
+            paths.append(path)
+        else:
+            raise SystemExit(f"路径不存在：{path}")
+
+    comparisons, skipped = collect_comparisons(
+        paths,
+        args.control,
+        args.treatment,
+        resamples=args.resamples,
+        seed=args.seed,
+        alpha=args.alpha,
+    )
+    if not comparisons:
+        raise SystemExit(
+            f"没有可比较的运行：需要同一份 metrics.json 同时包含 "
+            f"`{args.control}` 与 `{args.treatment}`，且任务带 ground truth。\n"
+            + ("\n".join(skipped) if skipped else "")
+        )
+
+    report = render_report(comparisons, alpha=args.alpha, source=", ".join(str(p) for p in paths))
+    for label in skipped:
+        report += f"\n> 跳过：{label}"
+    print(report)
+
+    if args.out:
+        args.out.mkdir(parents=True, exist_ok=True)
+        (args.out / "stats.md").write_text(report, encoding="utf-8")
+        payload = {
+            "control": args.control,
+            "treatment": args.treatment,
+            "alpha": args.alpha,
+            "seed": args.seed,
+            "comparisons": [
+                {"label": label, **comparison_payload(comparison)}
+                for label, comparison in comparisons
+            ],
+        }
+        (args.out / "stats.json").write_text(
+            _json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        print(f"\n已写入：{args.out / 'stats.md'}、{args.out / 'stats.json'}")
+    return 0
+
+
 def _run_spotcheck_cli(args: argparse.Namespace) -> int:
     """产出抽查工作表。刻意不调模型——这一步是给人看的清单。"""
     from parallax.eval.spotcheck import write_outputs
@@ -501,6 +653,8 @@ def main(argv: list[str] | None = None) -> int:
             return 130
     if args.command == "rerender":
         return _run_rerender_cli(args)
+    if args.command == "stats":
+        return _run_stats_cli(args)
     if args.command == "spotcheck":
         return _run_spotcheck_cli(args)
     parser.error(f"未知命令 {args.command}")
