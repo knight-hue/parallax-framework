@@ -182,9 +182,11 @@ class ArmSummary:
     hits: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    llm_calls: int = 0
     sole_source_defects: int = 0
     unanimous_defects: int = 0
     effective_channels: list[float] = field(default_factory=list)
+    redundancies: list[int] = field(default_factory=list)
 
     @property
     def recall(self) -> float:
@@ -204,6 +206,17 @@ class ArmSummary:
         if not self.tokens or not self.hits:
             return None
         return self.tokens / self.hits
+
+    @property
+    def calls_per_hit(self) -> float | None:
+        """每次真阳性的调用次数。早期产物只记了 calls，没记 token，这个量仍可算。"""
+        if not self.llm_calls or not self.hits:
+            return None
+        return self.llm_calls / self.hits
+
+    @property
+    def sole_source_rate(self) -> float:
+        return self.sole_source_defects / self.hits if self.hits else 0.0
 
 
 @dataclass
@@ -287,13 +300,19 @@ def summarise(entries: dict[str, dict[str, Any]], arm: str) -> ArmSummary:
         summary.hits += int(entry.get("hits") or 0)
         summary.prompt_tokens += int(entry.get("prompt_tokens") or 0)
         summary.completion_tokens += int(entry.get("completion_tokens") or 0)
+        summary.llm_calls += int(entry.get("llm_calls") or 0)
         summary.effective_channels.append(float(entry.get("effective_channels") or 0.0))
+        config = entry.get("config") or {}
+        if isinstance(config.get("redundancy"), int):
+            summary.redundancies.append(config["redundancy"])
+        # 「全员一致」的阈值必须是**实际产出过 claim 的 Agent 数**：
+        # 多轮臂每一轮都会生成全新 Reader 身份，用 reader_count 会把阈值算低、多算一致。
+        threshold = int(entry.get("agent_count") or entry.get("reader_count") or 0)
         for defect in entry.get("defects") or []:
             found = len(defect.get("found_by") or [])
             if found == 1:
                 summary.sole_source_defects += 1
-            reader_count = int(entry.get("reader_count") or 0)
-            if reader_count and found >= reader_count:
+            if threshold and found >= threshold:
                 summary.unanimous_defects += 1
     return summary
 
@@ -387,15 +406,15 @@ def render_comparison(comparison: Comparison, *, label: str = "") -> str:
     lines = [
         f"### {label or comparison.control + ' vs ' + comparison.treatment}",
         "",
-        "| 臂 | 任务 | 植入 | 命中 | 召回 | token | token/命中 | 独有发现 | 全员一致 |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| 臂 | 任务 | 植入 | 命中 | 召回 | 调用 | 调用/命中 | token/命中 | 独有发现 | 全员一致 |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for summary in (cs, ts):
         per_hit = "—" if summary.tokens_per_hit is None else f"{summary.tokens_per_hit:,.0f}"
-        tokens = f"{summary.tokens:,}" if summary.tokens else "未记录"
+        per_call = "—" if summary.calls_per_hit is None else f"{summary.calls_per_hit:.1f}"
         lines.append(
             f"| `{summary.arm}` | {summary.tasks} | {summary.planted} | {summary.hits} "
-            f"| {_percent(summary.recall)} | {tokens} | {per_hit} "
+            f"| {_percent(summary.recall)} | {summary.llm_calls} | {per_call} | {per_hit} "
             f"| {summary.sole_source_defects} | {summary.unanimous_defects} |"
         )
     lines += [
@@ -417,6 +436,23 @@ def render_comparison(comparison: Comparison, *, label: str = "") -> str:
         lines.append(
             "- ⚠️ 只覆盖 1 个任务：同一任务内的缺陷共享同一批 Reader 与同一个仓库，"
             "独立性有限，这里的 p 值应视为**乐观下界**"
+        )
+    control_redundancy = set(cs.redundancies)
+    treatment_redundancy = set(ts.redundancies)
+    if control_redundancy and treatment_redundancy:
+        if control_redundancy != treatment_redundancy:
+            lines.append(
+                "- ⚠️ 两臂冗余不同（`"
+                + ",".join(str(v) for v in sorted(control_redundancy))
+                + "` vs `"
+                + ",".join(str(v) for v in sorted(treatment_redundancy))
+                + "`）：「独有发现」受分区影响，跨冗余比较该列无效；"
+                "召回与配对检验不受影响"
+            )
+    else:
+        lines.append(
+            "- ⚠️ 产物未记录冗余配置（早期运行），无法核实两臂分区是否相同："
+            "「独有发现」列请勿跨臂比较"
         )
     return "\n".join(lines)
 
