@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import shutil
+import stat
 import subprocess
 import tarfile
 import tempfile
@@ -13,6 +15,24 @@ from urllib.parse import urlsplit
 
 from parallax.domain.errors import ConfigurationError
 from parallax.service.sources import ResolvedSource, validate_git_url
+
+
+def _remove_tree(path: Path) -> None:
+    """Delete a scratch tree even when Git left read-only pack files behind.
+
+    Windows marks fetched pack/idx files read-only, so a plain `rmtree` raises
+    PermissionError after an otherwise successful fetch and the task looks failed.
+    Clearing the write bit before unlinking keeps cleanup from deciding the outcome.
+    """
+
+    def retry(function, target, _error):
+        with contextlib.suppress(OSError):
+            Path(target).chmod(stat.S_IWRITE)
+            function(target)
+
+    if not path.exists():
+        return
+    shutil.rmtree(path, onexc=retry)
 
 
 class PlatformSources:
@@ -64,11 +84,12 @@ class PlatformSources:
             )
             self._extract(archive, output)
             # Keep only plain source files; no Git objects, hooks, submodule fetch or filters.
-            shutil.rmtree(repo)
+            _remove_tree(repo)
             archive.unlink()
             return ResolvedSource(output, actual, url)
         except BaseException:
-            shutil.rmtree(root)
+            with contextlib.suppress(OSError):  # cleanup must never mask the real cause
+                _remove_tree(root)
             raise
 
     def _extract(self, archive: Path, destination: Path):

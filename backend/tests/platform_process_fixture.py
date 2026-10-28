@@ -11,7 +11,7 @@ import uvicorn
 from parallax.config import Settings
 from parallax.infra.llm_fake import FakeLLMClient
 from parallax.ports.llm import UsageStats
-from parallax.service import platform_worker
+from parallax.service import platform_engine, platform_worker
 from parallax.service.app import create_app
 from parallax.service.sources import ResolvedSource
 
@@ -56,7 +56,9 @@ def main():
         platform_heartbeat_seconds=0.05,
         platform_replay_seconds=0.05,
     )
+    # Two modules import the client directly, so both bindings need the deterministic model.
     platform_worker.OpenAICompatClient = LocalModel
+    platform_engine.OpenAICompatClient = LocalModel
     app = create_app(settings, runs_dir=root / "runs")
     worker = app.state.platform_worker
     worker.sources.resolve = lambda url, commit: ResolvedSource(source, commit, url)

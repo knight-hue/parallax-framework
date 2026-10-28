@@ -1,5 +1,6 @@
 import io
 import os
+import stat
 import subprocess
 import tarfile
 from pathlib import Path
@@ -135,6 +136,36 @@ def test_pinned_fetch_is_fresh_and_failed_revision_is_cleaned(tmp_path, monkeypa
     with pytest.raises(ConfigurationError, match="revision"):
         manager.resolve("https://github.com/org/repo", wanted)
     assert len(list(manager.workspace.iterdir())) == 2
+
+
+def test_read_only_git_artifacts_do_not_decide_the_task_outcome(tmp_path, monkeypatch):
+    """Windows marks fetched pack files read-only; cleanup must still succeed."""
+
+    monkeypatch.setattr("parallax.service.platform_sources.validate_git_url", lambda value: value)
+    manager = PlatformSources(tmp_path / "work", {"github.com"})
+    wanted = "b" * 40
+
+    def git(args):
+        if args[0] == "init":
+            repo = Path(args[-1])
+            pack = repo / "objects" / "pack"
+            pack.mkdir(parents=True)
+            artifact = pack / "pack-fixture.idx"
+            artifact.write_bytes(b"pack")
+            artifact.chmod(stat.S_IREAD)
+        if "rev-parse" in args:
+            return wanted
+        if "archive" in args:
+            output = Path(
+                next(a.removeprefix("--output=") for a in args if a.startswith("--output="))
+            )
+            archive(output, [("Main.java", tarfile.REGTYPE, b"class Main {}")])
+        return ""
+
+    monkeypatch.setattr(manager, "_git", git)
+    resolved = manager.resolve("https://github.com/org/repo", wanted)
+    assert (resolved.path / "Main.java").is_file()
+    assert list(manager.workspace.iterdir()) == [resolved.path.parent]
 
 
 def test_real_local_git_archive_round_trip(tmp_path):

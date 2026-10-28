@@ -19,6 +19,12 @@ def main() -> int:
     parser.add_argument("--maven", type=Path, required=True)
     parser.add_argument("--java-home", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--python",
+        type=Path,
+        help="Optional Python interpreter; when given, the dispatch chain test also runs "
+        "against this temporary broker with a real worker process.",
+    )
     args = parser.parse_args()
     flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     root = Path(__file__).resolve().parents[2]
@@ -122,6 +128,13 @@ def main() -> int:
             PARALLAX_TEST_RABBIT_ISOLATED="true",
             PARALLAX_TEST_RABBIT_URI=f"amqp://parallax_test:{env['RABBITMQ_DEFAULT_PASS']}@127.0.0.1:{port}/%2f",
         )
+        tests = "RabbitDispatchIT"
+        extra: list[str] = []
+        if args.python is not None:
+            tests = "RabbitDispatchIT,PlatformDispatchProcessIT"
+            extra = [
+                "-Dparallax.test.python=" + str(args.python.resolve(strict=True)),
+            ]
         with (output / "maven.log").open("wb") as log:
             result = subprocess.run(
                 [
@@ -132,8 +145,9 @@ def main() -> int:
                     str(root / "gateway/pom.xml"),
                     "verify",
                     "-DskipITs=false",
-                    "-Dit.test=RabbitDispatchIT",
+                    "-Dit.test=" + tests,
                     "-Dparallax.test.rabbit=true",
+                    *extra,
                 ],
                 cwd=root,
                 env=test_env,
