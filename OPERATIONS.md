@@ -6,6 +6,20 @@
 
 实际密钥只写 `backend/.env`，不要填写或提交 `.env.example`。支持 `PARALLAX_LLM_*` 和 `OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL`；PARALLAX 配置优先。兼容服务的模型别名不能当作官方 OpenAI 型号证明。
 
+### 模型供应商差异（`PARALLAX_LLM_PROVIDER`）
+
+当前接入 DeepSeek（OpenAI 兼容协议）。`PARALLAX_LLM_PROVIDER` 取 `auto`（默认，按 `base_url` 域名推断）/ `openai` / `openai_compat` / `deepseek`，差异只影响请求参数，不改协议：
+
+| 供应商 | temperature | token 字段 | `reasoning_effort` | `response_format` |
+| --- | --- | --- | --- | --- |
+| openai | 推理模型不发 | 推理模型用 `max_completion_tokens` | 有配置才发 | 受 `PARALLAX_LLM_USE_JSON_MODE` 控制 |
+| openai_compat | 同上 | 同上 | 有配置才发 | 同上 |
+| deepseek | 非推理模型才发 | `max_tokens` | **从不发**（DeepSeek 无此字段） | 推理模型不发 |
+
+显式把 `PARALLAX_LLM_PROVIDER` 设为 `deepseek` 且没改 `PARALLAX_LLM_BASE_URL`（仍是 OpenAI 默认值）时，会自动改用 `https://api.deepseek.com`；`PARALLAX_LLM_MODEL` 仍留 OpenAI 默认值时会退到 `deepseek-chat`。使用自建代理时请同时显式设置 base_url 与 model。
+
+解析结果可在 `GET /health`（`provider`、`model`）与 `GET /api/v1/meta` 看到，两者都不回显端点与密钥。
+
 不联网构建：Python 使用已有 `.venv`；前端执行已有 `node_modules` 中的 lint、typecheck、build；网关执行 `mvn -o verify`。禁止用 `npm ci`、pip 安装或 Docker build 来冒充离线验证。
 
 生产 Compose 覆盖文件要求预先准备项目镜像和基础设施镜像，缺少就失败，不会下载：

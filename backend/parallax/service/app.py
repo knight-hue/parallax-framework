@@ -34,6 +34,7 @@ from pydantic import BaseModel, Field
 from parallax import __version__
 from parallax.config import Settings, load_settings
 from parallax.domain.errors import ConfigurationError
+from parallax.infra.provider import resolve_profile
 from parallax.plugins.code_audit import DEFECT_CLASSES
 from parallax.service.events import RunEventBus
 from parallax.service.metrics import render_prometheus
@@ -169,11 +170,13 @@ def create_app(
 
     @app.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
+        profile = resolve_profile(resolved)
         return HealthResponse(
             status="ok",
             version=__version__,
             llm_configured=resolved.is_llm_configured(),
-            model=resolved.llm_model,
+            model=profile.model,
+            provider=profile.name,
         )
 
     @app.get("/ready", response_model=ReadyResponse)
@@ -224,6 +227,7 @@ def create_app(
                 "max_rounds": resolved.max_rounds,
                 "visibility": resolved.reader_visibility,
                 "model": resolved.llm_model,
+                "provider": resolve_profile(resolved).name,
                 "max_evidence_per_call": resolved.max_evidence_per_call,
                 "adaptive_scheduling": resolved.adaptive_scheduling,
                 "enable_llm_falsifier": resolved.enable_llm_falsifier,

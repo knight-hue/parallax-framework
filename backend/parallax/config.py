@@ -38,6 +38,12 @@ class Settings(BaseSettings):
         default="gpt-4o-mini",
         validation_alias=AliasChoices("PARALLAX_LLM_MODEL", "OPENAI_MODEL"),
     )
+    llm_provider: Literal["auto", "openai", "openai_compat", "deepseek"] = "auto"
+    """模型供应商。`auto` 按 base_url 域名推断；显式指定时优先。
+
+    差异只影响请求参数（是否发 temperature / reasoning_effort / response_format、
+    用哪个 token 字段），不改协议。见 infra/provider.py。
+    """
     llm_temperature: float = 0.0
     llm_reasoning_effort: Literal["low", "medium", "high"] | None = None
     """只在显式配置时发送；需由兼容端点实际验收支持程度。"""

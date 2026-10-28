@@ -30,6 +30,7 @@ from pydantic import BaseModel, ValidationError
 
 from parallax.config import Settings
 from parallax.domain.errors import ConfigurationError, LLMError, SchemaValidationError
+from parallax.infra.provider import build_body, resolve_profile
 from parallax.ports.llm import ChatMessage, UsageStats
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,7 @@ class OpenAICompatClient:
             )
         self.settings = settings
         self.usage = usage or UsageStats()
+        self.profile = resolve_profile(settings)
         self._client = client
         self._owns_client = client is None
 
@@ -123,23 +125,17 @@ class OpenAICompatClient:
         *,
         json_mode: bool,
     ) -> dict[str, Any]:
-        body: dict[str, Any] = {
-            "model": self.settings.llm_model,
-            "messages": [m.model_dump() for m in messages],
-        }
-        # OpenAI reasoning models (o-series and GPT-5+) reject sampling
-        # temperature and use the non-deprecated completion token field.
-        reasoning_model = self._is_reasoning_model(self.settings.llm_model)
-        if not reasoning_model:
-            body["temperature"] = temperature
-        if self.settings.llm_reasoning_effort is not None:
-            body["reasoning_effort"] = self.settings.llm_reasoning_effort
-        if max_tokens:
-            body["max_completion_tokens" if reasoning_model else "max_tokens"] = max_tokens
-        if json_mode and self.settings.llm_use_json_mode:
-            body["response_format"] = {"type": "json_object"}
+        body: dict[str, Any] = build_body(
+            self.profile,
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            json_mode=json_mode,
+            use_json_mode=self.settings.llm_use_json_mode,
+            reasoning_effort=self.settings.llm_reasoning_effort,
+        )
 
-        url = f"{self.settings.llm_base_url.rstrip('/')}/chat/completions"
+        url = self.profile.chat_completions_url
         headers = {
             "Authorization": f"Bearer {self.settings.llm_api_key}",
             "Content-Type": "application/json",
@@ -192,6 +188,7 @@ class OpenAICompatClient:
 
     @staticmethod
     def _is_reasoning_model(model: str) -> bool:
+        """保留给旧调用方；新代码请用 provider.resolve_profile。"""
         normalized = model.casefold().strip()
         return normalized.startswith(("o1", "o3", "o4", "gpt-5", "gpt-6"))
 

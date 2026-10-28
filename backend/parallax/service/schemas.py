@@ -68,6 +68,8 @@ class HealthResponse(BaseModel):
     version: str
     llm_configured: bool
     model: str = ""
+    provider: str = ""
+    """解析后的供应商（openai / openai_compat / deepseek），不回显端点与密钥。"""
 
 
 class ReadyResponse(BaseModel):
