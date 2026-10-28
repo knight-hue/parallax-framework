@@ -185,6 +185,7 @@ class ArmSummary:
     llm_calls: int = 0
     sole_source_defects: int = 0
     unanimous_defects: int = 0
+    threshold_sources: list[str] = field(default_factory=list)
     effective_channels: list[float] = field(default_factory=list)
     redundancies: list[int] = field(default_factory=list)
 
@@ -308,6 +309,9 @@ def summarise(entries: dict[str, dict[str, Any]], arm: str) -> ArmSummary:
         # 「全员一致」的阈值必须是**实际产出过 claim 的 Agent 数**：
         # 多轮臂每一轮都会生成全新 Reader 身份，用 reader_count 会把阈值算低、多算一致。
         threshold = int(entry.get("agent_count") or entry.get("reader_count") or 0)
+        summary.threshold_sources.append(
+            "agent" if entry.get("agent_count") else ("reader" if threshold else "missing")
+        )
         for defect in entry.get("defects") or []:
             found = len(defect.get("found_by") or [])
             if found == 1:
@@ -422,6 +426,8 @@ def render_comparison(comparison: Comparison, *, label: str = "") -> str:
         f"- 配对缺陷：实验组独中 **{comparison.only_treatment}**，对照组独中 "
         f"**{comparison.only_control}**，两边都中 {comparison.both}，两边都漏 "
         f"{comparison.neither}（n={comparison.planted}）",
+        f"- 独有发现占比：实验组 {ts.sole_source_defects} 个（{ts.sole_source_rate:.0%} "
+        f"of 命中），对照组 {cs.sole_source_defects} 个（{cs.sole_source_rate:.0%}）",
         f"- 风险差（实验组 − 对照组）：**{comparison.risk_difference:+.1%}**"
         f"，95% 自助法区间 [{low:+.1%}, {high:+.1%}]",
         f"- McNemar 精确检验 p = **{comparison.mcnemar_p:.4g}**"
@@ -454,6 +460,13 @@ def render_comparison(comparison: Comparison, *, label: str = "") -> str:
             "- ⚠️ 产物未记录冗余配置（早期运行），无法核实两臂分区是否相同："
             "「独有发现」列请勿跨臂比较"
         )
+    if "reader" in cs.threshold_sources or "reader" in ts.threshold_sources:
+        lines.append(
+            "- ⚠️ 该运行未记录 `agent_count`，「全员一致」退回 `reader_count` 判定，"
+            "多轮臂下会多算一致"
+        )
+    if "missing" in cs.threshold_sources or "missing" in ts.threshold_sources:
+        lines.append("- ⚠️ 该运行既无 `agent_count` 也无 `reader_count`，「全员一致」恒为 0")
     return "\n".join(lines)
 
 
@@ -485,25 +498,6 @@ def render_report(
             lines.append(f"| {label} | {comparison.mcnemar_p:.4g} | {adjusted[label]:.4g} |")
         lines.append("")
     return "\n".join(lines)
-
-
-def render_json(report: str, comparisons: list[tuple[str, Comparison]]) -> str:  # pragma: no cover
-    """保留接口：报告文本与结构化数据一起落盘时用。"""
-    payload = [
-        {
-            "label": label,
-            "control": comparison.control,
-            "treatment": comparison.treatment,
-            "planted": comparison.planted,
-            "only_treatment": comparison.only_treatment,
-            "only_control": comparison.only_control,
-            "risk_difference": comparison.risk_difference,
-            "risk_difference_ci": list(comparison.risk_difference_ci),
-            "mcnemar_p": comparison.mcnemar_p,
-        }
-        for label, comparison in comparisons
-    ]
-    return json.dumps({"report": report, "comparisons": payload}, ensure_ascii=False, indent=2)
 
 
 def collect_comparisons(

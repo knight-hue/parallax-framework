@@ -123,15 +123,19 @@ def build_parser() -> argparse.ArgumentParser:
     experiment.add_argument(
         "--budget-calls",
         default=None,
-        help="调用次数预算档，逗号分隔（如 8,24）；与所选实验臂做笛卡尔积，臂名带后缀",
+        help="总调用次数上限（不是单次输出长度），逗号分隔多档（如 8,24）；"
+        "预算耗尽的臂会提前停止，召回会被低估，解读时必须看 stop_reason",
     )
     experiment.add_argument(
         "--budget-tokens",
         default=None,
-        help="token 预算档，逗号分隔（如 20000,60000）；与所选实验臂做笛卡尔积",
+        help="总 token 预算（不是单次输出上限，那个是 PARALLAX_LLM_MAX_OUTPUT_TOKENS），"
+        "逗号分隔多档；达到预算后引擎停止",
     )
     experiment.add_argument(
-        "--variance-control", default=None, help="variance.md 里的对照臂名（默认用函数内置默认值）"
+        "--variance-control",
+        default=None,
+        help="variance.md 里的对照臂名（默认取所选的前两条臂）",
     )
     experiment.add_argument("--variance-treatment", default=None, help="variance.md 里的实验臂名")
 
@@ -401,10 +405,20 @@ async def _run_experiment_cli(args: argparse.Namespace) -> int:
         from parallax.eval.variance import render_variance
 
         variance_kwargs = {"repo": ", ".join(task.task_id for task in tasks)}
-        if args.variance_control:
-            variance_kwargs["control"] = args.variance_control
-        if args.variance_treatment:
-            variance_kwargs["treatment"] = args.variance_treatment
+        control, treatment = args.variance_control, args.variance_treatment
+        if control is None and treatment is None:
+            if len(arms) == 2:
+                control, treatment = arms[0].name, arms[1].name
+                print(f"稳定性统计比较 `{control}` 与 `{treatment}`")
+            else:
+                print(
+                    "提示：实验臂不是恰好 2 条，请用 --variance-control/"
+                    "--variance-treatment 指定要比较的两条，否则 variance.md 无法给出判定"
+                )
+        if control:
+            variance_kwargs["control"] = control
+        if treatment:
+            variance_kwargs["treatment"] = treatment
         (out_dir / "variance.md").write_text(
             render_variance(repetitions, **variance_kwargs), encoding="utf-8"
         )

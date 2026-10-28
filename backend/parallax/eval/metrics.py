@@ -362,10 +362,26 @@ class ArmMetrics(BaseModel):
 
     @property
     def unanimous_defects(self) -> int:
-        """被所有 Agent 都发现的缺陷数。"""
-        return sum(
-            1 for d in self.defects if self.reader_count and len(d.found_by) >= self.reader_count
-        )
+        """被所有 Agent 都发现的缺陷数。
+
+        阈值取**实际产出过 claim 的 Agent 数**（`agent_count`），不是跑起来的
+        Reader 数：多轮运行每一轮都会生成全新 Reader 身份，3 轮 × 6 Reader
+        实际是 18 个 Agent，用 `reader_count` 会把阈值算低、把“部分一致”当成全员一致。
+
+        旧产物未记录 `agent_count`（缺省 0）时退回 `reader_count`，
+        并在报告里标出来——不能假装那个口径是对的。
+        """
+        threshold = self.agent_count or self.reader_count
+        return sum(1 for d in self.defects if threshold and len(d.found_by) >= threshold)
+
+    @property
+    def unanimous_threshold_source(self) -> str:
+        """`unanimous_defects` 用的阈值来自哪里：agent / reader / missing。"""
+        if self.agent_count:
+            return "agent"
+        if self.reader_count:
+            return "reader"
+        return "missing"
 
     def missed_ids(self) -> list[str]:
         return [d.defect_id for d in self.defects if not d.hit]
