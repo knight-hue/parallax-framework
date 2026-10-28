@@ -56,7 +56,6 @@ def main() -> int:
                 "docker",
                 "run",
                 "--pull=never",
-                "--rm",
                 "--detach",
                 "--name",
                 name,
@@ -81,23 +80,39 @@ def main() -> int:
         port = json.loads(docker("inspect", name).stdout)[0]["NetworkSettings"][
             "Ports"
         ]["5672/tcp"][0]["HostPort"]
-        for _ in range(60):
-            if (
-                docker(
+        # The management image needs roughly 25-40 s of a cold start on Windows containers,
+        # so readiness must be a wall-clock deadline, not a fixed number of short polls.
+        deadline = time.monotonic() + 180
+        last_error = ""
+        while time.monotonic() < deadline:
+            try:
+                probe = docker(
                     "exec",
+                    "--user",
+                    "rabbitmq",
                     name,
                     "rabbitmq-diagnostics",
                     "-q",
                     "check_running",
                     check=False,
                     timeout=10,
-                ).returncode
-                == 0
-            ):
-                break
-            time.sleep(0.5)
+                )
+                if probe.returncode == 0:
+                    break
+                last_error = (probe.stderr or probe.stdout or "").strip()[-400:]
+            except subprocess.TimeoutExpired:
+                last_error = "rabbitmq-diagnostics timed out"
+            time.sleep(1.0)
         else:
-            raise RuntimeError("Temporary RabbitMQ did not become ready")
+            (output / "rabbit-failure.log").write_text(
+                docker("logs", name, check=False).stdout
+                + "\n--- inspect ---\n"
+                + docker("inspect", name, check=False).stdout,
+                encoding="utf-8",
+            )
+            raise RuntimeError(
+                f"Temporary RabbitMQ did not become ready within 180 s: {last_error}"
+            )
         test_env = os.environ.copy()
         for key in list(test_env):
             if key.startswith(("PARALLAX_", "OPENAI_", "SPRING_", "LOGGING_")):
