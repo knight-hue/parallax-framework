@@ -49,3 +49,6 @@ labs/*/bin/
 .idea/
 .DS_Store
 Thumbs.db
+
+# 逐条 claim 明细含源码引用与推理，只留在本地
+eval/results/**/*.claims.json
