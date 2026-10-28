@@ -120,8 +120,10 @@ with `X-Internal-Token`. Missing configuration returns 503; missing/wrong token 
   last observation. This is an uncertainty charge, not a measured provider invoice. No
   automatic restart spends a fresh full budget while the old worker may still be alive.
 - With the opt-in dispatch runtime enabled, bounded background scans call recovery and
-  expose metrics. See DISPATCH_OPERATIONS.md; Python platform integration and real
-  broker/multi-instance acceptance remain pending.
+expose metrics. See DISPATCH_OPERATIONS.md. The full chain (Outbox -> real broker ->
+Java consumer -> HTTP bridge -> real Python worker process -> events and settlement)
+now has opt-in acceptance coverage, including worker replacement and dead-letter
+recovery; multi-instance broker failover and capacity remain pending.
 
 `GET /api/v1/platform/projects/{projectId}/tasks/{taskId}/events?after=0&limit=50`
 checks live project membership and returns `{items,nextCursor}`. Cursor is the database

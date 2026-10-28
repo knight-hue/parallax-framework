@@ -69,3 +69,5 @@ Java 默认运行档和 Compose 已切为 MySQL，旧 PostgreSQL 作为显式回
 8. 项目 app/正式 worker 镜像、公网服务器/TLS/域名、现场备份恢复与持续压测尚未交付。生产配置不能等同于已经上线。
 
 创新定位是代码审查的系统组合创新；信息分区、先独立后共识、K* 不是本项目理论首创。
+
+2026-10-28 派发全链路增量：gateway/tools/verify_cached_rabbit.py 新增 --python，一条命令在临时 rabbitmq 4.1.8 容器上同时跑 6 项 broker 语义与 2 项全链路进程用例（eval/java-platform/platform-dispatch-chain.json）。全链路 = Outbox → 真 broker → Java 消费 → HTTP 桥 → 真实 Python Worker 进程 → 事件入库与结算：任务 1 首次投递即成功、只有 1 条 SETTLE；杀掉进程并在同一固定端点起第二个进程后，任务 2 同样成功且各自只结算一次；无 Worker 监听时消息进死信，attempt/fence 递增且不写结算，直到新进程启动后由协调器重投才成功。过程中修掉两个真实缺陷：PlatformSources 在 Windows 上被 git 的只读 pack 文件卡住清理（成功抓取被误判为失败），以及 Worker 进程夹具只替换了 platform_worker 的模型绑定、引擎实际仍调真实模型。Java 116 项、Python 474 项全绿。仍不构成多机、集群故障转移或容量验收。

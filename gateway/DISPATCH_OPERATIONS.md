@@ -72,9 +72,16 @@ backend/.venv/Scripts/python.exe gateway/tools/verify_cached_rabbit.py --image r
 ```
 
 The tool inspects the cache first, starts only its own temporary container with
-`--pull=never`, random credentials and a loopback random port, runs three opt-in
-broker tests (persistent confirmation, channel-loss redelivery, reject-to-DLQ),
-and removes only its own container. No existing broker is used or changed. Exit 2
-means the Docker engine/image is unavailable; it is not a passing acceptance.
-RabbitMQ production topology, cluster failover and capacity still need target-
-environment evidence.
+`--pull=never`, random credentials and a loopback random port, runs the opt-in
+broker tests (persistent confirmation, channel-loss redelivery, reject-to-DLQ,
+transient retry, worker port failure, stale 409), and removes only its own
+container. No existing broker is used or changed. Exit 2 means the Docker
+engine/image is unavailable; it is not a passing acceptance.
+
+Add `--python <interpreter>` to also run `PlatformDispatchProcessIT` against the same
+temporary broker. That test starts a real worker process (deterministic model and
+source fixtures), drives a dispatch through the broker, and asserts exactly one
+settlement plus recovery when the dispatch was dead-lettered and a new process takes
+over. Stop other consumers of the same vhost first: a shared queue would split
+deliveries between them and mask the assertions. RabbitMQ production topology,
+cluster failover and capacity still need target-environment evidence.
