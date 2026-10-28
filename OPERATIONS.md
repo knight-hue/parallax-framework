@@ -56,6 +56,20 @@ docker build -f docker/sandbox.Dockerfile -t parallax-engine-sandbox:local .
 后，仲裁输入不含任何一方的结论文本，只给指针、引用与可证伪条件，并与原始证据重新核对。
 回执里的 `statement_digests` 只能在事后验证“当时账本确实是这句话”，不能反推出被剥离的结论。
 
+## 运行产物镜像（对象存储）
+
+默认 `PARALLAX_ARTIFACT_STORE=off`，报告/摘要/claims 只落在 `PARALLAX_RUNS_DIR`。需要把证据再留一份到别处时：
+
+| 取值 | 行为 | 前提 |
+| --- | --- | --- |
+| `local` | 额外镜像到 `PARALLAX_ARTIFACT_LOCAL_ROOT`（默认 `<runs_dir>/_artifacts`） | 无 |
+| `s3` | 镜像到 S3 兼容端点（AWS S3 / MinIO / OSS S3 网关） | **需先安装 boto3**；未安装时启动即报错并提示改用 `local` |
+
+对象 key 固定为 `runs/<run_id>/report.md`、`result.json`、`claims.json`（带 `PARALLAX_ARTIFACT_S3_PREFIX` 时会加前缀）。
+镜像失败只记日志、返回已写入列表，**不会**让已经成功的审查变成失败——本地产物仍在。
+
+S3 分支目前只用假客户端做过单元测试，**没有在真实端点上验收**；上生产前需用目标端点跑一次 put/get/list。
+
 ## 可选监控栈
 
 默认不启动。镜像需在工作环境自行准备，本仓库不代你拉取：

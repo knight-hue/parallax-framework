@@ -173,6 +173,16 @@ class Settings(BaseSettings):
 
     # ---- 运行产物 ----
     runs_dir: Path = Field(default=Path("runs"))
+    artifact_store: Literal["off", "local", "s3"] = "off"
+    """运行产物镜像目标。`off` 只写本地 runs 目录（默认）；`local` 额外镜像到另一个目录；`s3` 镜像到 S3 兼容端点。"""
+    artifact_local_root: Path | None = None
+    """`local` 模式的根目录；留空则用 `<runs_dir>/_artifacts`。"""
+    artifact_s3_bucket: str = ""
+    artifact_s3_prefix: str = ""
+    artifact_s3_endpoint: str = ""
+    artifact_s3_region: str = ""
+    artifact_s3_access_key: str = ""
+    artifact_s3_secret_key: str = Field(default="", repr=False)
 
     # ---- 输入边界 ----
     audit_root: str = ""

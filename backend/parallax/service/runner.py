@@ -29,9 +29,11 @@ from parallax.domain.errors import ConfigurationError
 from parallax.engine import ParallaxEngine
 from parallax.infra.falsifier_llm import LLMFalsifier
 from parallax.infra.llm_openai_compat import OpenAICompatClient
+from parallax.infra.object_store import build_object_store
 from parallax.plugins.code_audit import CodeAuditReader, RepoAdapter
 from parallax.ports.reproduction import DockerReproductionExecutor
 from parallax.reporting import render_markdown, summarise
+from parallax.service.artifacts import mirror_run_artifacts
 from parallax.service.callback import CompletionCallback
 from parallax.service.events import RunEventBus
 from parallax.service.sources import RepoSourceManager, validate_commit_sha, validate_git_url
@@ -81,6 +83,16 @@ class AuditRunner:
         self.bus = bus
         self.settings = settings
         self.max_concurrent_runs = max_concurrent_runs
+        self.artifacts = build_object_store(
+            kind=settings.artifact_store,
+            local_root=settings.artifact_local_root or (store.root / "_artifacts"),
+            bucket=settings.artifact_s3_bucket,
+            prefix=settings.artifact_s3_prefix,
+            endpoint_url=settings.artifact_s3_endpoint,
+            region=settings.artifact_s3_region,
+            access_key=settings.artifact_s3_access_key,
+            secret_key=settings.artifact_s3_secret_key,
+        )
         self._client_factory = client_factory or (lambda s: OpenAICompatClient(s))
         self._callback = CompletionCallback(settings)
         # 声誉跨运行累积，不能随每个 HTTP 任务重新创建内存字典。
@@ -407,8 +419,16 @@ class AuditRunner:
         self.store.save_report(
             run_id, render_markdown(report, max_items=job.settings.report_max_items)
         )
-        self.store.save_summary(run_id, _summary_payload(report, engine))
+        summary = _summary_payload(report, engine)
+        self.store.save_summary(run_id, summary)
         self.store.save_claims(run_id, engine.runtime.ledger.claims)
+        mirror_run_artifacts(
+            self.artifacts,
+            run_id,
+            markdown=render_markdown(report, max_items=job.settings.report_max_items),
+            summary=summary,
+            claims=engine.runtime.ledger.claims,
+        )
         self.store.save_manifest(run_id, report.manifest)
         self.store.save_source_hashes(
             run_id,
