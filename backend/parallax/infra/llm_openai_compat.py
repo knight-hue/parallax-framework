@@ -212,6 +212,17 @@ class OpenAICompatClient:
         content = message.get("content")
         if content is None:
             raise LLMError("响应中没有 content 字段")
+        if not content.strip():
+            # 推理型模型（如 DeepSeek flash 系列）会把输出预算先花在 reasoning_content 上，
+            # max_tokens 太小时 content 会是空字符串。这种情况必须显式报错，
+            # 否则空串会一路走到 JSON 解析，变成一次没有信息量的 schema 重试。
+            reasoning = message.get("reasoning_content") or ""
+            finish = choices[0].get("finish_reason")
+            raise LLMError(
+                "模型返回了空 content"
+                f"（finish_reason={finish!r}，reasoning_content 长度={len(reasoning)}）。"
+                "推理型模型需要更大的 max_tokens。"
+            )
         return content
 
     @staticmethod

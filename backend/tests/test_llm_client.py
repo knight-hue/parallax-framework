@@ -59,7 +59,13 @@ async def test_reasoning_model_uses_openai_compatible_fields():
         )
 
     client = OpenAICompatClient(
-        Settings(llm_api_key="test", llm_model="gpt-6.1-sol", llm_max_retries=0),
+        Settings(
+            _env_file=None,
+            llm_api_key="test",
+            llm_model="gpt-6.1-sol",
+            llm_base_url="https://api.openai.com/v1",
+            llm_max_retries=0,
+        ),
         client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
     )
     await client.complete([ChatMessage(role="user", content="ping")], temperature=0, max_tokens=128)
@@ -121,3 +127,61 @@ def test_empty_optional_reasoning_setting_is_omitted():
     from parallax.config import Settings
 
     assert Settings(_env_file=None, llm_reasoning_effort="").llm_reasoning_effort is None
+
+
+@pytest.mark.asyncio
+async def test_empty_content_from_reasoning_model_is_reported_as_error():
+    """推理模型把预算花在 reasoning_content 上时，content 会是空串——必须显式报错。"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            request=request,
+            json={
+                "choices": [
+                    {
+                        "finish_reason": "length",
+                        "message": {
+                            "role": "assistant",
+                            "content": "",
+                            "reasoning_content": "思考中",
+                        },
+                    }
+                ]
+            },
+        )
+
+    client = OpenAICompatClient(
+        Settings(_env_file=None, llm_api_key="test", llm_max_retries=0),
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(LLMError) as excinfo:
+        await client.complete([ChatMessage(role="user", content="ping")], max_tokens=16)
+    message = str(excinfo.value)
+    assert "空 content" in message
+    assert "finish_reason" in message
+    assert "max_tokens" in message
+    await client.aclose()
+
+
+def test_parallax_api_key_wins_over_openai_api_key(monkeypatch):
+    """两个密钥都填时必须用 PARALLAX 的，不能把旧供应商的密钥发到新端点。"""
+    from parallax.config import Settings
+
+    monkeypatch.setenv("PARALLAX_LLM_API_KEY", "parallax-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key-longer")
+    settings = Settings(_env_file=None)
+
+    assert settings.llm_api_key == "parallax-key"
+    assert settings.api_key_source == "PARALLAX_LLM_API_KEY"
+
+
+def test_openai_key_is_used_when_parallax_key_is_empty(monkeypatch):
+    from parallax.config import Settings
+
+    monkeypatch.setenv("PARALLAX_LLM_API_KEY", "")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-fallback")
+    settings = Settings(_env_file=None)
+
+    assert settings.llm_api_key == "openai-fallback"
+    assert settings.api_key_source == "OPENAI_API_KEY"

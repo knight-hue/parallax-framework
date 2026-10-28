@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,9 +31,22 @@ class Settings(BaseSettings):
     )
     llm_api_key: str = Field(
         default="",
-        validation_alias=AliasChoices("PARALLAX_LLM_API_KEY", "OPENAI_API_KEY"),
+        validation_alias=AliasChoices("PARALLAX_LLM_API_KEY"),
         repr=False,
     )
+    openai_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("OPENAI_API_KEY"),
+        repr=False,
+    )
+    api_key_source: str = Field(default="", repr=False)
+    """实际生效的密钥来源，由 `merge_api_keys` 回填；不含密钥本身。"""
+    """`OPENAI_API_KEY` 只作为回退。
+
+    为什么拆成两个字段：`AliasChoices` 在 dotenv 源与进程环境源下的优先级不完全一致，
+    实测同一份 .env 里两个都填时，优先级可能落到 `OPENAI_API_KEY` 上——那会把旧供应商的
+    密钥发到新端点。把优先级写成显式合并后，行为不再依赖库的别名解析顺序。
+    """
     llm_model: str = Field(
         default="gpt-4o-mini",
         validation_alias=AliasChoices("PARALLAX_LLM_MODEL", "OPENAI_MODEL"),
@@ -47,11 +60,6 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.0
     llm_reasoning_effort: Literal["low", "medium", "high"] | None = None
     """只在显式配置时发送；需由兼容端点实际验收支持程度。"""
-
-    @field_validator("llm_reasoning_effort", mode="before")
-    @classmethod
-    def empty_reasoning_effort(cls, value):
-        return None if value == "" else value
 
     llm_timeout_s: float = 90.0
     llm_max_retries: int = 3
@@ -244,6 +252,23 @@ class Settings(BaseSettings):
 
     def is_llm_configured(self) -> bool:
         return bool(self.llm_api_key)
+
+    @field_validator("llm_reasoning_effort", mode="before")
+    @classmethod
+    def empty_reasoning_effort(cls, value):
+        return None if value == "" else value
+
+    @model_validator(mode="after")
+    def merge_api_keys(self):
+        """`PARALLAX_LLM_API_KEY` 优先；没填时才用 `OPENAI_API_KEY`。"""
+        if self.llm_api_key:
+            object.__setattr__(self, "api_key_source", "PARALLAX_LLM_API_KEY")
+        elif self.openai_api_key:
+            object.__setattr__(self, "llm_api_key", self.openai_api_key)
+            object.__setattr__(self, "api_key_source", "OPENAI_API_KEY")
+        else:
+            object.__setattr__(self, "api_key_source", "")
+        return self
 
     def effective_min_independent_support(self) -> int:
         return self.min_independent_support or self.support_threshold

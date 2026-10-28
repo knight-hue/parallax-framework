@@ -20,6 +20,10 @@
 
 解析结果可在 `GET /health`（`provider`、`model`）与 `GET /api/v1/meta` 看到，两者都不回显端点与密钥。
 
+**密钥优先级**：`PARALLAX_LLM_API_KEY` 优先，没填时才回退到 `OPENAI_API_KEY`。两个都填时以 PARALLAX 为准，避免把旧供应商的密钥发到新端点。
+
+**推理型模型的输出预算**：DeepSeek 的 flash 系列会先写 `reasoning_content` 再写 `content`。`max_tokens` 太小会导致 `content` 为空——客户端会把这种情形报成 `LLMError` 并提示需要更大的 `max_tokens`，而不是把它当成 schema 校验失败去重试。
+
 不联网构建：Python 使用已有 `.venv`；前端执行已有 `node_modules` 中的 lint、typecheck、build；网关执行 `mvn -o verify`。禁止用 `npm ci`、pip 安装或 Docker build 来冒充离线验证。
 
 生产 Compose 覆盖文件要求预先准备项目镜像和基础设施镜像，缺少就失败，不会下载：

@@ -25,7 +25,9 @@ def _isolate_llm_credentials(monkeypatch):
     """
     monkeypatch.setenv("PARALLAX_LLM_API_KEY", "")
     monkeypatch.delenv("PARALLAX_LLM_BASE_URL", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    # 必须显式置空而不是删除：删除后 pydantic 会回退到 .env 里的旧 OPENAI_API_KEY，
+    # 于是「无凭据」测试拿到一个真实 key——这正是这条夹具要防的事故。
+    monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
     monkeypatch.delenv("OPENAI_MODEL", raising=False)
 
