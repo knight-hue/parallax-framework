@@ -5,6 +5,19 @@
 
 ## [Unreleased]
 
+### 2026-10-25 产品接线与可选监控栈
+
+- 仲裁器可配置：`PARALLAX_ARBITRATOR=null|blind|llm|llm-blind`，CLI 同步 `--arbitrator`；
+  `LLMArbitrator(redact_statements=True)` 让真实模型仲裁也不再读取双方结论。
+- `Report` 新增 `gap_attribution` 与 `gate` 字段，`service/runner.py` 返回体同步，
+  前端新增「覆盖缺口归因」「独立性准入闸门」两块面板。
+- `.env.example` 补齐 `PARALLAX_INDEPENDENCE_GATE` 等 5 个开关。
+- 新增可选监控栈：compose `profile observability`（Prometheus + Grafana，只绑回环）；
+  抓取配置只含 `gateway/actuator/prometheus`，Python 无 `/metrics` 故不设 job。
+- 真实模型仲裁实验脚本已就绪，端点返回 403 `service_suspended`，无实测数据，
+  如实记录为 `eval/java-platform/blind-arbitration-llm-blocked.json`。
+- 后端 438 项测试、前端 typecheck/lint/build 通过。
+
 ### 2026-10-22 抗从众控制面：结论剥离、缺口归因、独立性闸门
 
 - 新增 `core/arbitration.py`：仲裁输入改为不含 `statement` 的 `Observation`，

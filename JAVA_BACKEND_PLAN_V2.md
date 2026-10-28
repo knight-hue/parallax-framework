@@ -24,22 +24,24 @@
 
 ## 2. 本轮代码审查结论
 
+> 本节是 2026-10-20 的审查快照；2026-10-28 已把差距表与已解决问题就地更新，未删除原结论。
+
 | 用户要求 | 当前证据 | 结论 |
 | --- | --- | --- |
-| JVM/JMM、类加载、G1/ZGC、OOM | Java 21；gateway/Dockerfile 默认 UseSerialGC，未发现完整诊断配置和实验 | 未覆盖要求深度 |
-| AQS、线程池原理 | 有 synchronized、volatile、AtomicLong 和 SSE 流式转发；未发现专门的 AQS 实验和业务线程池治理配置 | 部分使用并发工具，不等于源码级掌握 |
-| MySQL 索引/MVCC/锁/慢查询 | gateway/pom.xml、application.yml 和迁移使用 PostgreSQL | 未实现 MySQL 体系 |
-| Redis 编码、缓存问题、Redisson | Bucket4j + Lettuce 分布式限流及故障回退 | 有限流基础，缺缓存体系和 Redisson 实验 |
-| Spring IOC/AOP/生命周期/自动配置 | 使用 Boot、Security、JPA、AOP、条件装配 | 有框架应用，缺源码学习和完整实验 |
-| 2PC/TCC/Seata | 未发现相关实现 | 未覆盖 |
-| 限流、熔断、降级 | RateLimitFilter、RedisRateLimiter、ResilientRateLimiter、UpstreamClient | 已有实现，仍需多实例故障及容量验收 |
-| 秒杀与短链 | 未发现相关业务模块 | 未覆盖 |
+| JVM/JMM、类加载、G1/ZGC、OOM | `eval/labs/jvm-concurrency.json`：JDK 21.0.12.1 上 JMM 可见性、安全发布、类加载、GC、OOM | 已覆盖（单机，非生产调优） |
+| AQS、线程池原理 | 同上：AQS、线程池七参数/拒绍策略、取消中断、背压 | 已覆盖 |
+| MySQL 索引/MVCC/锁/慢查询 | `eval/labs/mysql.json`（MySQL 8.4.0）：二级索引前后执行计划、覆盖索引、前缀 LIKE、RR/RC/SERIALIZABLE、反向加锁死锁 | 已覆盖（无 EXPLAIN ANALYZE 耗时对比） |
+| Redis 编码、缓存问题、Redisson | `eval/labs/redis-flash-sale.json`（Redis 8.10.0）+ `eval/java-platform/policy-cache.json`（Redisson 3.52.0 真实集成 4 项） | 已覆盖 |
+| Spring IOC/AOP/生命周期/自动配置 | `eval/labs/spring.json`（Spring Boot 3.5.16） | 已覆盖 |
+| 2PC/TCC/Seata | `eval/labs/seata.json`（真实 Seata 2.6.0 + MySQL 8.4：AT 4 项 + TCC 2 项）；`distributed-tx.json` 为协议模拟 | 已覆盖（真实 + 模拟分开标注） |
+| 限流、熔断、降级 | `capacity-and-faults.json`：双实例容量探针、Redis 停机降级 12/12、MySQL 停机 3.12s 返 500 | 已覆盖（单机短时） |
+| 秒杀与短链 | `eval/labs/redis-flash-sale.json`、`eval/java-platform/share-links.json` | 已覆盖（独立实验与后置扩展，不是平台核心） |
 
 具体需要解决的问题：
 
-1. QuotaService.check() 与后续任务登记不是一个原子动作；源码也明确记录了并发窗口。执行中 Token 预算尚未预占。
+1. ~~QuotaService.check() 与后续任务登记不是一个原子动作~~ — 已解决：预算改为原子预占，`task-budget.json` 验证 20 并发 × 100 token / 上限 300 → 仅 3 个被接受。
 2. QuotaService.record() 有先 exists 再 save 的过程，数据库已有 run_id 唯一约束；需要验证并完善并发重复回调时的事务响应，而不是声称缺少唯一约束。
-3. 当前 Java 仍以薄网关为定位；任务执行、内部事件和修复的大量权威状态在 Python。新平台需要重划归属，避免两套状态互相覆盖。
+3. ~~当前 Java 仍以薄网关为定位；权威状态在 Python~~ — 已解决：Java 已接管任务/预算/审批/仓库策略与审计（`PlatformTaskService`、`TaskState`、`WorkerTask`），Python 保留取证与聚合。
 4. SSE 使用 StreamingResponseBody，需要显式验收异步执行器容量、长连接资源、客户端断连和慢消费者行为。
 5. Redis 故障退化成实例内限流后，各实例额度不再合并。硬性预算不能依赖这种退化路径保证。
 

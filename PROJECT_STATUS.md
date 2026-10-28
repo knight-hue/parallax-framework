@@ -24,6 +24,8 @@ Java 默认运行档和 Compose 已切为 MySQL，旧 PostgreSQL 作为显式回
 
 2026-10-22 基础设施验收增量：本机部署 MySQL 8.4.0、RabbitMQ 4.1.4 + Erlang OTP 27.3、Seata Server 2.6.0（均免安装于 E 盘，数据不落 C 盘）。在真 MySQL 8.4 与真 PostgreSQL 16 上跑完整 `verify`：单测 113、`MysqlPersistenceIT` 8 项全过；同时修复离线迁移表清单遗漏 V10/V11 三张表、以及 V10 种入 `system.webhook` 使空目标库判定永久失败两个缺陷。真 RabbitMQ 上 `RabbitDispatchIT` 3 项通过。`labs/seata` 6 项通过，并更正了此前“提交后 `undo_log` 不清理”的错误结论：RM 异步清理存在约 10 秒延迟。新增 `labs/mysql` 6 项（执行计划、MVCC 隔离级别、行锁超时 1205、死锁 1213）。新增 `gateway/tools/verify_backup_restore.py`，在真 MySQL 上完成 11 个迁移、22 张表的逻辑备份与恢复校验和比对。以上仍不构成多实例、容量或公网部署验收。
 
+2026-10-25 产品接线增量：三条抗从众控制面接入产品路径：`PARALLAX_ARBITRATOR` 新增 `null/blind/llm/llm-blind`（`LLMArbitrator(redact_statements=True)` 不再把结论交给模型），`Report` 新增 `gap_attribution` 与 `gate` 并同步到 API 返回体与前端面板，`.env.example` 补齐 5 个闸门开关。后端 438 项、前端 typecheck/lint/build 通过。新增可选监控栈（compose `profile observability`：Prometheus + Grafana，只绑回环，仅抓 `gateway:8080/actuator/prometheus`；Python 服务尚无 `/metrics`）。真实模型仲裁已实现，但配置端点返回 403 `service_suspended`，无实测数据，记录于 `eval/java-platform/blind-arbitration-llm-blocked.json`。
+
 仅更新文档不会改变上述实现状态。阶段以升级方案 P0—P6、E1、L1 验收，历史数量不作为新增能力的测试结果。
 
 ## 已实现并验证

@@ -281,11 +281,11 @@ class MyValidator:                    # ③ 可选：入账否决权
 
 | 最终目标 | 当前差距 |
 | --- | --- |
-| MySQL + Java 平台业务 | 默认 MySQL 运行档、组织/项目权限、仓库/策略、任务/预算、产物和审批已实现；MySQL 8.4 与现场备份恢复待验收 |
-| 原子预算与可靠执行 | 预占/结算/Outbox/Inbox/fencing/心跳/恢复已实现；真实 RabbitMQ、多实例故障与容量验收待完成 |
-| 研发闭环 | Java 侧审批/产物管理已实现；GitHub PR 与 GitLab MR 的签名/token webhook、项目绑定与 delivery 幂等已实现，真实 webhook 现场验收、容器/VM 隔离执行器待完成 |
-| 缓存、容量与诊断 | 策略只读缓存、真实 Redis IT、任务/Worker/审批/缓存/Outbox 指标、可终止子进程执行器已实现；Prometheus 采集、容器/VM 隔离、多实例故障、JVM 排障和容量验收待完善 |
-| 后置扩展与独立实验 | 报告安全分享已实现；JVM/并发/Redis/Spring/秒杀已运行验证，2PC/TCC 为 SQLite 模拟；MySQL 8.4 真库锁/MVCC 与 Seata 未运行；独立短链域名、热点容量与多实例验收待完善 |
+| MySQL + Java 平台业务 | 默认 MySQL 运行档、组织/项目权限、仓库/策略、任务/预算、产物和审批已实现；MySQL 8.4.0 迁移（V1–V11）、19 表离线复制与 22 表备份恢复校验和一致已验收 |
+| 原子预算与可靠执行 | 预占/结算/Outbox/Inbox/fencing/心跳/恢复已实现；真实 RabbitMQ 4.1.4 分发、双实例共享配额、容量与故障注入已验收（单机短时，不作生产容量结论） |
+| 研发闭环 | Java 侧审批/产物管理已实现；GitHub PR 与 GitLab MR 的签名/token webhook、项目绑定与 delivery 幂等已实现；容器级隔离执行器 6 项边界测试通过；真实 webhook 现场验收与 VM 级隔离仍待完成 |
+| 缓存、容量与诊断 | 策略只读缓存、真实 Redis IT、任务/Worker/审批/缓存/Outbox 指标、可终止子进程与容器执行器已实现；可选 Prometheus/Grafana 编排已提供；生产采集端、VM 隔离与跨主机部署待完善 |
+| 后置扩展与独立实验 | 报告安全分享与短链已实现；JVM/并发/Redis/Spring 已运行验证；2PC/TCC 为 SQLite 模拟；MySQL 8.4.0 真库索引/隔离/死锁与 Seata 2.6 AT/TCC 已运行验证；独立短链域名与热点容量待完善 |
 
 当前文件租约按单 API worker 使用，不承诺跨节点协调或 exactly-once。AST 上下文只是有限语法近似；声明血缘不能发现所有未知共同来源；high_confidence 不是正确性证明，指定回归通过不等于完整无缺陷。
 
