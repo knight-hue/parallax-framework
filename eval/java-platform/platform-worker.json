@@ -1,0 +1,15 @@
+{
+  "module": "platform-worker-lifecycle-and-source-boundary",
+  "date": "2026-10-21",
+  "checks": {
+    "python_full_tests": {"passed": 381, "failed": 0, "skipped": 0},
+    "platform_worker_tests": 11,
+    "platform_source_boundary_tests": 18,
+    "java_worker_http_bridge_tests": 2,
+    "java_python_process_http_tests": 1,
+    "java_gateway_tests": "passed (offline, H2; gateway mvn test)",
+    "ruff": "passed",
+    "git_diff_check": "passed"
+  },
+  "limitations": ["RabbitMQ image absent from local cache", "Dispatch disabled by default", "Cross-node failure and MySQL 8.4 acceptance pending", "Public production deployment and approval UI takeover pending"]
+}

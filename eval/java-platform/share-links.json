@@ -1,0 +1,26 @@
+{
+  "module": "platform-report-share-links",
+  "date": "2026-10-22",
+  "checks": {
+    "java_full_tests": {"passed": 113, "failed": 0, "skipped": 0},
+    "share_integration_test": {"passed": 4, "failed": 0, "skipped": 0},
+    "flyway_version": 11
+  },
+  "verified_behaviors": [
+    "share creation requires REVIEWER project role and a verified successful artifact",
+    "raw tokens are 128-bit URL-safe random values and are returned only once",
+    "only SHA-256 token hashes are stored",
+    "unknown, expired, revoked and exhausted tokens return the same 404",
+    "expiry and revocation take effect immediately because shares are not cached",
+    "maximum accesses are enforced atomically under concurrent requests",
+    "anonymous report responses set no-store, no-referrer and nosniff headers",
+    "share creation and revocation are audited; access count and last access time are recorded"
+  ],
+  "limitations": [
+    "There is no separate short-domain redirect service; the link path is short but uses the API host",
+    "Access statistics are aggregate count and last access time, not per-visitor analytics",
+    "Hot-link capacity, negative-cache behavior and multi-instance acceptance pending",
+    "Per-tenant share quotas and dedicated share rate-limit buckets pending",
+    "MySQL 8.4 target-environment acceptance pending"
+  ]
+}

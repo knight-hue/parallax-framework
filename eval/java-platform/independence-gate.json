@@ -1,0 +1,112 @@
+{
+  "experiment": "independence-gate",
+  "date": "2026-10-22",
+  "design": {
+    "evidence": "8 units / 4 groups, 3 readers",
+    "threshold": {
+      "min_effective_channels": 2.6
+    },
+    "sweep": "redundancy 1..3",
+    "attempts": 0
+  },
+  "sweep_at_zero_attempts": [
+    {
+      "redundancy": 1,
+      "readers": 3,
+      "evidence_units": 8,
+      "effective_channels": 3.0,
+      "normalized_independence": 1.0,
+      "evidence_overlap_rate": 0.0,
+      "remedy": "add_reader",
+      "remedy_note": "独立通道不足，Reader 3 → 4",
+      "decisions": {
+        "off": "accept",
+        "observe": "accept",
+        "enforce": "accept"
+      }
+    },
+    {
+      "redundancy": 2,
+      "readers": 3,
+      "evidence_units": 8,
+      "effective_channels": 2.4,
+      "normalized_independence": 0.8,
+      "evidence_overlap_rate": 0.3333,
+      "remedy": "add_reader",
+      "remedy_note": "独立通道不足，Reader 3 → 4",
+      "decisions": {
+        "off": "accept",
+        "observe": "observe",
+        "enforce": "repartition"
+      }
+    },
+    {
+      "redundancy": 3,
+      "readers": 3,
+      "evidence_units": 8,
+      "effective_channels": 1.0,
+      "normalized_independence": 0.3333,
+      "evidence_overlap_rate": 1.0,
+      "remedy": "reduce_redundancy",
+      "remedy_note": "证据重叠 1.00 超过预算 0.50，冗余 3 → 2",
+      "decisions": {
+        "off": "accept",
+        "observe": "observe",
+        "enforce": "repartition"
+      }
+    }
+  ],
+  "sweep_after_one_attempt": [
+    {
+      "redundancy": 1,
+      "readers": 3,
+      "evidence_units": 8,
+      "effective_channels": 3.0,
+      "normalized_independence": 1.0,
+      "evidence_overlap_rate": 0.0,
+      "remedy": "add_reader",
+      "remedy_note": "独立通道不足，Reader 3 → 4",
+      "decisions": {
+        "off": "accept",
+        "observe": "accept",
+        "enforce": "accept"
+      }
+    },
+    {
+      "redundancy": 2,
+      "readers": 3,
+      "evidence_units": 8,
+      "effective_channels": 2.4,
+      "normalized_independence": 0.8,
+      "evidence_overlap_rate": 0.3333,
+      "remedy": "add_reader",
+      "remedy_note": "独立通道不足，Reader 3 → 4",
+      "decisions": {
+        "off": "accept",
+        "observe": "observe",
+        "enforce": "downgrade"
+      }
+    },
+    {
+      "redundancy": 3,
+      "readers": 3,
+      "evidence_units": 8,
+      "effective_channels": 1.0,
+      "normalized_independence": 0.3333,
+      "evidence_overlap_rate": 1.0,
+      "remedy": "reduce_redundancy",
+      "remedy_note": "证据重叠 1.00 超过预算 0.50，冗余 3 → 2",
+      "decisions": {
+        "off": "accept",
+        "observe": "observe",
+        "enforce": "downgrade"
+      }
+    }
+  ],
+  "limitations": [
+    "离线合成证据，Reader 是完美检出：本实验验证的是「指标→判定→处置」的接线与方向，不是真实模型的检出率。",
+    "有效通道数是基于证据分区 Jaccard 相关矩阵的参与率指标，不是因果意义上的独立通道数；它只回答「输入有多重叠」。",
+    "enforce 的重分区只提高 redundancy，不改变 Reader 身份之外的其它因素；若冗余已封顶，闸门直接降级而不空转。",
+    "门槛 2.6 是演示值；生产阈值应由目标误报率反推，本实验未做该标定。"
+  ]
+}

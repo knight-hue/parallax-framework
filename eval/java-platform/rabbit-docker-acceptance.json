@@ -1,0 +1,54 @@
+{
+  "module": "rabbit-dispatch-container-acceptance",
+  "date": "2026-10-28",
+  "tool": "gateway/tools/verify_cached_rabbit.py",
+  "command": "backend/.venv/Scripts/python.exe gateway/tools/verify_cached_rabbit.py --image rabbitmq:4.1-management --maven .toolchain/maven/bin/mvn.cmd --java-home .toolchain/jdk --out gateway/target/rabbit-acceptance",
+  "broker": {
+    "image": "rabbitmq:4.1-management",
+    "version": "4.1.8-management",
+    "image_id": "sha256:bf215c927c885b6d28bc52e02b0f2e1c033f2b439ec946c643834be93312ec4d",
+    "provisioning": "temporary container, --pull=never, random credentials, loopback random port, removed after the run",
+    "existing_brokers_touched": false
+  },
+  "checks": {
+    "broker_ready_seconds": 14.2,
+    "unit_tests": {"passed": 116, "failed": 0, "skipped": 0},
+    "rabbit_real_tests": {
+      "executed": 6,
+      "failed": 0,
+      "seconds": 10.44,
+      "cases": [
+        "durableConfirmationAndChannelLossCauseBrokerRedelivery",
+        "mandatoryUnroutableMessageIsNeverAcknowledgedAsPublished",
+        "permanentWorkerFailureIsManuallyRejectedToTheDeadLetterQueue",
+        "transientWorkerFailureRequeuesAndASecondDeliverySucceeds",
+        "workerProcessDeathKeepsRetryingUntilARestartedWorkerAccepts",
+        "staleContractIsAcknowledgedAndNeverRedelivered"
+      ]
+    },
+    "worker_failure_contract_on_a_real_broker": {
+      "5xx": "nack + requeue, then the second delivery is accepted (2 HTTP attempts, empty task queue, empty DLQ)",
+      "process_death": "while the worker port is closed every delivery fails to connect and keeps retrying; after a new process binds the same port the message is accepted and removed",
+      "409_stale_or_duplicate": "acknowledged once and never redelivered (1 HTTP attempt, no retry counter)",
+      "note": "the pre-existing cases covered redelivery, mandatory return and 4xx dead-lettering; these three cover the worker-restart path that dispatch documentation promises"
+    },
+    "build": "BUILD SUCCESS"
+  },
+  "tooling_defect_found_and_fixed": {
+    "symptom": "every run failed with 'Temporary RabbitMQ did not become ready'",
+    "root_cause": "the readiness probe ran rabbitmq-diagnostics as root inside the container, which created a root-owned /var/lib/rabbitmq/.erlang.cookie before the entrypoint dropped privileges; the broker then crashed with 'Error when reading /var/lib/rabbitmq/.erlang.cookie: eacces' (exit code 1)",
+    "evidence": "container logs and inspect captured in gateway/target/rabbit-acceptance/rabbit-failure.log; container exit code 1 ~8 s after start",
+    "fix": [
+      "probe with docker exec --user rabbitmq so the cookie is never created as root",
+      "replace the fixed 60-iteration poll with a 180 s wall-clock deadline plus TimeoutExpired tolerance, because a cold management image needs 15-40 s",
+      "keep the temporary container on failure and write logs plus inspect to the output directory instead of auto-removing the diagnosis"
+    ],
+    "note": "the previous 2026-10-22 acceptance used a native broker; this run proves the same three properties against a container broker provisioned by the tool itself, so the documented command is now reproducible"
+  },
+  "limitations": [
+    "Single local broker: proves delivery, confirmation, mandatory-return and dead-letter behaviour, not broker cluster failover",
+    "No multi-node quorum queue rebalance drill",
+    "Does not prove capacity or latency under production load",
+    "Python platform Worker endpoints are still required for a real end-to-end dispatch"
+  ]
+}

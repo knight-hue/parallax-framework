@@ -1,0 +1,31 @@
+{
+  "module": "mysql-runtime-and-offline-transfer",
+  "date": "2026-10-22",
+  "mysql_tested": "8.4.0 (native portable instance on E:, isolated datadir per run)",
+  "mysql_target": "8.4 LTS (verified)",
+  "source_tested": "PostgreSQL 16 (pgvector/pgvector:pg16 image)",
+  "java": 21,
+  "checks": {
+    "java_full_tests": {"passed": 113, "failed": 0},
+    "mysql_integration": {"passed": 8, "failed": 0},
+    "transfer_nonempty_tables": 19,
+    "transfer_per_column_digest": true,
+    "nonempty_destination_rejected": true,
+    "tampering_detected": true,
+    "compose_production_config": "passed"
+  },
+  "verified_behaviors": [
+    "Flyway runs every V*.sql on real MySQL 8.4 and records success rows",
+    "InnoDB engine and real foreign keys reject cross-project references",
+    "Budget reservation, outbox claiming and membership revocation hold under real MySQL contention",
+    "Offline transfer copies all 19 platform tables with per-column digests",
+    "Offline transfer accepts a destination that only holds the V10 system.webhook seed",
+    "Offline transfer refuses a modified quota seed and detects post-copy tampering"
+  ],
+  "reproduce": "backend/.venv/Scripts/python.exe gateway/tools/verify_native_mysql.py --mysql-home <mysql-8.4> --maven <mvn> --java-home <jdk> --out <dir> --postgres-image pgvector/pgvector:pg16",
+  "limitations": [
+    "Only MySQL 8.4.0 (LTS GA) exercised; later 8.4.x patch releases not tested",
+    "No production backup/restore or public deployment acceptance",
+    "Task execution still uses the existing Python runner"
+  ]
+}

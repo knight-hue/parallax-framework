@@ -1,0 +1,25 @@
+{
+  "module": "platform-policy-cache-governance",
+  "date": "2026-10-22",
+  "checks": {
+    "java_unit_integration": {"passed": 101, "failed": 0, "skipped": 0},
+    "java_real_redis_cache_it": {"passed": 4, "failed": 0, "skipped": 0, "redis_image": "redis:latest", "redisson_version": "3.52.0"},
+    "python_full_tests": {"passed": 381, "failed": 0, "skipped": 0},
+    "ruff": "passed",
+    "ruff_format": "106 files already formatted",
+    "frontend_typecheck": "passed",
+    "frontend_lint": "passed"
+  },
+  "verified_behaviors": [
+    "cache hit avoids the authoritative database loader",
+    "eviction forces an authoritative reload",
+    "invalid cached JSON or digest mismatch is discarded and rebuilt",
+    "lock wait uses milliseconds and is bounded",
+    "loader failures propagate once instead of being swallowed or retried by the cache layer"
+  ],
+  "limitations": [
+    "Real Redis multi-instance failure drill not performed",
+    "MySQL 8.4 target environment and production acceptance pending",
+    "Cache remains advisory; authorization, budget and task state stay in MySQL"
+  ]
+}

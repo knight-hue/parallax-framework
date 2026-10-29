@@ -1,0 +1,14 @@
+{
+  "module": "execution-snapshot-and-durable-worker-communication",
+  "date": "2026-10-21",
+  "checks": {
+    "java_full_tests": {"passed": 94, "failed": 0, "skipped": 0},
+    "native_mysql_8_0_19": {"passed": 8, "failed": 0, "skipped": 0},
+    "postgres_to_mysql_nonempty_tables": 17,
+    "python_full_tests": {"passed": 343, "failed": 0, "skipped": 0},
+    "python_client_tests": 22,
+    "python_journal_tests": 9,
+    "new_java_snapshot_tests": 2
+  },
+  "limitations": ["Engine execution integration pending", "Dispatch disabled by default", "Real RabbitMQ not verified", "Snapshot HTTP tests use test database", "MySQL 8.4 and public deployment not verified"]
+}

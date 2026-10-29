@@ -1,0 +1,90 @@
+{
+  "sample": "seed_java",
+  "date": "2026-10-22",
+  "planted_defects": 4,
+  "defect_classes": [
+    "atomicity",
+    "business_invariant",
+    "concurrency",
+    "error_handling"
+  ],
+  "baseline": {
+    "totals": {
+      "tests": 10,
+      "failures": 5,
+      "errors": 0,
+      "skipped": 0
+    },
+    "per_class": {
+      "dev.parallax.corpus.java.AccountTest": {
+        "tests": 2,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0
+      },
+      "dev.parallax.corpus.java.ConfigLoaderTest": {
+        "tests": 3,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0
+      },
+      "dev.parallax.corpus.java.ReportExporterTest": {
+        "tests": 2,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0
+      },
+      "dev.parallax.corpus.java.TokenBucketTest": {
+        "tests": 3,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "build_succeeded": false
+  },
+  "after_reference_fix": {
+    "totals": {
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "per_class": {
+      "dev.parallax.corpus.java.AccountTest": {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "dev.parallax.corpus.java.ConfigLoaderTest": {
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "dev.parallax.corpus.java.ReportExporterTest": {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "dev.parallax.corpus.java.TokenBucketTest": {
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "build_succeeded": true
+  },
+  "failing_test_classes_before_fix": [
+    "dev.parallax.corpus.java.AccountTest",
+    "dev.parallax.corpus.java.ConfigLoaderTest",
+    "dev.parallax.corpus.java.ReportExporterTest",
+    "dev.parallax.corpus.java.TokenBucketTest"
+  ],
+  "failing_test_classes_after_fix": [],
+  "detected_all_defects": true,
+  "passed": true
+}

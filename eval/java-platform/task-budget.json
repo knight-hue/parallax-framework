@@ -1,0 +1,17 @@
+{
+  "module": "platform-task-budget-and-outbox",
+  "date": "2026-10-21",
+  "mysql_tested": "8.0.19",
+  "checks": {
+    "java_full_tests": {"passed": 72, "failed": 0},
+    "mysql_integration": {"passed": 6, "failed": 0},
+    "budget_contention": {"concurrent_requests": 20, "tokens_per_task": 100, "limit": 300, "accepted": 3},
+    "real_mysql_contention": "8 same-key retries reserve 100 once; 20 new requests accept only 2 more with limit 300",
+    "repeated_cancellation": "single settlement/refund",
+    "transaction_rollback": "budget,task,outbox,ledger,audit restored",
+    "account_reconciliation": "consistent data accepted; injected mismatch detected",
+    "cross_project_fk": "rejected by real MySQL",
+    "postgres_to_mysql_nonempty_tables": 16
+  },
+  "limitations": ["Outbox is durable but not published yet", "Worker and frontend integration pending", "Budget grants are cumulative, no automatic daily reset", "MySQL 8.4 not verified"]
+}

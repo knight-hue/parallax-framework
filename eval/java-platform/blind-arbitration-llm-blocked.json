@@ -1,0 +1,29 @@
+{
+  "experiment": "blind-arbitration-llm",
+  "date": "2026-10-25",
+  "status": "superseded",
+  "superseded_by": "eval/java-platform/blind-arbitration-llm.json（2026-10-28，DeepSeek deepseek-flash 实测）",
+  "why": "当时配置的模型端点返回 403，供应商停用服务；该端点在 2026-10-28 已切换为 DeepSeek 并完成实测",
+  "provider_error": "模型返回 403（不可重试）：OpenASI is currently paused. All services are temporarily unavailable. code=service_suspended",
+  "attempt": ".venv\\Scripts\\python.exe tools\\verify_blind_arbitration_llm.py --repeats 1 --limit 2",
+  "observed": {
+    "calls_attempted": 4,
+    "calls_failed": 4,
+    "wall_seconds": 1.06,
+    "arbitrator_fallback": "LLMArbitrator 捕获异常后把争议保留为 disputed（不伪造裁决）"
+  },
+  "what_exists": [
+    "真实模型实验脚本 tools/verify_blind_arbitration_llm.py（两种输入条件、重复次数、逐场景记录）",
+    "LLMArbitrator(redact_statements=True) 已实现并与 PARALLAX_ARBITRATOR=llm-blind 接通",
+    "单测覆盖：redact=True 时提示词不含 statement"
+  ],
+  "what_does_not_exist": [
+    "任何真实模型在结论剥离条件下的准确率/救回率数字",
+    "模型别名与端点的可用性承诺"
+  ],
+  "next_command_when_provider_recovers": ".venv\\Scripts\\python.exe tools\\verify_blind_arbitration_llm.py --repeats 2 --out ..\\eval\\java-platform\\blind-arbitration-llm.json",
+  "limitations": [
+    "本文件只记录一次受阻尝试，不构成任何模型能力结论。",
+    "端点恢复后应原命令重跑；若更换端点，需同时更新 model 与 base_url_host 字段。"
+  ]
+}

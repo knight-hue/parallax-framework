@@ -1,0 +1,25 @@
+{
+  "module": "labs-distributed-tx",
+  "date": "2026-10-22",
+  "checks": {
+    "two_phase_simulation": "passed",
+    "tcc_simulation": "passed",
+    "runtime": "Python stdlib + SQLite"
+  },
+  "verified_behaviors": [
+    "normal 2PC commit reserves both branches exactly once",
+    "second-resource prepare failure aborts and restores the first branch",
+    "crash before a coordinator decision aborts prepared branches",
+    "crash after a durable commit decision commits both branches on recovery",
+    "duplicate commit is idempotent",
+    "TCC confirm/cancel are state-guarded and idempotent",
+    "confirm after cancel is rejected",
+    "empty rollback and hanging try cancellation restore stock"
+  ],
+  "limitations": [
+    "SQLite simulations are not real XA prepared transactions or Seata AT/TCC",
+    "No global locks, prepared-transaction blocking or multi-process coordinator failure",
+    "Seata Server, Seata dependency and target MySQL 8.4 are not available in this environment",
+    "No performance or throughput claim"
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "module": "multi-instance-rate-limit",
+  "date": "2026-10-22",
+  "topology": {
+    "instances": 2,
+    "ports": [18081, 18082],
+    "mysql": "127.0.0.1:3307/parallax (MySQL 8.4.0)",
+    "redis": "redis://127.0.0.1:6379/1",
+    "profile": "mysql",
+    "identity_enabled": true,
+    "require_auth": true
+  },
+  "quota": {"default_capacity": 5, "default_window_seconds": 60, "expensive_capacity": 5},
+  "checks": {
+    "instance_a_requests": [200, 200, 200, 200, 200],
+    "instance_b_requests": [429, 429, 429, 429],
+    "shared_quota_verified": true,
+    "flyway_on_shared_mysql": "both instances started against the same schema without migration conflicts"
+  },
+  "verified_behaviors": [
+    "Five authenticated requests through instance A consume the whole window budget",
+    "The very first request through instance B is rejected with 429, so the bucket is shared rather than per-process",
+    "Both processes run Flyway against the same MySQL schema and start cleanly"
+  ],
+  "reproduce": [
+    "mvn -DskipTests package (gateway)",
+    "java -jar parallax-gateway-0.1.0.jar --server.port=18081 --spring.profiles.active=mysql --parallax.identity.enabled=true --parallax.ratelimit.default-capacity=5 --parallax.ratelimit.redis-url=redis://127.0.0.1:6379/1 ...",
+    "java -jar parallax-gateway-0.1.0.jar --server.port=18082 (same flags)",
+    "POST /api/v1/auth/token then POST /api/v1/credentials to mint a key",
+    "GET /api/v1/usage/me five times on 18081, then once on 18082"
+  ],
+  "limitations": [
+    "Two processes on one host; no separate machines, load balancer or container orchestration",
+    "No latency percentile or throughput measurement, so this is a correctness check rather than a capacity result",
+    "Redis outage degradation is covered by RedisRateLimitIT, not re-run in this two-process drill"
+  ]
+}

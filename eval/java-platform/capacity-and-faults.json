@@ -1,0 +1,48 @@
+{
+  "module": "capacity-and-fault-injection",
+  "date": "2026-10-22",
+  "topology": {
+    "instances": 2,
+    "ports": [18081, 18082],
+    "host": "single workstation, both instances and all dependencies on one machine",
+    "jvm": "JDK 21, -Xms256m -Xmx512m per instance",
+    "mysql": "8.4.0 on 127.0.0.1:3307",
+    "redis": "container redis on 127.0.0.1:6379 (DB 1)",
+    "rate_limit": "capacity 100000 / 60s so the probe measures latency rather than throttle rejection"
+  },
+  "capacity": {
+    "tool": "gateway/tools/verify_capacity.py",
+    "endpoint": "GET /api/v1/usage/me (authenticated, hits MySQL)",
+    "requests": 600,
+    "concurrency": 12,
+    "wall_seconds": 17.689,
+    "throughput_rps": 33.92,
+    "status_counts": {"200": 600},
+    "error_rate": 0.0,
+    "latency_ms": {"min": 64.65, "p50": 186.45, "p95": 822.39, "p99": 4495.52, "max": 5280.6, "mean": 346.48}
+  },
+  "faults": [
+    {
+      "fault": "redis down",
+      "action": "docker stop redis",
+      "observed": "12/12 requests across both instances still returned 200; rate limiting degraded to the in-memory bucket",
+      "metric": "parallax_ratelimit_degraded_total = 1 after the first failed Redis attempt",
+      "recovery": "docker start redis, next request 200"
+    },
+    {
+      "fault": "mysql down",
+      "action": "kill the mysqld process on port 3307",
+      "observed_before_fix": "authenticated read and /actuator/health both hung past a 15s client timeout",
+      "observed_after_fix": "authenticated read returned 500 after 3.12s and /actuator/health returned 503 after 3.17s",
+      "fix": "spring.datasource.hikari.connection-timeout=3000ms (PARALLAX_DB_CONNECTION_TIMEOUT_MS) and validation-timeout=2000ms",
+      "recovery": "restart mysqld, next request 200 without restarting the gateway"
+    }
+  ],
+  "limitations": [
+    "Both instances and every dependency share one workstation; numbers are not a production capacity claim",
+    "Short burst only: no soak test, no ramp, no percentiles over a warmed JVM (p99 includes cold-start effects)",
+    "No load balancer or ingress in front; the probe alternates between instances itself",
+    "MySQL outage now fails fast (500 / 503 within ~3s) after lowering the Hikari connection timeout; before the fix it hung",
+    "Data set is a single API key with a small ledger, so the query cost is not representative of a large tenant"
+  ]
+}

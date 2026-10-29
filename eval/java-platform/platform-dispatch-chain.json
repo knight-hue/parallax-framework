@@ -1,0 +1,51 @@
+{
+  "module": "platform-dispatch-full-chain",
+  "date": "2026-10-28",
+  "design": {
+    "chain": "Outbox -> RabbitMQ (quorum) -> Java consumer -> HTTP bridge -> real Python worker process -> WorkerEvent ingress -> settlement",
+    "broker": "temporary rabbitmq:4.1.8-management container with random credentials on a loopback random port",
+    "worker_model": "deterministic local model fixture (tests/platform_process_fixture.py); the worker process, HTTP contract, journal, heartbeat, artifact upload and accounting are real",
+    "source": "local fixture tree in the worker fixture; egress allowlist, DNS and redirect controls are covered by unit tests instead",
+    "why_fixtures": "this drill verifies platform coordination, so the model and repository contents are intentionally deterministic"
+  },
+  "command": "backend/.venv/Scripts/python.exe gateway/tools/verify_cached_rabbit.py --image rabbitmq:4.1-management --maven .toolchain/maven/bin/mvn.cmd --java-home .toolchain/jdk --python backend/.venv/Scripts/python.exe --out gateway/target/rabbit-acceptance",
+  "checks": {
+    "rabbit_real_tests": {
+      "executed": 6,
+      "failed": 0,
+      "seconds": 8.592,
+      "cases": [
+        "durableConfirmationAndChannelLossCauseBrokerRedelivery",
+        "mandatoryUnroutableMessageIsNeverAcknowledgedAsPublished",
+        "permanentWorkerFailureIsManuallyRejectedToTheDeadLetterQueue",
+        "transientWorkerFailureRequeuesAndASecondDeliverySucceeds",
+        "workerProcessDeathKeepsRetryingUntilARestartedWorkerAccepts",
+        "staleContractIsAcknowledgedAndNeverRedelivered"
+      ]
+    },
+    "dispatch_chain_tests": {
+      "executed": 2,
+      "failed": 0,
+      "seconds": 69.27,
+      "cases": {
+        "brokerDeliveryReachesARealWorkerAndASecondProcessServesTheNextTask": "first task SUCCEEDED on attempt 1 with one SETTLE ledger entry and a stored artifact; after killing the worker and starting a second process on the same fixed endpoint the next task also succeeds with its own single settlement and a consistent account",
+        "aDeadLetteredDispatchIsRecoveredByTheNextWorkerProcess": "with no worker listening the delivery is refused until the dead-letter queue takes it; attempt and fence increase, no settlement is written, and the task only succeeds once a worker process is started and the coordinator republishes"
+      }
+    },
+    "regressions": {
+      "java_unit_tests": {"passed": 116, "failed": 0},
+      "python_tests": {"passed": 474, "failed": 0}
+    }
+  },
+  "tooling_defect_found_and_fixed": {
+    "symptom": "the worker fixture installed its deterministic model only on platform_worker, while platform_engine imports the client directly, so the engine tried the real provider and the process failed before any delivery could settle",
+    "fix": "patch both module bindings in backend/tests/platform_process_fixture.py",
+    "note": "the previous opt-in process test could not have passed with a clean environment before this fix"
+  },
+  "limitations": [
+    "Single broker node and a single host: no cluster failover, no separate worker machine, no load balancer",
+    "The repository and model inside the worker are deterministic fixtures, so this is not evidence about model quality or egress control",
+    "A production audit that needs a real model still depends on provider behaviour; reasoning models can exhaust the per-call output cap",
+    "No capacity, latency-percentile or soak measurement"
+  ]
+}

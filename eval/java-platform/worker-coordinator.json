@@ -1,0 +1,20 @@
+{
+  "module": "worker-coordination-inbox-and-events",
+  "date": "2026-10-21",
+  "mysql_tested": "8.0.19",
+  "checks": {
+    "java_full_tests": {"passed": 82, "failed": 0},
+    "mysql_integration": {"passed": 7, "failed": 0},
+    "new_coordinator_tests": 10,
+    "concurrent_final_duplicates": "one accepted settlement per task",
+    "real_mysql_cross_organization_starts": "passed without absent-key gap locking",
+    "stale_attempt": "rejected",
+    "sequence_gaps_and_usage_regression": "rejected without state change",
+    "cancel_success_race": "one terminal settlement",
+    "unclaimed_dispatch_recovery": "new attempt/fence, bounded retries",
+    "lost_running_worker": "full reservation charged conservatively with explicit uncertainty reason",
+    "event_replay": "database cursor, project authorization",
+    "postgres_to_mysql_nonempty_tables": 17
+  },
+  "limitations": ["No broker publication or Python execution integration yet", "Background recovery scanner not wired yet", "Success receipt digest does not verify artifact content yet", "MySQL 8.4 not verified"]
+}

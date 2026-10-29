@@ -1,0 +1,24 @@
+{
+  "module": "labs-jvm-concurrency",
+  "date": "2026-10-22",
+  "checks": {
+    "jdk": "21.0.12.1",
+    "jvm_lab": "passed",
+    "concurrency_lab": "passed"
+  },
+  "verified_behaviors": [
+    "volatile visibility and safe publication",
+    "volatile++ lost updates",
+    "isolated class loaders produce distinct Class objects",
+    "G1 young collections and controlled heap OOM",
+    "ReentrantLock reentrancy, fairness, Condition and timed tryLock",
+    "bounded thread pool rejection count",
+    "Future.cancel(true) interrupt propagation",
+    "CallerRunsPolicy backpressure"
+  ],
+  "limitations": [
+    "The non-volatile visibility failure is not deterministic on every JVM/hardware run",
+    "Behavioral labs do not replace reading JDK 21 AQS/ThreadPoolExecutor sources",
+    "No JMH benchmark or formal performance claim is made"
+  ]
+}

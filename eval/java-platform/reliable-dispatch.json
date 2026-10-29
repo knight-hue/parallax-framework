@@ -1,0 +1,25 @@
+{
+  "module": "reliable-dispatch-and-recovery-wiring",
+  "date": "2026-10-22",
+  "mysql_tested": "8.4.0",
+  "rabbit_tested": "4.1.4 (native broker, dedicated vhost parallax_it)",
+  "erlang": "OTP 27.3",
+  "checks": {
+    "java_full_tests": {"passed": 113, "failed": 0, "skipped": 0},
+    "mysql_integration": {"passed": 8, "failed": 0, "skipped": 0},
+    "mysql_claim_contention": "4 distinct claims from 12 concurrent requests; expired owner cannot overwrite replacement",
+    "mysql_deadlock_fix": "READ COMMITTED claim transaction avoids status-index next-key deadlock reproduced under RR",
+    "postgres_to_mysql_nonempty_tables": 19,
+    "outbox_tests": 5,
+    "transport_mock_tests": 3,
+    "loopback_http_bridge_tests": 2,
+    "rabbit_real_tests": {"compiled": 3, "executed": 3, "failed": 0, "quorum_queue_redelivery": true},
+    "isolated_broker": "dedicated vhost, PARALLAX_TEST_RABBIT_ISOLATED=true"
+  },
+  "limitations": [
+    "Python platform Worker endpoints pending",
+    "Dispatch disabled by default",
+    "No multi-node broker cluster failover drill",
+    "No public production deployment"
+  ]
+}

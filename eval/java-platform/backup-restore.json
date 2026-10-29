@@ -1,0 +1,23 @@
+{
+  "module": "mysql-backup-restore-drill",
+  "date": "2026-10-22",
+  "mysql": "8.4.0",
+  "tool": "gateway/tools/verify_backup_restore.py",
+  "migrations_applied": 11,
+  "tables_compared": 22,
+  "dump_bytes": 35614,
+  "checksum_mismatches": 0,
+  "checks": {
+    "scratch_schemas": "two throwaway databases created and dropped per run; user databases untouched",
+    "dump_command": "mysqldump --single-transaction --routines --triggers --events --hex-blob --set-gtid-purged=OFF",
+    "restore_into_second_schema": true,
+    "per_table_checksum_equal": true,
+    "per_table_row_count_equal": true,
+    "non_ascii_round_trip": "Chinese and emoji values in platform_user and organization names survived dump/restore"
+  },
+  "limitations": [
+    "Logical dump drill only; no physical backup, binlog point-in-time recovery or replication",
+    "No application traffic during the drill, so it is not an online hot-backup proof",
+    "Restore target is a scratch schema on the same instance, not a separate host"
+  ]
+}

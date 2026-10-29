@@ -1,0 +1,14 @@
+{
+  "module": "platform-result-artifacts",
+  "date": "2026-10-21",
+  "checks": {
+    "java_verify": {"passed": 98, "failed": 0, "skipped": 0},
+    "mysql_persistence": {"passed": 8, "failed": 0, "skipped": 0, "version": "8.0.19"},
+    "python_full_tests": {"passed": 370, "failed": 0, "skipped": 0},
+    "postgres_to_mysql_nonempty_tables": 18,
+    "flyway_version": 8,
+    "ruff": "passed",
+    "format": "passed"
+  },
+  "limitations": ["Real Java-Python execution acceptance pending", "RabbitMQ absent from local image cache", "Dispatch disabled by default", "S3 and repair approval integration pending", "MySQL 8.4 and production acceptance pending"]
+}

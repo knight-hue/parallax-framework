@@ -1,0 +1,39 @@
+{
+  "module": "platform-container-isolation-executor",
+  "date": "2026-10-22",
+  "execution_mode": "container",
+  "test_image": "python:3.12-slim (local, 179MB)",
+  "production_image": "parallax-engine-sandbox:local (built from backend/docker/sandbox.Dockerfile)",
+  "checks": {
+    "container_isolation_tests": {"passed": 6, "failed": 0, "skipped": 0},
+    "backend_full_suite": {"passed": 392, "failed": 0},
+    "ruff_check": "passed",
+    "ruff_format": "105 files already formatted"
+  },
+  "isolation_flags": [
+    "--network none",
+    "--read-only",
+    "--tmpfs /tmp",
+    "--cap-drop ALL",
+    "--security-opt no-new-privileges:true",
+    "--pids-limit 128",
+    "--memory 768m and --memory-swap 768m",
+    "--cpus 1",
+    "--user 65534:65534",
+    "source mounted read-only at /src, only /work is writable"
+  ],
+  "verified_behaviors": [
+    "Container has no network: an outbound TCP connection from inside fails",
+    "Source is mounted read-only: writing to /src is rejected and the host file is unchanged",
+    "The engine sees /src, never the host path, so host layout is not leaked into the result",
+    "A run past its deadline raises TimeoutError, force-removes the container and returns quickly",
+    "A result whose digest does not match its content is rejected",
+    "The generated argv contains every isolation flag before the image name"
+  ],
+  "limitations": [
+    "Shares the host kernel; this is container isolation, not a VM or a hardware sandbox",
+    "The production sandbox image was not built in this run, only the executor and its tests were exercised",
+    "No custom seccomp/AppArmor profile beyond Docker defaults plus no-new-privileges",
+    "A single container per task; no warm pool, so start-up latency is part of each run"
+  ]
+}

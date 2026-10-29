@@ -1,0 +1,19 @@
+{
+  "module": "repository-and-policy-catalog",
+  "date": "2026-10-21",
+  "mysql_tested": "8.0.19",
+  "checks": {
+    "java_full_tests": {"passed": 66, "failed": 0},
+    "http_and_business_tests": 5,
+    "identity_protocol_and_catalog_gate": {"passed": 19, "failed": 0},
+    "mysql_integration": {"passed": 5, "failed": 0},
+    "concurrent_policy_publishers": 8,
+    "policy_versions": "unique continuous 1..8 under real MySQL",
+    "postgres_to_mysql_nonempty_tables": 12,
+    "tenant_isolation": "passed",
+    "unsafe_repository_urls": "rejected",
+    "policy_tampering": "detected",
+    "seek_pagination": "bounded, complete, no duplicates"
+  },
+  "limitations": ["Repository registration does not fetch code", "Worker snapshot resolution and platform UI pending", "MySQL 8.4 not available locally"]
+}
