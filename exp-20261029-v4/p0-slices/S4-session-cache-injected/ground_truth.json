@@ -1,0 +1,160 @@
+{
+  "task_id": "S4-session-cache-injected",
+  "slice": "S4-session-cache",
+  "description": "S4-session-cache 注入版：12 个已知缺陷，每个都有测试验真",
+  "defect_count": 12,
+  "files_touched": [
+    "app/application/memory/preference_selector.py",
+    "app/domain/catalog/money.py",
+    "app/domain/session/ports/conversation_store.py",
+    "app/infrastructure/cache/cached_embedding_client.py",
+    "app/infrastructure/cache/semantic_cache.py",
+    "app/infrastructure/security/output_guard.py"
+  ],
+  "defects": [
+    {
+      "id": "d1-dislikes-truncated-by-total-budget",
+      "file": "app/application/memory/preference_selector.py",
+      "line_start": 94,
+      "line_end": 94,
+      "defect_class": "logic",
+      "title": "总预算截断把 dislike 一起吃掉，黑名单被降级成普通偏好",
+      "marker": "return (dislikes + selected_likes)[:top_k]",
+      "rationale": "PreferenceSelector 的安全底线是「dislike 全量保留，不参与 top_k 截断」，否则 query「推荐个咖啡杯」与「不要塑料」相似度极低时，黑名单会被排到末尾丢掉。改成对合并结果统一取 [:top_k] 后，读起来像「尊重预算」，实际把安全底线变成可裁剪项。",
+      "triggers_test": "TestD1DislikesNotTruncated::test_all_dislikes_survive_total_budget",
+      "reader_owner": "reader-r0-1"
+    },
+    {
+      "id": "d2-zero-budget-drops-dislikes",
+      "file": "app/application/memory/preference_selector.py",
+      "line_start": 83,
+      "line_end": 85,
+      "defect_class": "boundary",
+      "title": "预算为 0 时把 dislike 也一起丢掉",
+      "marker": "return []",
+      "rationale": "`top_k <= 0` 的语义是「正向偏好全部让位，只保留安全底线」，所以早退返回 dislikes。改成返回空列表后，注释也跟着改成「不注入任何偏好」，单看这段完全自洽。",
+      "triggers_test": "TestD2ZeroBudgetKeepsDislikes::test_zero_top_k_still_returns_dislikes",
+      "reader_owner": "reader-r0-1"
+    },
+    {
+      "id": "d3-relevance-ranking-keeps-sorted-order",
+      "file": "app/application/memory/preference_selector.py",
+      "line_start": 123,
+      "line_end": 123,
+      "defect_class": "ordering",
+      "title": "相关性排序后直接返回排序结果，注入块行序每轮抖动",
+      "marker": "return picked",
+      "rationale": "`_rank_by_relevance` 必须「挑出 top_k 后回到原始相对顺序」，否则同一批偏好在不同 query 下行序不同，重复注入时 Prompt Cache 前缀一直变。改成直接返回 picked 后，结果集合正确、只有顺序变了——单看返回值内容很难发现。",
+      "triggers_test": "TestD3RankingRestoresOriginalOrder::test_output_follows_original_order",
+      "reader_owner": "reader-r0-1"
+    },
+    {
+      "id": "d4-money-accepts-bool",
+      "file": "app/domain/catalog/money.py",
+      "line_start": 21,
+      "line_end": 21,
+      "defect_class": "type",
+      "title": "Money.of 把 bool 当整数收下，金额静默变成 1 分",
+      "marker": "if not isinstance(amount, int) or amount < 0:",
+      "rationale": "`bool` 是 `int` 的子类，`isinstance(True, int)` 为真。原实现专门挡了 `isinstance(amount, bool)`，去掉后 `Money.of(True, 'USD')` 会返回 1 分而不报错——上游若把 YAML 的 `true` 当数量传进来，错误会一路流到结算。判断语句看起来仍然「校验了类型」。",
+      "triggers_test": "TestD4MoneyRejectsBool::test_bool_amount_is_rejected",
+      "reader_owner": "reader-r0-2"
+    },
+    {
+      "id": "d5-conversation-role-unchecked",
+      "file": "app/domain/session/ports/conversation_store.py",
+      "line_start": 37,
+      "line_end": 39,
+      "defect_class": "validation",
+      "title": "对话轮次的 role 不再校验，脏角色进流水",
+      "marker": "raise ValueError(\"ConversationTurn.session_id required\")",
+      "rationale": "ConversationTurn 的不变量是 role ∈ (buyer, agent)。删掉这条校验后，`role='system'` 的轮次会被正常写入并被 list_turns 读出来喂回上下文，而 `__post_init__` 仍在，看起来只是「少了一个字段的检查」。",
+      "triggers_test": "TestD5ConversationRoleChecked::test_invalid_role_is_rejected",
+      "reader_owner": "reader-r0-2"
+    },
+    {
+      "id": "d6-embedding-key-drops-model",
+      "file": "app/infrastructure/cache/cached_embedding_client.py",
+      "line_start": 31,
+      "line_end": 32,
+      "defect_class": "cache_key",
+      "title": "embedding 缓存 key 丢掉模型名，换模型后拿到旧模型的向量",
+      "marker": "return f\"emb:{digest}\"",
+      "rationale": "key 的契约是 sha256(model + text)：embedding 是「同模型同文本才同向量」，换模型后必须全部未命中。去掉模型名后，换模型仍会命中旧向量，语义检索结果悄悄退化成上一个模型的——缓存命中率还变好看了。",
+      "triggers_test": "TestD6EmbeddingKeyIncludesModel::test_different_models_do_not_share_cache",
+      "reader_owner": "reader-r0-0"
+    },
+    {
+      "id": "d7-embedding-missing-silently-emptied",
+      "file": "app/infrastructure/cache/cached_embedding_client.py",
+      "line_start": 77,
+      "line_end": 77,
+      "defect_class": "error_handling",
+      "title": "上游少返回向量时静默补空列表，不报错",
+      "marker": "return [vector or [] for vector in results]",
+      "rationale": "原实现刻意在最后做一次 None 检查并抛 RuntimeError——「不静默补零向量」是写在注释里的约定。改成 `vector or []` 之后，向量维度对不上只会让余弦相似度恒为 0，表现为「语义检索突然不工作」，而不是一个能定位的异常。",
+      "triggers_test": "TestD7MissingVectorRaises::test_short_batch_raises",
+      "reader_owner": "reader-r0-0"
+    },
+    {
+      "id": "d8-history-not-blocked",
+      "file": "app/infrastructure/cache/semantic_cache.py",
+      "line_start": 127,
+      "line_end": 128,
+      "defect_class": "logic",
+      "title": "会话内多轮时仍走语义缓存，上下文依赖问句被跨轮复用",
+      "marker": "return None",
+      "rationale": "「会话内已有多轮上下文时不命中」是缓存的安全边界之一——「刚才那款多少钱」依赖上下文，跨会话复用会答错。漏检 has_history 后，调用点仍然传了参数，看起来一切正常。",
+      "triggers_test": "TestD8HistoryBlocksCache::test_lookup_with_history_misses",
+      "reader_owner": "reader-r0-0"
+    },
+    {
+      "id": "d9-error-reply-cached",
+      "file": "app/infrastructure/cache/semantic_cache.py",
+      "line_start": 155,
+      "line_end": 156,
+      "defect_class": "error_handling",
+      "title": "失败回复进语义缓存，错误被复用 24 小时",
+      "marker": "return",
+      "rationale": "`reply` 以 `[error]` 开头说明这一轮失败了，进缓存等于把错误固化 24 小时，而且命中率会变好看。删掉 startswith 判断后只剩下「空回复不缓存」，逻辑依旧合理。",
+      "triggers_test": "TestD9ErrorReplyNotCached::test_error_reply_is_not_reusable",
+      "reader_owner": "reader-r0-0"
+    },
+    {
+      "id": "d10-bucket-key-ignores-scope",
+      "file": "app/infrastructure/cache/semantic_cache.py",
+      "line_start": 110,
+      "line_end": 112,
+      "defect_class": "cache_key",
+      "title": "桶 key 不再带偏好指纹，撤回偏好后仍命中旧回复",
+      "marker": ").hexdigest()[:16]",
+      "rationale": "桶 key = namespace + buyer + scope，scope 是买家偏好指纹。回复是在「当时的偏好」下生成的，偏好撤回后旧回复必须自动失效，否则会向用户断言一条他自己删掉的偏好。去掉 scope 后 key 仍然随买家变化，单看这段毫无破绽。",
+      "triggers_test": "TestD10BucketKeyUsesScope::test_scope_change_invalidates_bucket",
+      "reader_owner": "reader-r0-0"
+    },
+    {
+      "id": "d11-bucket-keeps-oldest",
+      "file": "app/infrastructure/cache/semantic_cache.py",
+      "line_start": 167,
+      "line_end": 167,
+      "defect_class": "boundary",
+      "title": "桶内保留的是最旧 30 条而不是最近 30 条",
+      "marker": "await self._cache.set_json(key, entries[:_BUCKET_LIMIT], _TTL_SECONDS)",
+      "rationale": "`entries[-_BUCKET_LIMIT:]` 的语义是「保留最近 N 条」。换成 `[:N]` 后仍然只保留 30 条，长度约束还成立，但留下的是最旧的——新回复全部写不进去，缓存命中率随时间单调下降。",
+      "triggers_test": "TestD11BucketKeepsNewest::test_newest_entry_remains_reachable",
+      "reader_owner": "reader-r0-0"
+    },
+    {
+      "id": "d12-output-guard-misses-api-key",
+      "file": "app/infrastructure/security/output_guard.py",
+      "line_start": 39,
+      "line_end": 39,
+      "defect_class": "security",
+      "title": "输出审核的敏感模式表少了 API Key 形态",
+      "marker": "# API Key 形态由上游网关负责，这里不再重复匹配",
+      "rationale": "output_guard 是最后一道闸，`sk-` 开头的 API Key 是明确的敏感形态。把这一条从 SENSITIVE_PATTERNS 里去掉后，注释变成「由上游网关负责」，模式表其余项都还在，单看实现完全合理——但泄露的凭据会被原样下发。",
+      "triggers_test": "TestD12OutputGuardRedactsApiKey::test_api_key_is_redacted",
+      "reader_owner": "reader-r0-0"
+    }
+  ]
+}

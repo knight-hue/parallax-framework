@@ -1,0 +1,132 @@
+{
+  "task_id": "S6-presentation-injected",
+  "slice": "S6-presentation",
+  "description": "S6-presentation 注入版：10 个已知缺陷，每个都有测试验真",
+  "defect_count": 10,
+  "files_touched": [
+    "app/infrastructure/persistence/json_file_stores.py",
+    "app/infrastructure/persistence/sql/tables.py"
+  ],
+  "defects": [
+    {
+      "id": "d1-auto-pk-loses-sqlite-variant",
+      "file": "app/infrastructure/persistence/sql/tables.py",
+      "line_start": 33,
+      "line_end": 33,
+      "defect_class": "migration",
+      "title": "自增主键丢掉 SQLite 变体，内存库上主键不能自增",
+      "marker": "_AutoPk = BigInteger",
+      "rationale": "注释写明：SQLite 的 AUTOINCREMENT 只能用于 INTEGER PRIMARY KEY，故用 `BigInteger().with_variant(Integer, \"sqlite\")`。去掉 variant 后建表仍然成功，但 SQLite 里该列是 BIGINT，不是 rowid 别名，插入不带 id 就会违反非空——生产库（PG）完全正常，只有单测与本地 SQLite 会炸，极易被当成环境问题。",
+      "triggers_test": "TestD1AutoPkOnSqlite::test_message_row_gets_an_id",
+      "reader_owner": "reader-r0-1"
+    },
+    {
+      "id": "d2-preference-unique-key-narrowed",
+      "file": "app/infrastructure/persistence/sql/tables.py",
+      "line_start": 133,
+      "line_end": 133,
+      "defect_class": "constraint",
+      "title": "偏好唯一约束少了 kind 列，同一句话记不成 like 与 dislike",
+      "marker": "UniqueConstraint(\"buyer_id\", \"statement\", name=\"uq_pref_buyer_kind_statement\"),",
+      "rationale": "口径是 buyer+kind+statement 唯一：同一句话可以既是「喜欢」也是「不能接受」（例如「要静音的」既可喜欢也可当硬约束）。约束缩成 buyer+statement 后，建表、迁移、单测都照常通过，只有真的同时记两面时才撞唯一键。",
+      "triggers_test": "TestD2PreferenceUniqueKey::test_same_statement_two_kinds_allowed",
+      "reader_owner": "reader-r0-1"
+    },
+    {
+      "id": "d3-message-index-drops-turn",
+      "file": "app/infrastructure/persistence/sql/tables.py",
+      "line_start": 68,
+      "line_end": 68,
+      "defect_class": "index",
+      "title": "对话消息索引只剩 session_id，按轮次取流水退化成全表扫",
+      "marker": "__table_args__ = (Index(\"ix_msg_session_turn\", \"session_id\"),)",
+      "rationale": "索引名 `ix_msg_session_turn` 与建表语句都表明它覆盖 (session_id, turn_index)，这正是 list_turns 的查询形态。少一列后索引仍然建得出来、名字也仍然贴切，只是「按会话取最近 N 轮」变成先捞全量再过滤——数据量小完全看不出来。",
+      "triggers_test": "TestD3MessageIndexCoversTurn::test_index_has_both_columns",
+      "reader_owner": "reader-r0-1"
+    },
+    {
+      "id": "d4-order-line-loses-foreign-key",
+      "file": "app/infrastructure/persistence/sql/tables.py",
+      "line_start": 113,
+      "line_end": 113,
+      "defect_class": "constraint",
+      "title": "订单行不再外键到订单，孤儿行可以静默写入",
+      "marker": "order_id: Mapped[str] = mapped_column(String(32), index=True)",
+      "rationale": "order_items.order_id 指向 orders.order_id 是这张表唯一的引用完整性保障。去掉 ForeignKey 后列名、类型、索引都在，建表与读写全部正常，只有删除订单或写入错误 order_id 时才会留下无法追溯的孤儿行。",
+      "triggers_test": "TestD4OrderLineForeignKey::test_foreign_key_exists",
+      "reader_owner": "reader-r0-1"
+    },
+    {
+      "id": "d5-sku-stock-version-no-default",
+      "file": "app/infrastructure/persistence/sql/tables.py",
+      "line_start": 151,
+      "line_end": 151,
+      "defect_class": "default",
+      "title": "库存行的 version 不再默认 0，插入即违反非空",
+      "marker": "version: Mapped[int] = mapped_column(Integer)",
+      "rationale": "`version` 用于乐观锁观测，注释说明「每次变更 +1」，所以新行必须从 0 起。去掉 default 后列定义依旧存在，只有真的插入一条库存行才会因为 NULL 失败——而失败点在下单链路深处，看起来像是库存服务的问题。",
+      "triggers_test": "TestD5SkuStockVersionDefault::test_new_row_starts_at_zero",
+      "reader_owner": "reader-r0-1"
+    },
+    {
+      "id": "d6-path-traversal-not-sanitized",
+      "file": "app/infrastructure/persistence/json_file_stores.py",
+      "line_start": 31,
+      "line_end": 31,
+      "defect_class": "security",
+      "title": "文件名清洗被取消，买家 ID 里的路径片段会写到目录外",
+      "marker": "return raw or \"anonymous\"",
+      "rationale": "`_safe_name` 的白名单过滤是唯一的路径穿越防线（买家 ID 来自请求参数）。改成直接返回原值后，函数还在、还被调用，签名也没变，但 `../../x` 这样的 ID 会把偏好文件写到数据目录之外。",
+      "triggers_test": "TestD6SafeNameStripsPath::test_path_separators_removed",
+      "reader_owner": "reader-r0-0"
+    },
+    {
+      "id": "d7-preference-dedupe-ignores-kind",
+      "file": "app/infrastructure/persistence/json_file_stores.py",
+      "line_start": 44,
+      "line_end": 44,
+      "defect_class": "logic",
+      "title": "偏好追加只按 statement 去重，把另一面吃掉",
+      "marker": "if any(p.statement == preference.statement for p in existing):",
+      "rationale": "去重口径是 (statement, kind)：同一句话允许同时是 like 与 dislike。去掉 kind 后，「我要静音的」先记为 dislike 再记为 like 会被静默丢弃，买家看到的偏好列表少了一半，而代码只是少了一个 and 条件。",
+      "triggers_test": "TestD7DedupeKeepsBothKinds::test_same_statement_two_kinds_both_stored",
+      "reader_owner": "reader-r0-0"
+    },
+    {
+      "id": "d8-jsonl-append-becomes-overwrite",
+      "file": "app/infrastructure/persistence/json_file_stores.py",
+      "line_start": 123,
+      "line_end": 123,
+      "defect_class": "io",
+      "title": "JSONL 流水改成覆盖写，每次追加都把历史抹掉",
+      "marker": "with self._path(session_id).open(\"w\", encoding=\"utf-8\") as handle:",
+      "rationale": "模块 docstring 写明「一行一条记录，追加写不覆盖」。把 `open(\"a\")` 改成 `open(\"w\")` 后，方法名 `_append_line` 与调用点都没变，单次写入的测试也照常通过，只有连续两轮对话才会发现只剩最后一条。",
+      "triggers_test": "TestD8JsonlAppends::test_two_turns_both_persisted",
+      "reader_owner": "reader-r0-0"
+    },
+    {
+      "id": "d9-list-turns-includes-events",
+      "file": "app/infrastructure/persistence/json_file_stores.py",
+      "line_start": 164,
+      "line_end": 165,
+      "defect_class": "filter",
+      "title": "list_turns 不再跳过事件行，把过程事件当对话解析",
+      "marker": "continue",
+      "rationale": "同一个 JSONL 里混着 turn 与 event 两类记录，list_turns 只应收录 turn。把 `kind != \"turn\"` 放宽成「只要 kind 存在就继续」后，事件行会走到 `record[\"role\"]` 直接 KeyError——表现为「有事件就没法恢复对话」。",
+      "triggers_test": "TestD9ListTurnsSkipsEvents::test_events_are_not_turns",
+      "reader_owner": "reader-r0-0"
+    },
+    {
+      "id": "d10-delete-only-removes-dislike",
+      "file": "app/infrastructure/persistence/json_file_stores.py",
+      "line_start": 68,
+      "line_end": 72,
+      "defect_class": "logic",
+      "title": "按 statement 删除退化成「只删 dislike」，like 那条被留下",
+      "marker": "]",
+      "rationale": "docstring 明确：按 statement 精确匹配、**不分 kind**——买家说「以后别管塑料了」表达的是忘掉这条说法，而不是只忘掉负向那一面。改成只删 dislike 后，函数仍然返回 True、仍然写回文件，只是列表里悄悄剩下了同名的 like。",
+      "triggers_test": "TestD10DeleteRemovesAllKinds::test_delete_by_statement_only",
+      "reader_owner": "reader-r0-0"
+    }
+  ]
+}

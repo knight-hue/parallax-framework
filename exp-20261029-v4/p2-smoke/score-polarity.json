@@ -1,0 +1,25 @@
+{
+  "defects_total": 12,
+  "hits": 9,
+  "recall": 0.75,
+  "claims_total": 23,
+  "claims_scored": 14,
+  "claims_dropped_non_defect_stance": 9,
+  "claims_unmatched": 5,
+  "missed": [
+    "d7-embedding-missing-silently-emptied",
+    "d9-error-reply-cached",
+    "d12-output-guard-misses-api-key"
+  ],
+  "hits_by_defect": {
+    "d1-dislikes-truncated-by-total-budget": "aeafa3eda806",
+    "d2-zero-budget-drops-dislikes": "47bf8104a2b6",
+    "d3-relevance-ranking-keeps-sorted-order": "21d74e7d6ef1",
+    "d4-money-accepts-bool": "97b4bd5539a2",
+    "d5-conversation-role-unchecked": "6292c4505a66",
+    "d6-embedding-key-drops-model": "a0aa386979ff",
+    "d8-history-not-blocked": "d6f4ef70db47",
+    "d10-bucket-key-ignores-scope": "a8bc8f67cadd",
+    "d11-bucket-keeps-oldest": "1b2478e72bef"
+  }
+}
