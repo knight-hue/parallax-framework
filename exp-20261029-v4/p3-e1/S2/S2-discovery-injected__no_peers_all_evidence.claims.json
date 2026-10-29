@@ -1,0 +1,788 @@
+[
+  {
+    "claim_id": "2c37f6fb3d79",
+    "fingerprint": "app/application/usecases/catalog_search.py#logic@220",
+    "statement": "[logic] app/application/usecases/catalog_search.py:225-227 关键词兜底召回用 score >= 0 过滤，未命中的商品(得分 0.0)也会全部进入结果（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:225-227",
+    "rationale": "_keyword_score 在 `matched` 为空时显式返回 0.0（第 235-236 行），而非负分；因此调用方用 `if score >= 0` 判断时条件恒为真，目录中每一条商品都会被加入候选。这使 embedding 异常的降级路径（以及未配置 embedder 时的默认路径）退化为“返回整个目录”，recall_strategy 声称是关键词匹配，但实际没有任何关键词过滤效果；top_k 截断后给出的商品与 query 无关，并且 total_candidates/filtered_out 也会基于全量商品计算，向模型传递错误的“召回到了”信号。",
+    "title": "关键词兜底召回用 score >= 0 过滤，未命中的商品(得分 0.0)也会全部进入结果",
+    "line_start": 225,
+    "line_end": 227,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:225-227",
+        "quote": "            score = self._keyword_score(query_terms, product, spec)\n            if score >= 0:\n                candidates.append((score, product))"
+      }
+    ]
+  },
+  {
+    "claim_id": "e651a9a90587",
+    "fingerprint": "app/application/usecases/catalog_search.py#logic@140",
+    "statement": "[logic] app/application/usecases/catalog_search.py:144-147 注释承诺按 product_id 兜底打破分数并列，实际排序键只含分数，并列顺序仍不确定（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:144-147",
+    "rationale": "紧邻的注释明确说明“分数相同时按 product_id 兜底排序”，理由是向量后端在分数并列时返回顺序不固定、会让同一 query 结果不可复现。但实际排序键是 `lambda item: -item[0]`，只用分数；Python 稳定排序在并列时保留输入顺序，而输入顺序正是 Qdrant 返回顺序（向量路径）或 list_all 顺序（关键词路径），因此不同分片/版本/DB 返回顺序下，同一个 query 的 hits 顺序（以及 top_k 边界处哪些商品被保留）仍会变化，recall/nDCG 评测不可复现。",
+    "title": "注释承诺按 product_id 兜底打破分数并列，实际排序键只含分数，并列顺序仍不确定",
+    "line_start": 144,
+    "line_end": 147,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:144-147",
+        "quote": "        # 分数相同时按 product_id 兜底排序。向量检索在分数并列时的返回顺序由后端内部\n        # 决定（Qdrant 版本/分片不同就可能变），不固定的话同一个 query 在不同次运行\n        # 会给出不同结果——除了\"同问句答案不稳定\"，还会让召回评测指标（recall/nDCG）无法复现。\n        filtered.sort(key=lambda item: -item[0])"
+      }
+    ]
+  },
+  {
+    "claim_id": "2a574cb8a174",
+    "fingerprint": "app/application/usecases/catalog_search.py#error_handling@100",
+    "statement": "[error_handling] app/application/usecases/catalog_search.py:115-120 向量召回异常时 recall_strategy 不会被误标为 embedding_only（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:115-120",
+    "rationale": "怀疑点是“向量召回失败后是否会把 recall_strategy 谎报为 embedding_only”。核对后确认安全：`recall_strategy = \"embedding_only\"` 写在 `scored = await self._vector_recall(spec)` 之后，只有召回成功才执行；异常分支只把 scored 置空，recall_strategy 仍保持初始的 keyword_2gram，随后 `elif not scored:` 走关键词召回且再次显式赋值为 keyword_2gram。同理 rerank 抛异常时 scored 未被重新赋值（赋值语句未完成），保持向量分排序且 recall_strategy 停在 embedding_only、rerank_applied=False，与注释描述一致。",
+    "title": "向量召回异常时 recall_strategy 不会被误标为 embedding_only",
+    "line_start": 115,
+    "line_end": 120,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:115-120",
+        "quote": "            try:\n                scored = await self._vector_recall(spec)\n                recall_strategy = \"embedding_only\"\n            except Exception as err:  # noqa: BLE001 —— 召回基建异常必须降级而非失败\n                logger.warning(\"向量召回不可用，降级关键词召回：%s\", err)\n                scored = []"
+      }
+    ]
+  },
+  {
+    "claim_id": "b27f1bfd4078",
+    "fingerprint": "app/application/usecases/catalog_search.py#error_handling@200",
+    "statement": "[error_handling] app/application/usecases/catalog_search.py:211-216 rerank 返回分数条数不足会 IndexError，但被上层 try/except 兜住并降级（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:211-216",
+    "rationale": "`rerank_scores[i]` 假设 Reranker 返回与 documents 等长的分数列表；若实现返回短列表会抛 IndexError。核对调用方确认这是被显式设计的：execute 中 `scored = await self._rerank(...)` 包在 `except Exception` 内，异常时不重新赋值 scored（保持向量分顺序）、recall_strategy 停在 embedding_only、rerank_applied 保持 False，属于文档描述的降级链，不会让整个检索失败。",
+    "title": "rerank 返回分数条数不足会 IndexError，但被上层 try/except 兜住并降级",
+    "line_start": 211,
+    "line_end": 216,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:211-216",
+        "quote": "        rerank_scores = await self._reranker.rerank(spec.normalized_query, documents)\n        reranked = [\n            (rerank_scores[i], product)\n            for i, (_, product) in enumerate(scored)\n        ]\n        reranked.sort(key=lambda pair: pair[0], reverse=True)"
+      }
+    ]
+  },
+  {
+    "claim_id": "b4f911c4afaf",
+    "fingerprint": "app/infrastructure/resilience.py#concurrency@60",
+    "statement": "[concurrency] app/infrastructure/resilience.py:71-80 半开状态不限制并发探测：冷却期一过，所有排队调用同时被放行，熔断形同失效（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/resilience.py:71-80",
+    "rationale": "allow() 只在 opened_at 非空且 elapsed < reset_seconds 时返回 False；一旦冷却期届满，它无条件把 half_open_probing 置 True 并返回 True，完全没有检查 half_open_probing 是否已经为 True（即已有探测在飞行中）。因此冷却期满后这段时间内所有并发到达的调用都会拿到 True 一起打向故障下游，与方法 docstring 声明的「放一次探测请求」以及文件头注释「冷却期满转半开，放一次探测请求」直接矛盾。更严重的是若那次探测的协程被取消（CancelledError 继承自 BaseException，on_tool_call 的 except Exception 捕不到）或进程内异常路径没有走到 _record_success/_record_failure，half_open_probing 会永久停留在 True、opened_at 也不再更新，之后每次 allow() 都返回 True，熔断器彻底失效，永远不会再打开。这在高并发下表现为：下游刚恢复或仍故障时，一个 reset_seconds 窗口结束后整批请求同时涌入。",
+    "title": "半开状态不限制并发探测：冷却期一过，所有排队调用同时被放行，熔断形同失效",
+    "line_start": 71,
+    "line_end": 80,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "195131b30098",
+        "adapter": "repo",
+        "locator": "app/infrastructure/resilience.py:71-80",
+        "quote": "        state = self._state(tool_name)\n        if state.opened_at is None:\n            return True\n        elapsed = (now or time.monotonic()) - state.opened_at\n        if elapsed < self.reset_seconds:\n            return False\n        state.half_open_probing = True\n        return True"
+      }
+    ]
+  },
+  {
+    "claim_id": "57b42817690d",
+    "fingerprint": "app/infrastructure/resilience.py#error_handling@100",
+    "statement": "[error_handling] app/infrastructure/resilience.py:119-126 降级路径上同步发布事件未做异常隔离，bus.publish 抛错会把异常抛穿到 Agent 循环（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/resilience.py:119-126",
+    "rationale": "_publish_circuit 直接调用 self._bus.publish(...)，没有任何 try/except；而它在 on_tool_call 中被调用在 yield 降级 ToolChunk(ERROR) 之前（短线路径第 139 行、超时路径第 162 行、异常路径）。一旦 publish 自身抛异常（事件总线未初始化、payload 序列化失败、发布时访问了已关闭的下游、或在无事件循环/session 上下文时抛 KeyError 等），异常会在 yield error chunk 之前逸出 async 生成器，直接违背文件头承诺的「返回结构化 error chunk，不把异常抛穿到 Agent 循环」，调用方拿不到任何 ERROR chunk，只能看到异常。同一行里 ShoppingContext.current_session_id() 若在无上下文时抛错，效果相同。",
+    "title": "降级路径上同步发布事件未做异常隔离，bus.publish 抛错会把异常抛穿到 Agent 循环",
+    "line_start": 119,
+    "line_end": 126,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "195131b30098",
+        "adapter": "repo",
+        "locator": "app/infrastructure/resilience.py:119-126",
+        "quote": "    def _publish_circuit(self, tool_name: str, circuit: str, detail: str) -> None:\n        if self._bus is None:\n            return\n        self._bus.publish(\n            ShoppingContext.current_session_id(),\n            \"tool.result\",\n            {\"tool\": tool_name, \"circuit\": circuit, \"error\": detail},\n        )"
+      }
+    ]
+  },
+  {
+    "claim_id": "ffea395ecb2c",
+    "fingerprint": "app/infrastructure/resilience.py#boundary@60",
+    "statement": "[boundary] app/infrastructure/resilience.py:76-76 用 `now or time.monotonic()` 取时间：显式传入 0.0 时间戳会被当成 falsy 丢弃（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/resilience.py:76-76",
+    "rationale": "now: Optional[float] 的语义是「外部注入的时钟值」，但 `now or time.monotonic()` 在 now == 0.0 时会退回到真实单调时钟。若测试或上层用 0.0 作为基准时间（例如把 opened_at 也设为 0.0 的假时钟），elapsed 会变成 time.monotonic() - 0.0（一个巨大的正数），从而跳过冷却期直接进入半开，判定结果完全反转。同一模式在 record_failure 的第 89、94 行重复出现，行为一致。正确写法应是 `now if now is not None else time.monotonic()`。",
+    "title": "用 `now or time.monotonic()` 取时间：显式传入 0.0 时间戳会被当成 falsy 丢弃",
+    "line_start": 76,
+    "line_end": 76,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "195131b30098",
+        "adapter": "repo",
+        "locator": "app/infrastructure/resilience.py:76-76",
+        "quote": "        elapsed = (now or time.monotonic()) - state.opened_at"
+      }
+    ]
+  },
+  {
+    "claim_id": "750a3e5691b4",
+    "fingerprint": "app/domain/catalog/product_search_spec.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/product_search_spec.py:25-28 ProductSearchSpec 未校验 top_k / price_max_major（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product_search_spec.py:25-28",
+    "rationale": "__post_init__ 只校验 normalized_query 非空，注释明确写了「top_k 由调用方保证为正」，这是刻意的契约划分，而不是实现遗漏；price_max_major 作为可选硬约束，None 即无约束，也不存在需要在本对象内拒绝的非法取值。在本文件范围内没有可复现的错误行为，若检索链路真的传入非正 top_k，缺陷点在调用方而非此处。",
+    "title": "ProductSearchSpec 未校验 top_k / price_max_major",
+    "line_start": 25,
+    "line_end": 28,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "13e4eea2c850",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product_search_spec.py:25-28",
+        "quote": "    def __post_init__(self) -> None:\n        if not self.normalized_query or not self.normalized_query.strip():\n            raise ValueError(\"ProductSearchSpec.normalized_query required\")\n        # top_k 由调用方保证为正"
+      }
+    ]
+  },
+  {
+    "claim_id": "0c0a11a03778",
+    "fingerprint": "app/domain/catalog/sku.py#logic@0",
+    "statement": "[logic] app/domain/catalog/sku.py:19-30 Sku 是可变的非 frozen dataclass，理论上可在内存中改写 stock（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/sku.py:19-30",
+    "rationale": "虽然 @dataclass 未加 frozen=True，外部可以 sku.stock = 0，但本类刻意不提供 deduct_stock/restore_stock 之类的变更方法，__post_init__ 也只做构造期校验，因此文件本身没有引入「读-判断-写」超卖路径；属性直接赋值属于调用方违规，不是该实体实现的缺陷。要彻底防止需 frozen=True + 对外只读，但那是设计增强，不是本文件里可复现的 bug。",
+    "title": "Sku 是可变的非 frozen dataclass，理论上可在内存中改写 stock",
+    "line_start": 19,
+    "line_end": 30,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "00e2b01edb94",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/sku.py:19-30",
+        "quote": "@dataclass\nclass Sku:\n    sku_id: str\n    spec: str  # 规格描述，如 \"黑色 / 20寸\"\n    price: Money\n    stock: int  # 初始库存（只读；可变库存在 StockRepository）"
+      }
+    ]
+  },
+  {
+    "claim_id": "f9af6d4e67e1",
+    "fingerprint": "app/application/usecases/catalog_search.py#logic@140",
+    "statement": "[logic] app/application/usecases/catalog_search.py:144-147 分数并列时缺少 product_id 兜底排序，与注释声明的确定性目标不符（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:144-147",
+    "rationale": "注释明确声明「分数相同时按 product_id 兜底排序」，理由是向量检索在分数并列时后端返回顺序不稳定（Qdrant 版本/分片差异），不固定会导致同一 query 多次运行结果不同、评测指标不可复现。但实际排序 key 只有 `-item[0]`，完全没有 product_id 参与。Python 的 `list.sort` 是稳定排序，因此并列项会保持进入该函数时的原始顺序。这个原始顺序来自 `_vector_recall` 中 `vector_hits` 的返回顺序（向量后端内部顺序）或 `_keyword_recall` 中 `list_all()` 的返回顺序以及 score 全为 0 的并列项顺序。换言之，代码并未实现它所声称的确定性，并列截断 top_k 时同一 query 仍可能给出不同的 hits 子集。",
+    "title": "分数并列时缺少 product_id 兜底排序，与注释声明的确定性目标不符",
+    "line_start": 144,
+    "line_end": 147,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:144-147",
+        "quote": "        # 分数相同时按 product_id 兜底排序。向量检索在分数并列时的返回顺序由后端内部\n        # 决定（Qdrant 版本/分片不同就可能变），不固定的话同一个 query 在不同次运行\n        # 会给出不同结果——除了\"同问句答案不稳定\"，还会让召回评测指标（recall/nDCG）无法复现。\n        filtered.sort(key=lambda item: -item[0])"
+      }
+    ]
+  },
+  {
+    "claim_id": "7dd8bea67460",
+    "fingerprint": "app/application/usecases/catalog_search.py#logic@220",
+    "statement": "[logic] app/application/usecases/catalog_search.py:224-228 关键词召回的非零判定恒真，导致降级路径把全库商品都当作候选（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:224-228",
+    "rationale": "`_keyword_score` 的返回值只可能是 0.0 或正数（`len(matched)` 非负，命中品类再 +3.0），所以 `if score >= 0` 恒为真，过滤条件形同不存在。结果是 `list_all()` 中每一个商品都会进入 candidates：完全无关键词交集的商品带着 0.0 分被加入候选，随后 `filtered[: spec.top_k]` 会把这些 0 分不相关商品放进 hits（当命中项不足 top_k 时），模型会据此把「库里没有这个商品」答成「有这些商品」，与本文件 docstring 强调的「不让模型给出误导性结论」直接冲突。此外 `total_candidates` 也会被虚增为全库规模。同一分支还叠加性能问题：每次关键词降级都要 `list_all()` 全量拉取并对每个商品重新 tokenize，无任何缓存。",
+    "title": "关键词召回的非零判定恒真，导致降级路径把全库商品都当作候选",
+    "line_start": 224,
+    "line_end": 228,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:224-228",
+        "quote": "        for product in await self._product_repo.list_all():\n            score = self._keyword_score(query_terms, product, spec)\n            if score >= 0:\n                candidates.append((score, product))"
+      }
+    ]
+  },
+  {
+    "claim_id": "4db9fe01cb81",
+    "fingerprint": "app/application/usecases/catalog_search.py#boundary@180",
+    "statement": "[boundary] app/application/usecases/catalog_search.py:182-186 价格上限使用严格小于，等于预算的商品被误判为超预算（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:182-186",
+    "rationale": "`price_max_major` 从命名与语义上都是「预算上限」，即价格 ≤ 上限应当通过；但这里用的是 `<`，价格恰好等于上限（例如换算后 100.0 对上限 100.0）的商品会被 `_reject_reason` 判为 `over_price_cap` 并从 hits 中剔除，还会出现在 filtered_out 里、以「over_price_cap」原因回传给模型，导致模型向用户报告「这些商品超预算」，与用户表达的预算语义相反。汇率换算后的浮点值也会让边界更容易落在等值附近。",
+    "title": "价格上限使用严格小于，等于预算的商品被误判为超预算",
+    "line_start": 182,
+    "line_end": 186,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:182-186",
+        "quote": "        if spec.price_max_major is None:\n            return True\n        primary_in_target = self._tariff.rates.convert(product.primary_sku().price, spec.target_currency)\n        return primary_in_target.to_major_units() < spec.price_max_major"
+      }
+    ]
+  },
+  {
+    "claim_id": "b1748d10e52c",
+    "fingerprint": "app/application/usecases/catalog_search.py#error_handling@160",
+    "statement": "[error_handling] app/application/usecases/catalog_search.py:171-186 过滤摘要路径上的汇率转换未做异常保护，与商品卡路径的降级策略不一致（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:171-186",
+    "rationale": "`_to_card` 中明确对计价失败做了保护（`except ValueError` → landed_price 标注 unavailable_reason），说明货币/目的国不在规则表内是预期内的可恢复情况；`_vector_recall`/`_rerank` 也都有降级。但 `_to_rejected`（以及 `_within_price_cap`）直接调用 `self._tariff.rates.convert(..., spec.target_currency)`，没有任何 try/except。一旦目标币种不在 ExchangeRateTable 中（或 convert 对未知币种抛 ValueError/KeyError），只要本轮有任意一个候选被 ship_to 或价格约束挡掉，异常就会从 execute 里抛出，整次检索失败——而同一请求里支持币种的商品卡本来是能正常组装的。相比之下 `_to_card` 的保护反而说明这条路径的失败被遗漏了。",
+    "title": "过滤摘要路径上的汇率转换未做异常保护，与商品卡路径的降级策略不一致",
+    "line_start": 171,
+    "line_end": 186,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:171-186",
+        "quote": "    def _to_rejected(self, product: Product, spec: ProductSearchSpec, reason: str) -> dict:\n        primary_in_target = self._tariff.rates.convert(product.primary_sku().price, spec.target_currency)"
+      }
+    ]
+  },
+  {
+    "claim_id": "db907f3e3799",
+    "fingerprint": "app/application/usecases/catalog_search.py#error_handling@200",
+    "statement": "[error_handling] app/application/usecases/catalog_search.py:210-217 rerank 返回分数条数与 documents 不一致时不会造成脏数据或崩溃（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:210-217",
+    "rationale": "`reranked` 用 `rerank_scores[i]` 与 `scored` 按下标对齐。若 reranker 返回的列表偏短，`IndexError` 会在 `_rerank` 内部、`scored = await self._rerank(...)` 赋值完成之前抛出，因此 execute 中 `scored` 仍保持向量召回的原值，被外层 `except Exception` 捕获并如实降级为 embedding_only（rerank_applied=False）；若返回偏长，多余分数被忽略。两条路径都不会产生错位的 score→product 映射，也不会把异常抛给 Agent。",
+    "title": "rerank 返回分数条数与 documents 不一致时不会造成脏数据或崩溃",
+    "line_start": 210,
+    "line_end": 217,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:210-217",
+        "quote": "        rerank_scores = await self._reranker.rerank(spec.normalized_query, documents)\n        reranked = [\n            (rerank_scores[i], product)\n            for i, (_, product) in enumerate(scored)\n        ]"
+      }
+    ]
+  },
+  {
+    "claim_id": "b610640f7fc3",
+    "fingerprint": "app/application/usecases/catalog_search.py#api_misuse@280",
+    "statement": "[api_misuse] app/application/usecases/catalog_search.py:298-301 在 frozen dataclass 上修改嵌套可变对象不会抛错，库存覆盖按预期生效（确认并非缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:298-301",
+    "rationale": "`ProductCard` 虽为 `@dataclass(frozen=True)`，但 frozen 只禁止重新绑定属性，不禁止修改字段引用的可变对象。`card.skus` 里的 dict 是 `_to_card` 新建的、未与其他对象共享，`sku[\"stock\"] = ...` 修改的正是这些 dict，因此 `_overlay_authoritative_stock` 会正确覆盖库存；且覆盖发生在 `to_dict()` 之前，回传 JSON 中展示的是权威库存。不存在失效或读到陈旧值的问题。",
+    "title": "在 frozen dataclass 上修改嵌套可变对象不会抛错，库存覆盖按预期生效",
+    "line_start": 298,
+    "line_end": 301,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:298-301",
+        "quote": "        for card in cards:\n            for sku in card.skus:\n                if sku[\"sku_id\"] in current:\n                    sku[\"stock\"] = current[sku[\"sku_id\"]]"
+      }
+    ]
+  },
+  {
+    "claim_id": "c66257eb25c7",
+    "fingerprint": "app/application/tools/order_tools.py#error_handling@60",
+    "statement": "[error_handling] app/application/tools/order_tools.py:61-87 create_order_tool 的参数转换只捕获 ValueError/KeyError，quantity 为 null 或 items 元素非 dict 时抛出未捕获的 TypeError（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/tools/order_tools.py:61-87",
+    "rationale": "工具层在 try 内用 item[\"product_id\"]、item[\"sku_id\"] 和 int(item.get(\"quantity\", 1)) 搬运模型入参，但 except 只写了 (ValueError, KeyError)。items 在 schema 里只是 list[dict]，dict 内部没有字段约束，因此模型给出 {\"product_id\": \"P1001\", \"sku_id\": \"P1001-S1\", \"quantity\": null} 时 item.get(\"quantity\", 1) 返回 None（默认值不会生效，因为键存在且值为 null），int(None) 抛 TypeError；同理 items 里混入字符串/None（如把 items 误传成 [\"P1001\"]）时 item[\"product_id\"] 抛 TypeError（字符串下标是整数）。TypeError 不在捕获列表里，异常会穿透工具函数：既不会走 bus.publish 的 \"tool.result\" 事件路径，也不会返回 ToolResultState.ERROR 的 ToolChunk，模型拿到的是异常而不是可自纠的 [error] 文本，前端也收不到这次调用的结果事件。其它同类入口（Address 构造、shipping_address.get）在 shipping_address 为 null 时会抛 AttributeError，同样未被覆盖。",
+    "title": "create_order_tool 的参数转换只捕获 ValueError/KeyError，quantity 为 null 或 items 元素非 dict 时抛出未捕获的 TypeError",
+    "line_start": 61,
+    "line_end": 87,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "4b900e6f074c",
+        "adapter": "repo",
+        "locator": "app/application/tools/order_tools.py:61-87",
+        "quote": "                OrderItemInput(\n                    product_id=item[\"product_id\"],\n                    sku_id=item[\"sku_id\"],\n                    quantity=int(item.get(\"quantity\", 1)),\n                )\n                for item in items\n            ]"
+      }
+    ]
+  },
+  {
+    "claim_id": "352987ce4656",
+    "fingerprint": "app/application/tools/product_search_tool.py#error_handling@40",
+    "statement": "[error_handling] app/application/tools/product_search_tool.py:52-67 product_search_tool 中数字参数强转失败时提前返回，跳过 tool.invoke/tool.result 事件发布（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/tools/product_search_tool.py:52-67",
+    "rationale": "同一个函数里两条错误路径的事件行为不一致：第 78 行之后的 ValueError 路径在 tool.invoke 之后执行，会同时发布 tool.invoke 与带 error 的 tool.result；而第 52-67 行的 top_k / price_max_major 强转失败路径发生在 session_id 获取（第 68 行）和 bus.publish(\"tool.invoke\")（第 77 行）之前，直接 return 错误 ToolChunk，事件总线上既没有 invoke 也没有 result。该文件的注释明确说明商品卡与调用过程都通过事件下发给前端渲染（\"商品卡随事件下发，前端无需再调接口即可渲染\"），所以这类调用在事件流里会完全消失：模型收到了 [error] 文本，但前端/审计链路看不到发生过这次工具调用，也无法显示错误原因。",
+    "title": "product_search_tool 中数字参数强转失败时提前返回，跳过 tool.invoke/tool.result 事件发布",
+    "line_start": 52,
+    "line_end": 67,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "419547828c32",
+        "adapter": "repo",
+        "locator": "app/application/tools/product_search_tool.py:52-67",
+        "quote": "            except ValueError:\n                return ToolChunk(\n                    content=[TextBlock(type=\"text\", text=f\"[error] top_k 非法：{top_k}\")],\n                    state=ToolResultState.ERROR,\n                )"
+      }
+    ]
+  },
+  {
+    "claim_id": "55c5df3fbf35",
+    "fingerprint": "app/application/tools/product_search_tool.py#boundary@60",
+    "statement": "[boundary] app/application/tools/product_search_tool.py:60-67 price_max_major 字符串强转接受 nan/inf，预算硬约束会被静默失效或误判为空结果（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/tools/product_search_tool.py:60-67",
+    "rationale": "这段代码的意图是把模型给的数字字符串规整成 float 再进检索链路做结构化过滤，但 float() 会接受 \"nan\"、\"inf\"、\"Infinity\"、\"1e999\"（后者溢出为 inf）而不抛 ValueError。于是价格上限变成 nan 时，下游 `price <= nan` 恒为 False，检索会返回 0 条命中，模型据此告诉买家「预算内无商品」；变成 inf 时 `price <= inf` 恒为 True，预算硬约束被完全绕过，可能给买家推荐超预算商品。工具层在这里就是把关点（注释称 schema 层已放宽为接受字符串），因此缺少 math.isfinite 校验会把非法数值放行到检索链路。",
+    "title": "price_max_major 字符串强转接受 nan/inf，预算硬约束会被静默失效或误判为空结果",
+    "line_start": 60,
+    "line_end": 67,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "419547828c32",
+        "adapter": "repo",
+        "locator": "app/application/tools/product_search_tool.py:60-67",
+        "quote": "        if isinstance(price_max_major, str):\n            try:\n                price_max_major = float(price_max_major)\n            except ValueError:"
+      }
+    ]
+  },
+  {
+    "claim_id": "501058eb807e",
+    "fingerprint": "app/application/tools/order_tools.py#logic@40",
+    "statement": "[logic] app/application/tools/order_tools.py:58-59 idempotency_key 只由 task_id+buyer_id 组成，task_id 缺失时退化为空串（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/tools/order_tools.py:58-59",
+    "rationale": "审查过这条幂等键的构造：`f\"order:{task_id}:{buyer_id}\" if task_id else \"\"`。潜在风险有两点：(1) task_id 为空时传入空串做幂等键，若 PlaceOrderUseCase 把任何传入值都当作有效 key 存储，那么所有无 task 的下单会命中同一条记录，第二单会静默返回第一单的快照；(2) 键里不含 items/address，同一 task 内改单会命中旧单。但由于代码注释已明确说明设计意图是「按任务+买家幂等，同一会话另说一次会拿到新 task_id」，且常见实现是 `if idempotency_key:` 才查重（空串等同于不幂等），在本文件可见范围内无法证明存在错误行为，故不判为缺陷，仅记录此依赖前提。",
+    "title": "idempotency_key 只由 task_id+buyer_id 组成，task_id 缺失时退化为空串",
+    "line_start": 58,
+    "line_end": 59,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "4b900e6f074c",
+        "adapter": "repo",
+        "locator": "app/application/tools/order_tools.py:58-59",
+        "quote": "        task_id = ShoppingContext.current_task_id()\n        idempotency_key = f\"order:{task_id}:{buyer_id}\" if task_id else \"\""
+      }
+    ]
+  },
+  {
+    "claim_id": "8b288b873ad5",
+    "fingerprint": "app/application/tools/order_tools.py#api_misuse@20",
+    "statement": "[api_misuse] app/application/tools/order_tools.py:24-28 _ok / tool.result 直接把 usecase 返回的 snapshot 交给 json.dumps 与事件总线（确认并非缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/tools/order_tools.py:24-28",
+    "rationale": "`json.dumps(payload, ensure_ascii=False)` 在 snapshot 是 dataclass/ORM 对象或含 Decimal/datetime 字段时会抛 TypeError。但这属于推测：函数签名 `_ok(payload: dict)`、product_search_tool 里同样对 result 直接 json.dumps，说明 UseCase 的契约是返回纯 dict（通常已是 model_dump 结果）。在给定文件内没有证据表明返回非可序列化对象，故不判为缺陷，仅记录该隐式契约：一旦 PlaceOrderUseCase/QueryOrderUseCase 改为返回领域对象，这里会在 try 之外抛未捕获的 TypeError 且丢失 tool.result 事件。",
+    "title": "_ok / tool.result 直接把 usecase 返回的 snapshot 交给 json.dumps 与事件总线",
+    "line_start": 24,
+    "line_end": 28,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "4b900e6f074c",
+        "adapter": "repo",
+        "locator": "app/application/tools/order_tools.py:24-28",
+        "quote": "def _ok(payload: dict) -> ToolChunk:\n    return ToolChunk(\n        content=[TextBlock(type=\"text\", text=json.dumps(payload, ensure_ascii=False))],\n        state=ToolResultState.SUCCESS,\n    )"
+      }
+    ]
+  },
+  {
+    "claim_id": "0aa8c18a6299",
+    "fingerprint": "app/application/usecases/catalog_search.py#logic@140",
+    "statement": "[logic] app/application/usecases/catalog_search.py:144-147 排序注释承诺按 product_id 兜底破平，但实际 sort key 只用分数（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:144-147",
+    "rationale": "注释明确说明并列分数时要“按 product_id 兜底排序”，目的是消除后端返回顺序带来的不确定性，让同一 query 的结果与评测指标可复现。但实际代码 `filtered.sort(key=lambda item: -item[0])` 只按分数排序，Python 的稳定排序会把并列分数的相对顺序保持为召回时的顺序：向量召回路径下该顺序由 Qdrant 分片/版本决定，因此并列分数时同问句仍可能给出不同 hits 顺序，注释声称解决的问题原样存在。",
+    "title": "排序注释承诺按 product_id 兜底破平，但实际 sort key 只用分数",
+    "line_start": 144,
+    "line_end": 147,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:144-147",
+        "quote": "        # 分数相同时按 product_id 兜底排序。向量检索在分数并列时的返回顺序由后端内部\n        # 决定（Qdrant 版本/分片不同就可能变），不固定的话同一个 query 在不同次运行\n        # 会给出不同结果——除了“同问句答案不稳定”，还会让召回评测指标（recall/nDCG）无法复现。\n        filtered.sort(key=lambda item: -item[0])"
+      }
+    ]
+  },
+  {
+    "claim_id": "7cfa3695bd0d",
+    "fingerprint": "app/application/usecases/catalog_search.py#logic@220",
+    "statement": "[logic] app/application/usecases/catalog_search.py:224-228 关键词兜底召回用 score >= 0 过滤，等于不过滤，零命中商品也会被当结果返回（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:224-228",
+    "rationale": "_keyword_score 在没有交集时返回 0.0（该函数第 234-236 行 `if not matched: return 0.0`），有交集时返回 >=1.0 的分数，绝不会返回负数。因此 `if score >= 0:` 恒为真，所有商品都会进入候选列表。当 query 与整个目录没有任何词元交集（embedding 服务异常且关键词也不命中）时，`_keyword_recall` 仍返回全量商品，execute 再截取 top_k 作为命中返回、score 全为 0.0。这与模块 docstring 强调的“让模型能区分库里没有这个商品与有但不满足约束”相冲突：模型会被告知“找到了这些商品”，实际是完全无关的商品。正确写法应为 `score > 0`（或显式区分“无命中”）。",
+    "title": "关键词兜底召回用 score >= 0 过滤，等于不过滤，零命中商品也会被当结果返回",
+    "line_start": 224,
+    "line_end": 228,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:224-228",
+        "quote": "        for product in await self._product_repo.list_all():\n            score = self._keyword_score(query_terms, product, spec)\n            if score >= 0:\n                candidates.append((score, product))\n        candidates.sort(key=lambda pair: pair[0], reverse=True)"
+      }
+    ]
+  },
+  {
+    "claim_id": "d8bc61d770a3",
+    "fingerprint": "app/application/usecases/catalog_search.py#boundary@180",
+    "statement": "[boundary] app/application/usecases/catalog_search.py:182-186 价格上限用严格小于比较，恰好等于预算的商品被误判为 over_price_cap（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:182-186",
+    "rationale": "`price_max_major` 语义上是预算上限（“xxx 以内”），通常包含端点值；而 `_within_price_cap` 返回的是 `primary_in_target.to_major_units() < spec.price_max_major`，恰好等于上限的商品会被判为不通过，并在 `_reject_reason` 中打上 `over_price_cap` 标签回传给模型。这不仅少召回一个完全符合预算的商品，回传的 reason 也是错误事实（并未超预算），可能诱导模型向用户解释“超出预算”。",
+    "title": "价格上限用严格小于比较，恰好等于预算的商品被误判为 over_price_cap",
+    "line_start": 182,
+    "line_end": 186,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:182-186",
+        "quote": "    def _within_price_cap(self, product: Product, spec: ProductSearchSpec) -> bool:\n        if spec.price_max_major is None:\n            return True\n        primary_in_target = self._tariff.rates.convert(product.primary_sku().price, spec.target_currency)\n        return primary_in_target.to_major_units() < spec.price_max_major"
+      }
+    ]
+  },
+  {
+    "claim_id": "08b30e64efd5",
+    "fingerprint": "app/application/usecases/catalog_search.py#error_handling@100",
+    "statement": "[error_handling] app/application/usecases/catalog_search.py:114-120 向量召回与库存查询的宽泛 except 属于有意的降级路径，不构成缺陷（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:114-120",
+    "rationale": "这里用 `except Exception` 包住向量召回，并在异常时把 scored 清空、把 recall_strategy 保持为 keyword_2gram，让后续 `elif not scored` 分支接管关键词兜底，同时打 warning 日志。这是模块 docstring 明确声明的降级链（embedding_rerank → embedding_only → keyword_2gram），不会静默失败，也不会破坏状态。_overlay_authoritative_stock 中的宽泛 except 同样只是退化为展示初始库存并记日志，不改变扣减链路。",
+    "title": "向量召回与库存查询的宽泛 except 属于有意的降级路径，不构成缺陷",
+    "line_start": 114,
+    "line_end": 120,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:114-120",
+        "quote": "        if self._embedder is not None and self._vector_index is not None:\n            try:\n                scored = await self._vector_recall(spec)\n                recall_strategy = \"embedding_only\"\n            except Exception as err:  # noqa: BLE001 —— 召回基建异常必须降级而非失败\n                logger.warning(\"向量召回不可用，降级关键词召回：%s\", err)\n                scored = []"
+      }
+    ]
+  }
+]

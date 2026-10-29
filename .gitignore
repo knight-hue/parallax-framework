@@ -75,3 +75,6 @@ eval/acceptance/20261020/repair/verification.json
 # backend/tools/build_slices.py 从上游按 import 闭包重建，slices.json 记着参数与哈希。
 exp-20261029-v4/p0-slices/*/repo/
 exp-20261029-v4/p0-slices/*/tests_verify/
+
+# 实验运行的终端日志：体积大、含大量重试刷屏，结论已提炼进 PROGRESS/LEDGER。
+exp-20261029-v4/*.log

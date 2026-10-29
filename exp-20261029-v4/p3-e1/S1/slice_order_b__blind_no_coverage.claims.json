@@ -1,0 +1,514 @@
+[
+  {
+    "claim_id": "5b97925bc4ea",
+    "fingerprint": "app/domain/catalog/exchange_rate.py#logic@20",
+    "statement": "[logic] app/domain/catalog/exchange_rate.py:31-35 ExchangeRateTable.rate 汇率方向写反，导致所有跨币种换算结果错误（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/exchange_rate.py:31-35",
+    "rationale": "表 rates_to_cny 的语义在注释中被明确定义为“1 单位外币 = N CNY”（如 rates_to_cny['USD']=7.10 表示 1 USD = 7.10 CNY）。因此 from→to 的换算率应为 rates_to_cny[from] / rates_to_cny[to]；而代码写成 rates_to_cny[to] / rates_to_cny[from]，把分子分母颠倒了。实测 rate('USD','CNY') 返回 1.0/7.10≈0.1408，而正确值应为 7.10；反之 rate('CNY','USD') 返回 7.10 而正确值约 0.1408。所有非同一币种的 convert 都会沿用它，导致金额相差约 50 倍（USD/CNY）甚至更多（JPY 相差 400 倍以上），且因 Money.of 只校验非负与币种合法，错误金额会静默通过，不会被任何后续校验拦下。",
+    "title": "ExchangeRateTable.rate 汇率方向写反，导致所有跨币种换算结果错误",
+    "line_start": 31,
+    "line_end": 35,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "ba5691d9e6a9",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/exchange_rate.py:31-35",
+        "quote": "    def rate(self, from_currency: str, to_currency: str) -> float:\n        for currency in (from_currency, to_currency):\n            if currency not in self.rates_to_cny:\n                raise ValueError(f\"汇率表不支持币种：{currency}\")\n        return self.rates_to_cny[to_currency] / self.rates_to_cny[from_currency]"
+      }
+    ]
+  },
+  {
+    "claim_id": "7b8dfaecfb14",
+    "fingerprint": "app/domain/catalog/money.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/money.py:27-30 Money.from_major_units 用 int() 截断浮点乘积，产生 1 分误差（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/money.py:27-30",
+    "rationale": "int(major * 100) 对浮点结果向零截断，而二进制浮点无法精确表示多数两位小数，major*100 可能略小于真实整数（例如 1.15*100 = 114.99999999999999，2.675*100 = 267.49999999999994），截断后少 1 分。由于 Money 是价格核心不变量，这类少 1 分的偏差会静默写入订单金额，且不会被 Money.of 的非负/币种校验发现。正确做法应先做十进制或 round/Decimal 再取整。",
+    "title": "Money.from_major_units 用 int() 截断浮点乘积，产生 1 分误差",
+    "line_start": 27,
+    "line_end": 30,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "c90b00fedcdd",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/money.py:27-30",
+        "quote": "    @staticmethod\n    def from_major_units(major: float, currency: str) -> \"Money\":\n        # 简化处理：所有支持币种均按 100 倍换算（JPY 实际为 1，demo 暂统一）\n        return Money.of(int(major * 100), currency)"
+      }
+    ]
+  },
+  {
+    "claim_id": "f6e9c73b441b",
+    "fingerprint": "app/domain/catalog/exchange_rate.py#api_misuse@20",
+    "statement": "[api_misuse] app/domain/catalog/exchange_rate.py:27-29 frozen dataclass 持有 dict 字段：hash 时抛 TypeError，且不变式可被外部改写（确认存在缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/exchange_rate.py:27-29",
+    "rationale": "dataclass(frozen=True) 且 eq=True 时会自动生成 __hash__ = hash((self.rates_to_cny,))，而 dict 不可哈希，因此 hash(ExchangeRateTable()) 会抛 TypeError: unhashable type: 'dict'；这意味着该“值对象”无法放进 set、无法作为 dict 键、无法参与 functools.lru_cache 的参数哈希。同时 frozen 只阻止字段重新赋值，不阻止对 dict 内容的原地修改（table.rates_to_cny['USD']=1.0 可以成功），值对象的不可变承诺被破坏，若在多处共享同一实例会得到不稳定结果。",
+    "title": "frozen dataclass 持有 dict 字段：hash 时抛 TypeError，且不变式可被外部改写",
+    "line_start": 27,
+    "line_end": 29,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "ba5691d9e6a9",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/exchange_rate.py:27-29",
+        "quote": "@dataclass(frozen=True)\nclass ExchangeRateTable:\n    rates_to_cny: dict[str, float] = field(default_factory=lambda: dict(_RATES_TO_CNY))"
+      }
+    ]
+  },
+  {
+    "claim_id": "e43fdf0c37f2",
+    "fingerprint": "app/domain/catalog/money.py#logic@20",
+    "statement": "[logic] app/domain/catalog/money.py:27-42 JPY 按 100 倍“分”记账与硬编码汇率 0.048 是自洽的，不构成换算错误（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/money.py:27-42",
+    "rationale": "from_major_units/to_major_units 对所有币种统一按 100 倍换算（JPY 未按真实 1 倍处理），初看会怀疑跨币种换算会出错。但在 ExchangeRateTable.convert 中两侧都以 100 倍最小单位参与计算，比例因子相互抵消：1000 JPY → 100000 minor，乘 0.048 = 4800 minor = 48.00 CNY，与真实值 1000×0.048=48 CNY 一致；from_major_units(1000,'JPY').to_major_units() 也回到 1000.00。因此 JPY 的“假分”处理只影响对外 ISO 语义（代码注释已声明为 demo 简化），不会导致内部换算算术错误。",
+    "title": "JPY 按 100 倍“分”记账与硬编码汇率 0.048 是自洽的，不构成换算错误",
+    "line_start": 27,
+    "line_end": 42,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "c90b00fedcdd",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/money.py:27-42",
+        "quote": "    def to_major_units(self) -> float:\n        return self.amount_in_minor_units / 100"
+      }
+    ]
+  },
+  {
+    "claim_id": "66a04196a801",
+    "fingerprint": "app/infrastructure/persistence/sql/migrations/versions/0001_baseline.py#logic@20",
+    "statement": "[logic] app/infrastructure/persistence/sql/migrations/versions/0001_baseline.py:25-30 基线迁移用 Base.metadata.create_all 建表，迁移内容会随 models 漂移，全新库升级到 head 时后续迁移会重复建表失败（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/migrations/versions/0001_baseline.py:25-30",
+    "rationale": "upgrade() 没有冻结 0001 时刻的表结构，而是导入当前代码里的 Base 并执行 create_all，因此 0001 实际执行的内容取决于“执行迁移时的 models”。一旦 models 增加了新表或新列（文件注释本身也说明后续要用 alembic revision --autogenerate 生成显式迁移），在空库上执行 `alembic upgrade head` 时，0001 会先把当前全部表建出来，随后 0002 里 autogenerate 生成的 op.create_table / op.add_column 就会因为表/列已存在而报错，迁移链在全新环境直接断掉；同理，0001 也不再能重现历史 schema，`alembic upgrade 0001_baseline` 得到的是最新结构。downgrade() 的 drop_all 也依赖当前 metadata，而非 0001 实际建过的对象集合。",
+    "title": "基线迁移用 Base.metadata.create_all 建表，迁移内容会随 models 漂移，全新库升级到 head 时后续迁移会重复建表失败",
+    "line_start": 25,
+    "line_end": 30,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "48cc2d0a9307",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/migrations/versions/0001_baseline.py:25-30",
+        "quote": "def upgrade() -> None:\n    Base.metadata.create_all(bind=op.get_bind())\n\n\ndef downgrade() -> None:\n    Base.metadata.drop_all(bind=op.get_bind())"
+      }
+    ]
+  },
+  {
+    "claim_id": "3f8514a7fcf3",
+    "fingerprint": "app/infrastructure/settings.py#logic@140",
+    "statement": "[logic] app/infrastructure/settings.py:154-154 布尔型环境变量只识别 0/false/False，写成 FALSE/off/no 会被静默当作 true（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/settings.py:154-154",
+    "rationale": "所有布尔开关都用 `os.getenv(name, default) not in (\"0\", \"false\", \"False\")` 解析，白名单只覆盖三种拼写。运维或 .env 里写 SEMANTIC_CACHE_ENABLED=FALSE / HARNESS_ENABLED=off / OUTPUT_GUARD_ENABLED=no（这些都是常见的布尔环境变量写法）时，取值不会命中白名单，结果为 True，也就是“显式关闭”被静默忽略：语义缓存仍然开启（可能返回相似度误判的答案），护栏仍然生效，配置与预期行为相反且没有任何告警。该模式在文件中被复制了 8 次（semantic_cache_enabled、queue_enabled、harness_enabled、output_guard_enabled、drift_detect_enabled、breaker_shared、preference_relevance_enabled、preference_subagent_inject、queue_priority_enabled），问题具有系统性。",
+    "title": "布尔型环境变量只识别 0/false/False，写成 FALSE/off/no 会被静默当作 true",
+    "line_start": 154,
+    "line_end": 154,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "2cc7c376f2fe",
+        "adapter": "repo",
+        "locator": "app/infrastructure/settings.py:154-154",
+        "quote": "        semantic_cache_enabled=os.getenv(\"SEMANTIC_CACHE_ENABLED\", \"1\") not in (\"0\", \"false\", \"False\"),"
+      }
+    ]
+  },
+  {
+    "claim_id": "d670e35e4b10",
+    "fingerprint": "app/infrastructure/persistence/in_memory_repositories.py#concurrency@60",
+    "statement": "[concurrency] app/infrastructure/persistence/in_memory_repositories.py:63-72 InMemoryOrderIdempotencyStore 的 find/record 单次调用是原子的，未发现本文件内的竞态缺陷（确认并非缺陷）",
+    "claim_type": "concurrency",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_repositories.py:63-72",
+    "rationale": "find 与 record 各自都在 asyncio.Lock 内完成，record 用 `if key in self._keys` 实现原子的“写入或拒绝”，返回值语义正确。虽然 find 与 record 分两次调用时存在 TOCTOU 窗口，但那是调用方（UseCase）的使用方式问题，本文件提供的 record 已足以做原子的 check-and-set；docstring 也明确声明了跨进程不生效、需换 SqlOrderIdempotencyStore 的有意取舍。因此在本文件的实现范围内不构成缺陷。",
+    "title": "InMemoryOrderIdempotencyStore 的 find/record 单次调用是原子的，未发现本文件内的竞态缺陷",
+    "line_start": 63,
+    "line_end": 72,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "52e48d38e8e3",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_repositories.py:63-72",
+        "quote": "    async def find(self, key: str) -> Optional[str]:\n        async with self._lock:\n            return self._keys.get(key)\n\n    async def record(self, key: str, order_id: str) -> bool:\n        async with self._lock:\n            if key in self._keys:\n                return False"
+      }
+    ]
+  },
+  {
+    "claim_id": "0a88102992c5",
+    "fingerprint": "app/infrastructure/persistence/in_memory_repositories.py#boundary@20",
+    "statement": "[boundary] app/infrastructure/persistence/in_memory_repositories.py:30-31 find_by_ids 对未知 id 静默跳过不构成缺陷（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_repositories.py:30-31",
+    "rationale": "find_by_ids 用 `if pid in self._products` 过滤掉不存在的商品，返回“命中集合”，与 find_by_id 返回 Optional 的契约一致，调用方本来就要处理缺失商品（如下架）。列表推导按请求顺序返回且不会因单个缺失 id 抛 KeyError，也没有掩盖其他错误类型；这是刻意设计而非越界错误。",
+    "title": "find_by_ids 对未知 id 静默跳过不构成缺陷",
+    "line_start": 30,
+    "line_end": 31,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "52e48d38e8e3",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_repositories.py:30-31",
+        "quote": "    async def find_by_ids(self, product_ids: list[str]) -> list[Product]:\n        return [self._products[pid] for pid in product_ids if pid in self._products]"
+      }
+    ]
+  },
+  {
+    "claim_id": "d57e401bd557",
+    "fingerprint": "app/infrastructure/settings.py#api_misuse@40",
+    "statement": "[api_misuse] app/infrastructure/settings.py:56-56 frozen dataclass 中放置 list[str] 字段不影响取值，仅在 hash(Settings) 时才会报错（确认并非缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/settings.py:56-56",
+    "rationale": "cors_origins 没有默认值，且 load_settings 每次都新建列表，因此不存在可变默认值被共享的经典陷阱；frozen=True 也禁止外部改写该字段内容（只能整体替换，同样被禁止）。唯一潜在问题是 frozen+eq 会自动生成 __hash__，而 list 不可哈希，一旦把 Settings 放进 set/dict key 或用于 lru_cache 就会 TypeError，但在本文件与给定文件中没有任何 hash(Settings) 的用法，属于尚未触发的隐患而非已确认缺陷。",
+    "title": "frozen dataclass 中放置 list[str] 字段不影响取值，仅在 hash(Settings) 时才会报错",
+    "line_start": 56,
+    "line_end": 56,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "2cc7c376f2fe",
+        "adapter": "repo",
+        "locator": "app/infrastructure/settings.py:56-56",
+        "quote": "    cors_origins: list[str]"
+      }
+    ]
+  },
+  {
+    "claim_id": "9ea52378204b",
+    "fingerprint": "app/domain/order/order_line.py#logic@20",
+    "statement": "[logic] app/domain/order/order_line.py:25-26 OrderLine.subtotal 少乘一件，导致订单行金额始终少计一个单位（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "critical",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/order/order_line.py:25-26",
+    "rationale": "subtotal 应等于 unit_price × quantity，但实现使用 quantity - 1 作为乘数。任何 quantity >= 1 的订单行都会少计一件；quantity=1 时 subtotal 直接为 0，造成单件订单金额归零，属于核心计价逻辑错误。",
+    "title": "OrderLine.subtotal 少乘一件，导致订单行金额始终少计一个单位",
+    "line_start": 25,
+    "line_end": 26,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "1bd894600f10",
+        "adapter": "repo",
+        "locator": "app/domain/order/order_line.py:25-26",
+        "quote": "    def subtotal(self) -> Money:\n        return self.unit_price.multiply(self.quantity - 1)"
+      }
+    ]
+  },
+  {
+    "claim_id": "b8cde6c69199",
+    "fingerprint": "app/domain/order/order.py#boundary@40",
+    "statement": "[boundary] app/domain/order/order.py:50-54 Order.__post_init__ 只拦截 lines=None，空列表绕过“至少一条订单行”不变量，随后 total_amount/snapshot 抛 IndexError（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/order/order.py:50-54",
+    "rationale": "类文档声明的第一条不变量是“至少一条订单行”，但 __post_init__ 只判断 `self.lines is None`。传入空列表 `[]` 时：空集合推导得到空 currencies，`len(currencies) > 1` 为 False，构造完全通过；随后 Order.place() 会把它 confirm 成 CONFIRMED 并落入仓储，此时聚合处于违反不变量（0 条订单行）的状态。之后任何读取路径——total_amount() 的 `self.lines[0]`、以及 snapshot() 中的 `self.total_amount()`——都会抛 IndexError（未被包装成 ValueError），工具层回传快照时变成 500/未处理异常，且是发生在订单已持久化之后，属于事后崩溃而非入口拒绝。触发条件是调用方（例如 Agent 工具在用户未选中任何商品、或过滤后列表为空时）以 lines=[] 创建订单。",
+    "title": "Order.__post_init__ 只拦截 lines=None，空列表绕过“至少一条订单行”不变量，随后 total_amount/snapshot 抛 IndexError",
+    "line_start": 50,
+    "line_end": 54,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "bc5e5d287d57",
+        "adapter": "repo",
+        "locator": "app/domain/order/order.py:50-54",
+        "quote": "        if self.lines is None:\n            raise ValueError(f\"Order 至少要有一条订单行：{self.order_id}\")\n        currencies = {line.unit_price.currency for line in self.lines}\n        if len(currencies) > 1:\n            raise ValueError(f\"Order 订单行币种不一致：{currencies}\")"
+      }
+    ]
+  },
+  {
+    "claim_id": "4003f1421c43",
+    "fingerprint": "app/domain/order/ports/order_idempotency_store.py#concurrency@0",
+    "statement": "[concurrency] app/domain/order/ports/order_idempotency_store.py:19-27 OrderIdempotencyStore 的 find/record 分离并不构成竞态缺陷（确认并非缺陷）",
+    "claim_type": "concurrency",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/order/ports/order_idempotency_store.py:19-27",
+    "rationale": "初看 find + record 两步存在 TOCTOU：并发的重复消费可能都 find 到 None 然后各建一单。但端口把 record 定义为“登记键→订单号，键已存在返回 False”，实现方可以用主键/唯一约束把 record 做成原子抢占；调用方只要先生成 order_id（例如 uuid4），先 record 抢占、抢占成功再构造并持久化 Order，抢占失败方直接 find 拿回既有订单，就不会产生第二单。顺序由调用方控制，端口契约本身足以表达去重，不能仅凭缺少 claim 方法判定为缺陷。",
+    "title": "OrderIdempotencyStore 的 find/record 分离并不构成竞态缺陷",
+    "line_start": 19,
+    "line_end": 27,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "a760b2d04e87",
+        "adapter": "repo",
+        "locator": "app/domain/order/ports/order_idempotency_store.py:19-27",
+        "quote": "    @abstractmethod\n    async def find(self, key: str) -> Optional[str]:\n        \"\"\"返回该键已创建的订单号；未登记返回 None。\"\"\"\n\n    @abstractmethod\n    async def record(self, key: str, order_id: str) -> bool:\n        \"\"\"登记键→订单号。键已存在返回 False（表示本次是重复执行）。\"\"\""
+      }
+    ]
+  },
+  {
+    "claim_id": "0937804d61d7",
+    "fingerprint": "app/domain/order/order.py#performance@80",
+    "statement": "[performance] app/domain/order/order.py:90-91 snapshot() 重复计算 total_amount() 属于可忽略的重复计算（确认并非缺陷）",
+    "claim_type": "performance",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/order/order.py:90-91",
+    "rationale": "snapshot() 对 total_amount() 调用了两次（一次取 major units，一次取 currency），每次都会遍历全部订单行并做 Money.add。订单行数量在业务上是个位数，重复一次遍历的开销可忽略，且不会产生错误结果（同一次 snapshot 内 lines 未被修改）。因此这是可以合并取值的写法偏好，不构成需要修复的性能缺陷。",
+    "title": "snapshot() 重复计算 total_amount() 属于可忽略的重复计算",
+    "line_start": 90,
+    "line_end": 91,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "bc5e5d287d57",
+        "adapter": "repo",
+        "locator": "app/domain/order/order.py:90-91",
+        "quote": "            \"total_amount_major\": self.total_amount().to_major_units(),\n            \"currency\": self.total_amount().currency,"
+      }
+    ]
+  },
+  {
+    "claim_id": "8c664a7fe4e1",
+    "fingerprint": "app/domain/session/ports/conversation_store.py#api_misuse@20",
+    "statement": "[api_misuse] app/domain/session/ports/conversation_store.py:31-41 ConversationTurn 文档提到的 turn_index 字段并不存在，但不产生运行时错误（确认并非缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/session/ports/conversation_store.py:31-41",
+    "rationale": "ConversationTurn 的文档字符串说“turn_index 由存储层按会话自增，写入时可留空”，list_turns 也声明“按 turn_index 升序返回”，但值对象上没有 turn_index 字段。这只是文档措辞与字段集合不一致：存储层自行排序即可，调用方也不会访问不存在的属性（是 dataclass，访问不存在的字段会 AttributeError，但本文件内无任何读取 turn_index 的代码）。不构成可复现的行为缺陷，属于契约描述需要与实现对齐的问题。",
+    "title": "ConversationTurn 文档提到的 turn_index 字段并不存在，但不产生运行时错误",
+    "line_start": 31,
+    "line_end": 41,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "9edbfee83839",
+        "adapter": "repo",
+        "locator": "app/domain/session/ports/conversation_store.py:31-41",
+        "quote": "    \"\"\"一轮完整问答。turn_index 由存储层按会话自增，写入时可留空。\"\"\"\n\n    session_id: str\n    buyer_id: str\n    role: str  # buyer / agent\n    content: str"
+      }
+    ]
+  },
+  {
+    "claim_id": "5c4172b73e41",
+    "fingerprint": "app/domain/order/address.py#logic@20",
+    "statement": "[logic] app/domain/order/address.py:26-27 one_line() 的格式化在字段为空时产生连续空格/空括号，仅为展示瑕疵（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/order/address.py:26-27",
+    "rationale": "one_line 用 f-string 无条件拼接 country/state/city/address_line 与收件人/电话。若 state 或 phone 为空（这是被允许的），输出会出现连续空格或空的括号样式；但这只影响文本观感，不涉及返回类型、长度上限或解析契约——没有任何代码会反向解析该字符串（仓库内无解析方），因此不判定为真实缺陷。若后续需要展示优化，应在此处做 ' '.join(x for x in ... if x) 的空值过滤。",
+    "title": "one_line() 的格式化在字段为空时产生连续空格/空括号，仅为展示瑕疵",
+    "line_start": 26,
+    "line_end": 27,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "c2972f6fadce",
+        "adapter": "repo",
+        "locator": "app/domain/order/address.py:26-27",
+        "quote": "    def one_line(self) -> str:\n        return f\"{self.country} {self.state} {self.city} {self.address_line}（{self.recipient_name} {self.phone}）\""
+      }
+    ]
+  },
+  {
+    "claim_id": "13f17ab6b5f8",
+    "fingerprint": "app/domain/order/address.py#api_misuse@0",
+    "statement": "[api_misuse] app/domain/order/address.py:11-24 frozen dataclass 的 __post_init__ 中未做字段赋值，不会触发 FrozenInstanceError，非缺陷（确认并非缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/order/address.py:11-24",
+    "rationale": "在 @dataclass(frozen=True) 类型中，__post_init__ 里只要不写 self.x = ... 就完全合法；本实现只读取字段并可能抛 ValueError，因此不会触发 FrozenInstanceError 警告或异常。同时实现了 __eq__/__hash__（eq、frozen 为默认），Address 作为值对象在 set/dict 中可安全使用。校验失败时抛 ValueError（而非 TypeError）也符合“必填值非法”的语义。",
+    "title": "frozen dataclass 的 __post_init__ 中未做字段赋值，不会触发 FrozenInstanceError，非缺陷",
+    "line_start": 11,
+    "line_end": 24,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "c2972f6fadce",
+        "adapter": "repo",
+        "locator": "app/domain/order/address.py:11-24",
+        "quote": "@dataclass(frozen=True)\nclass Address:"
+      }
+    ]
+  }
+]
