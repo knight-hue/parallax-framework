@@ -50,9 +50,22 @@ labs/*/bin/
 .DS_Store
 Thumbs.db
 
-# 实验产物（语料、结果、分析、真实仓库报告）只留在本地，不随仓库分发。
-# 原因有两条：
-#   1) 逐条 claim 明细含被审代码的原文引用（quote）与推理过程；
-#   2) 部分实验跑在第三方开源项目上，报告里带着它们的代码片段。
-# 复现方式写在 README 里，产物本身不入库。
-eval/
+# 评测产物只留在本地，不随仓库分发。
+# 原因：逐条 claim 明细含被审代码的原文引用（quote）与推理过程，
+# 部分实验还跑在第三方开源项目上，报告里带着它们的代码片段。
+#
+# 但下面三类是**工程验收证据**，不涉及召回测算，必须入库：
+#   java-platform  真实 broker / MySQL / 多实例 / PR 接入 / Worker 执行器 / 容器隔离
+#   labs           语言与中间件实验记录
+#   acceptance     修复流程与 Java 缺陷样本的验收结论
+eval/*
+!eval/java-platform/
+!eval/labs/
+!eval/acceptance/
+
+# 修复流证据里有代码 diff、模型提案原文与逐条 claim，仍只留本地
+eval/acceptance/20261020/repair/claims.json
+eval/acceptance/20261020/repair/original-model-proposal.json
+eval/acceptance/20261020/repair/proposal.json
+eval/acceptance/20261020/repair/review.diff
+eval/acceptance/20261020/repair/verification.json
