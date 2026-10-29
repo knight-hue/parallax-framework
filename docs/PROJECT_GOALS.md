@@ -102,7 +102,7 @@ Java 已开始接管平台业务，默认 MySQL 运行档、用户/组织/项目
 | 本文 | 最终定位、业务闭环、范围与完成判据 |
 | JAVA_BACKEND_PLAN_V2.md | 技术细节、阶段和逐项验收要求 |
 | PROJECT_STATUS.md | 当前已实现事实及待完成差距 |
-| PROJECT_HANDOFF.md | 当前接手顺序与开发约束 |
+| exp-20261029-v4/STATE.md | v4 实验线的唯一交接：进度、未决决策与下一步 |
 | ACCEPTANCE.md / eval | 指定日期和版本的验收事实及原件 |
 | OPERATIONS.md | 当前实现的可执行运行命令；迁移完成后随代码更新 |
 | README.md | 项目入口、现状与目标导航 |

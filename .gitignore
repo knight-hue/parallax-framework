@@ -69,3 +69,9 @@ eval/acceptance/20261020/repair/original-model-proposal.json
 eval/acceptance/20261020/repair/proposal.json
 eval/acceptance/20261020/repair/review.diff
 eval/acceptance/20261020/repair/verification.json
+
+# 实验切片里的第三方项目源码不进公开仓库：
+# 上游仓库未附许可证，重分发有版权风险；切片本身可用
+# backend/tools/build_slices.py 从上游按 import 闭包重建，slices.json 记着参数与哈希。
+exp-20261029-v4/p0-slices/*/repo/
+exp-20261029-v4/p0-slices/*/tests_verify/

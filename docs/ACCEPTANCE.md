@@ -12,7 +12,7 @@
 - Docker：生产 Compose 合并配置检查通过。只使用已有镜像，不拉取缺少的 app 镜像。
 - 仓库既有变异审计：Python 20/20、网关离线 2/2 均被回归测试检出。
 
-机器计数：[test-totals.json](eval/acceptance/20261020/test-totals.json)。
+机器计数：[test-totals.json](../eval/acceptance/20261020/test-totals.json)。
 
 ## 完整本机链路
 
@@ -20,7 +20,7 @@
 
 编排使用确定性假模型，验证平台通信而不调用外网模型。该链路发现并修复 Spring Security 在 ASYNC dispatch 丢失初始请求认证后截断响应的问题；新增强认证回归保护管理员及普通用户路径。
 
-产物：[native-stack.json](eval/acceptance/20261020/native-stack.json)。脚本：backend/tools/verify_native_stack.py。
+产物：[native-stack.json](../eval/acceptance/20261020/native-stack.json)。脚本：backend/tools/verify_native_stack.py。
 
 ## 用户模型重复实验
 
@@ -46,7 +46,8 @@
 - 原报告早于最终极性元数据修复，部分 DENY 的 independent_support 误为 0；保留原件和源码快照，不拿错误字段做收益结论。
 - 较早的大上下文/默认推理尝试发生超时并中断，保存在 openai-20261020 / openai-20261020-small；不混入有效重复统计。
 
-原始产物：[acceptance.json](eval/real/openai-20261020-accepted/acceptance.json)。离线补充：[analysis.json](eval/real/openai-20261020-accepted/analysis.json)。历史 variance.md 保留原口径；其定性结论不能当作因果效果证据。
+原始产物（`acceptance.json` / `analysis.json`）与历史 `variance.md` 只保留在本地，未随仓库分发；
+  其定性结论不能当作因果效果证据。
 
 ## 真实模型到修复回归
 
@@ -56,7 +57,7 @@
 
 缓存 ibmcom/db2:latest 的 Python 3.6.8 仅供标准库夹具展示隔离机制，不是项目生产运行镜像；后端要求 Python ≥3.11。容器隔离不能替代敌对租户的专用 VM。
 
-证据：[verification.json](eval/acceptance/20261020/repair/verification.json)、[review.diff](eval/acceptance/20261020/repair/review.diff)，同目录保留模型原提案、审阅后提案、Claim、manifest、源码摘要。
+证据：[verification.json](../eval/acceptance/20261020/repair/verification.json)、[review.diff](../eval/acceptance/20261020/repair/review.diff)，同目录保留模型原提案、审阅后提案、Claim、manifest、源码摘要。
 
 ## 现场交付边界
 

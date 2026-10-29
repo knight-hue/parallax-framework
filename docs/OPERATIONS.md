@@ -1,6 +1,6 @@
 # 运行与隔离验证
 
-当前 Java 默认使用 MySQL，Compose 同步切换；旧 PostgreSQL 通过 legacy-postgres 显式保留。新库运行、停写迁移和回退见 [MySQL 运维](gateway/MYSQL_OPERATIONS.md)。任务仍由单 Python API worker 管理，RabbitMQ 与 Java 调度尚未接管。最终目标见 [PROJECT_GOALS.md](PROJECT_GOALS.md)。
+当前 Java 默认使用 MySQL，Compose 同步切换；旧 PostgreSQL 通过 legacy-postgres 显式保留。新库运行、停写迁移和回退见 [MySQL 运维](../gateway/MYSQL_OPERATIONS.md)。任务仍由单 Python API worker 管理，RabbitMQ 与 Java 调度尚未接管。最终目标见 [PROJECT_GOALS.md](PROJECT_GOALS.md)。
 
 ## 配置和构建
 
@@ -25,6 +25,8 @@
 **推理型模型的输出预算**：DeepSeek 的 flash 系列会先写 `reasoning_content` 再写 `content`。`max_tokens` 太小会导致 `content` 为空——客户端会把这种情形报成 `LLMError` 并提示需要更大的 `max_tokens`，而不是把它当成 schema 校验失败去重试。
 
 不联网构建：Python 使用已有 `.venv`；前端执行已有 `node_modules` 中的 lint、typecheck、build；网关执行 `mvn -o verify`。禁止用 `npm ci`、pip 安装或 Docker build 来冒充离线验证。
+
+本机没有全局 JDK/Maven/Node 时，使用仓内便携工具链 `.toolchain/`（JDK 21、Maven、Node；不入库）：把 `.toolchain/jdk` 设为 `JAVA_HOME`，并把 `.toolchain/maven/bin`、`.toolchain/node` 加入 `PATH`。版本与缓存先核查本地已有资源，不自动下载。
 
 生产 Compose 覆盖文件要求预先准备项目镜像和基础设施镜像，缺少就失败，不会下载：
 

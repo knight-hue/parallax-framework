@@ -1,6 +1,6 @@
 # Parallax 项目状态
 
-更新：2026-10-22。验收依据见 [ACCEPTANCE.md](ACCEPTANCE.md)，运行方式见 [OPERATIONS.md](OPERATIONS.md)。
+更新：2026-10-29。验收依据见 [ACCEPTANCE.md](ACCEPTANCE.md)，运行方式见 [OPERATIONS.md](OPERATIONS.md)，v4 实验线见 [exp-20261029-v4/STATE.md](../exp-20261029-v4/STATE.md)。
 
 最终目标已校准为：**Java 主导的智能代码审查与修复协作平台，以独立证据装配为审查引擎，平台统一使用 MySQL。** 目标与范围见 [PROJECT_GOALS.md](PROJECT_GOALS.md)，实施细节见 [JAVA_BACKEND_PLAN_V2.md](JAVA_BACKEND_PLAN_V2.md)。
 
@@ -8,7 +8,7 @@ Java 默认运行档和 Compose 已切为 MySQL，旧 PostgreSQL 作为显式回
 
 ## 新目标待完成范围
 
-实施已开始：任务协议/生命周期、用户/组织/项目权限基础及 MySQL 运行档已落地；用户 JWT 禁止访问未关联项目的旧接口。已验证本机 MySQL 8.0.19 和 PostgreSQL → MySQL 离线复制，目标 8.4 尚待现场验收，尚未接管当前 runner。各模块记录见 [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md)。
+实施已开始：任务协议/生命周期、用户/组织/项目权限基础及 MySQL 运行档已落地；用户 JWT 禁止访问未关联项目的旧接口。已验证本机 MySQL 8.0.19 和 PostgreSQL → MySQL 离线复制，目标 8.4 尚待现场验收，尚未接管当前 runner。各模块记录见 [CHANGELOG.md](../CHANGELOG.md)。
 
 | 范围 | 当前差距 |
 | --- | --- |
@@ -16,7 +16,7 @@ Java 默认运行档和 Compose 已切为 MySQL，旧 PostgreSQL 作为显式回
 | Java 业务主体 | 用户/组织/项目权限、仓库/策略、集合分页、平台任务、报告产物及修复提案/审批/回归回执已实现；工作台已接入 Java 任务与审批入口，组织/项目管理 UI 待完善 |
 | 可靠执行与额度 | 预占/结算/释放/对账、Outbox、Inbox、fencing/心跳/恢复与事件重放已实现；真实 RabbitMQ 4.1.4 上 3 项分发集成测试通过；Java MQ 发布/消费默认关闭，Python/工作台切换与多实例故障验收待完成 |
 | 缓存与可观测 | 策略只读缓存、Redisson 可选重建锁、TTL/故障回源、真实 Redis 集成测试已通过；任务/Worker/审批/缓存/Outbox 指标已接入；Worker 支持子进程与容器两种执行边界，容器模式 6 项边界测试通过；`multi-instance.json` 验证两进程共享 Redis 配额；`capacity-and-faults.json` 记录容量与故障注入结果；生产 Prometheus 采集、VM 级隔离与跨主机部署仍待完善 |
-| 研发闭环 | Java 侧权限/审批/产物管理已实现；GitHub PR 与 GitLab MR 签名/token 接入、项目绑定、固定 commit 与 delivery 幂等已实现；Java 缺陷与回归样例已落地（`eval/corpus/seed_java`，4 个植入缺陷在缺陷版本上全部被测试捉到、打参考修复后 10/10 通过）；前端已补组织/项目/仓库/策略管理面板，并与平台工作台按项目 ID 联动；引擎新增容器级隔离执行器（`container-isolation.json`，6 项边界测试通过，共享宿主内核）；真实 webhook 现场验收与 VM 级隔离仍待完成 |
+| 研发闭环 | Java 侧权限/审批/产物管理已实现；GitHub PR 与 GitLab MR 签名/token 接入、项目绑定、固定 commit 与 delivery 幂等已实现；Java 缺陷与回归样例已落地（Java 缺陷语料（本地留存），4 个植入缺陷在缺陷版本上全部被测试捉到、打参考修复后 10/10 通过）；前端已补组织/项目/仓库/策略管理面板，并与平台工作台按项目 ID 联动；引擎新增容器级隔离执行器（`container-isolation.json`，6 项边界测试通过，共享宿主内核）；真实 webhook 现场验收与 VM 级隔离仍待完成 |
 | 后置扩展 | 报告安全分享已实现：128 位高熵短码、哈希存储、过期、撤销、访问上限和聚合统计；独立短链域名与热点容量待完成 |
 | 原理与故障实验 | JVM、并发、Redis、Spring、秒杀、2PC/TCC 模拟已运行；Seata 2.6 AT/TCC 已对真实服务端与 MySQL 8.4 跑通 6 项；MySQL 原理实验（B+ 树、MVCC、隔离级别、锁与死锁、EXPLAIN）待补 |
 
@@ -55,7 +55,7 @@ Java 默认运行档和 Compose 已切为 MySQL，旧 PostgreSQL 作为显式回
 | Compose | 生产合并配置校验通过；未下载、未构建缺少的项目镜像 |
 | 抗从众控制面（2026-10-22） | 结论剥离仲裁、缺口归因、独立性闸门已接入编排；后端 435 项测试通过；证据见 `blind-arbitration.json`、`gap-attribution.json`、`independence-gate.json` |
 
-产物在 `eval/acceptance/20261020` 和 `eval/real/openai-20261020-accepted`。本机完整链路使用确定性假模型；真实模型实验和修复另有独立产物，二者不能混称。
+产物在 `eval/acceptance/20261020`（真实仓库那一批只保留在本地）。本机完整链路使用确定性假模型；真实模型实验和修复另有独立产物，二者不能混称。
 
 ## 能力边界
 
@@ -72,8 +72,10 @@ Java 默认运行档和 Compose 已切为 MySQL，旧 PostgreSQL 作为显式回
 
 2026-10-28 派发全链路增量：gateway/tools/verify_cached_rabbit.py 新增 --python，一条命令在临时 rabbitmq 4.1.8 容器上同时跑 6 项 broker 语义与 2 项全链路进程用例（eval/java-platform/platform-dispatch-chain.json）。全链路 = Outbox → 真 broker → Java 消费 → HTTP 桥 → 真实 Python Worker 进程 → 事件入库与结算：任务 1 首次投递即成功、只有 1 条 SETTLE；杀掉进程并在同一固定端点起第二个进程后，任务 2 同样成功且各自只结算一次；无 Worker 监听时消息进死信，attempt/fence 递增且不写结算，直到新进程启动后由协调器重投才成功。过程中修掉两个真实缺陷：PlatformSources 在 Windows 上被 git 的只读 pack 文件卡住清理（成功抓取被误判为失败），以及 Worker 进程夹具只替换了 platform_worker 的模型绑定、引擎实际仍调真实模型。Java 116 项、Python 474 项全绿。仍不构成多机、集群故障转移或容量验收。
 
-2026-10-28 评测方法增量：新增 parallax stats（McNemar 精确检验 + 配对自助法区间 + Holm 校正），从已落的 metrics.json 直接出结论，**零模型调用**；parallax experiment 支持 --repeat 与 --budget-calls/--budget-tokens（真实预算维度，不再用「维度数量」代理）。对现有产物重算的结果：`budget_shared` vs `budget_blind` 为 40:0 不一致对，风险差 +83.3%、95% CI [+72.9%, +93.8%]、p=1.8e-12。产物见 eval/analysis/20261028-stats/，后端 495 项测试与 Ruff 全绿。
+2026-10-28 评测方法增量：新增 parallax stats（McNemar 精确检验 + 配对自助法区间 + Holm 校正），从已落的 metrics.json 直接出结论，**零模型调用**；parallax experiment 支持 --repeat 与 --budget-calls/--budget-tokens（真实预算维度，不再用「维度数量」代理）。报告内置两条自动警示：只覆盖单任务时提示样本量不足、两臂冗余不同时提示「独有发现」列不可跨臂比较。后端 495 项测试与 Ruff 全绿。
 
-2026-10-28 口径自查修正：parallax stats 里两处口径不严已修——「全员一致」改用实际产出过 claim 的 Agent 数（多轮臂每轮都生成新 Reader 身份，按 reader_count 判会把阈值算低、多算一致）；成本指标改为以调用次数为主（早期产物没记 token，用 token 会得出“零成本”的假结论）。报告新增两条自动警示：只覆盖单任务时标“乐观下界”、两臂冗余不同或未记录时提示「独有发现」列不可跨臂比较。重新生成 eval/analysis/20261028-stats/ 两份产物，后端 495 项测试与 Ruff 全绿。
+2026-10-28 口径自查修正：parallax stats 里两处口径不严已修——「全员一致」改用实际产出过 claim 的 Agent 数（多轮臂每轮都生成新 Reader 身份，按 reader_count 判会把阈值算低、多算一致）；成本指标改为以调用次数为主（早期产物没记 token，用 token 会得出「零成本」的假结论）。后端 495 项测试与 Ruff 全绿。
 
-2026-10-29 真实项目切片语料流水线：从电商项目按 import 闭包截取下单链路切片（43 文件 / 2540 行，源码不入库），注入 **9 个「单看自洽、对照才矛盾」**的缺陷（契约漂移 / 语义错位 / 精度方向偏移），全部有测试验真：干净切片 21 passed，注入后 11 failed，9 个缺陷各自打红对应测试。Reader 归属改为**注入后实测分区**（EvidenceUnit id 含内容哈希，改一个字符切块归属就会变，写死过就错）。预筛 `blind_no_coverage` R=3：聚合命中 8/9，单个 Reader 最高 3/9，聚合增益 x2.67——分片互斥使得任何单个 Reader 都不可能全中。切片构建、注入、验真、预筛均已脚本化，复现命令见 `backend/tools/inject_slice_defects.py` 与仓库 README。
+2026-10-29 真实项目切片语料流水线：从电商项目按 import 闭包截取下单链路切片（43 文件 / 2540 行，源码不入库），注入 **9 个「单看自洽、对照才矛盾」**的缺陷（契约漂移 / 语义错位 / 精度方向偏移），全部有测试验真：干净切片 21 passed，注入后 11 failed，9 个缺陷各自打红对应测试。Reader 归属改为**注入后实测分区**（EvidenceUnit id 含内容哈希，改一个字符切块归属就会变）。切片构建、注入、验真均已脚本化，见 backend/tools/inject_slice_defects.py 与 backend/tools/build_slices.py。
+
+> 2026-10-29 起的新一轮对照实验在 exp-20261029-v4/ 内单独记录；此前的实验产物只保留在本地，不随仓库分发。

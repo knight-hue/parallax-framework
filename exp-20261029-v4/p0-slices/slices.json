@@ -1,0 +1,123 @@
+{
+  "source": "E:\\complex\\电商agent\\globex-agent-main",
+  "slices": [
+    {
+      "slice": "S2-discovery",
+      "seeds": [
+        "app/domain/catalog",
+        "app/application/tools",
+        "app/infrastructure/rag",
+        "app/infrastructure/rerank",
+        "app/infrastructure/embedding",
+        "app/infrastructure/vector"
+      ],
+      "files": 63,
+      "non_empty_lines": 3162,
+      "batches_to_read_all": 11,
+      "groups": {
+        "app/domain": 22,
+        "app/application": 21,
+        "app/infrastructure": 19,
+        "root": 1
+      },
+      "verify_tests": [
+        "test_retrieval.py",
+        "test_recall_metrics.py",
+        "test_embedding_client.py"
+      ]
+    },
+    {
+      "slice": "S3-orchestration",
+      "seeds": [
+        "app/application/agents",
+        "app/application/harness",
+        "app/application/prompts"
+      ],
+      "files": 72,
+      "non_empty_lines": 4544,
+      "batches_to_read_all": 12,
+      "groups": {
+        "app/application": 27,
+        "app/domain": 26,
+        "app/infrastructure": 18,
+        "root": 1
+      },
+      "verify_tests": [
+        "test_harness_guards.py",
+        "test_harness_middleware.py",
+        "test_harness_drift.py",
+        "test_harness_infra.py"
+      ]
+    },
+    {
+      "slice": "S4-session-cache",
+      "seeds": [
+        "app/domain/session",
+        "app/domain/buyer",
+        "app/application/memory",
+        "app/infrastructure/cache",
+        "app/infrastructure/security"
+      ],
+      "files": 26,
+      "non_empty_lines": 813,
+      "batches_to_read_all": 5,
+      "groups": {
+        "app/domain": 14,
+        "app/infrastructure": 8,
+        "app/application": 3,
+        "root": 1
+      },
+      "verify_tests": [
+        "test_memory_persistence.py",
+        "test_preference_selector.py",
+        "test_preference_tools.py",
+        "test_phase4_cache.py",
+        "test_rate_limit.py",
+        "test_phase4_throttle.py"
+      ]
+    },
+    {
+      "slice": "S5-queue-events",
+      "seeds": [
+        "app/domain/queue",
+        "app/infrastructure/queue"
+      ],
+      "files": 9,
+      "non_empty_lines": 470,
+      "batches_to_read_all": 2,
+      "groups": {
+        "app/domain": 4,
+        "app/infrastructure": 4,
+        "root": 1
+      },
+      "verify_tests": [
+        "test_phase4_queue.py",
+        "test_event_contract.py",
+        "test_event_replay.py"
+      ]
+    },
+    {
+      "slice": "S6-presentation",
+      "seeds": [
+        "app/presentation",
+        "app/worker.py",
+        "app/composition.py"
+      ],
+      "files": 102,
+      "non_empty_lines": 7341,
+      "batches_to_read_all": 17,
+      "groups": {
+        "app/infrastructure": 40,
+        "app/domain": 29,
+        "app/application": 27,
+        "app/presentation": 4,
+        "root": 2
+      },
+      "verify_tests": [
+        "test_logging_setup.py",
+        "test_phase3.py",
+        "test_tools_and_eventbus.py"
+      ]
+    }
+  ]
+}

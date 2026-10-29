@@ -43,7 +43,7 @@
   </profiles>
 
   <dependencies>
-    <!-- Java owns platform business; Python retains evidence reasoning. See PROJECT_GOALS.md. -->
+    <!-- Java owns platform business; Python retains evidence reasoning. See docs/PROJECT_GOALS.md. -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>

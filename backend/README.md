@@ -2,10 +2,10 @@
 
 智能代码审查与修复协作平台的独立证据装配引擎，保留可插拔框架、CLI 和离线使用方式。平台目标由 Java 管理组织权限、任务、预算和审批，Python 负责分区、独立取证、反证与聚合；隔离执行由专用 Worker 承接。
 
-最终职责见 [PROJECT_GOALS.md](../PROJECT_GOALS.md)。当前 Python 服务仍维护任务和 SSE，向平台模式迁移的协议与状态权威尚待实现，不能把目标架构当作当前实现。
+最终职责见 [PROJECT_GOALS.md](../docs/PROJECT_GOALS.md)。当前 Python 服务仍维护任务和 SSE，向平台模式迁移的协议与状态权威尚待实现，不能把目标架构当作当前实现。
 
-完整介绍、机制说明与实验结果见仓库根目录的 [README.md](../README.md) 与
-[说明材料/P0-验证结果.md](../../说明材料/P0-验证结果.md)。
+完整介绍与机制说明见仓库根目录的 [README.md](../README.md)；
+历史实验口径与修正记录见 [CHANGELOG.md](../CHANGELOG.md) 与 [ACCEPTANCE.md](../docs/ACCEPTANCE.md)。
 
 ## 快速开始
 

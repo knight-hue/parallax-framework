@@ -21,10 +21,13 @@
 
 | 文档 | 用途 |
 | --- | --- |
-| [最终目标](PROJECT_GOALS.md) | 定位、职责、范围和完成判据 |
-| [技术升级方案](JAVA_BACKEND_PLAN_V2.md) | Java 技术栈、实施阶段、原理实验与验收 |
-| [当前状态](PROJECT_STATUS.md) / [开发交接](PROJECT_HANDOFF.md) | 已实现事实、差距和下一步 |
-| [验收记录](ACCEPTANCE.md) / [运行说明](OPERATIONS.md) | 历史证据与当前代码的可执行命令 |
+| [最终目标](docs/PROJECT_GOALS.md) | 定位、职责、范围和完成判据 |
+| [技术升级方案](docs/JAVA_BACKEND_PLAN_V2.md) | Java 技术栈、实施阶段、原理实验与验收 |
+| [当前状态](docs/PROJECT_STATUS.md) | 已实现事实、差距和下一步 |
+| [实验交接](exp-20261029-v4/STATE.md) | v4 实验的唯一交接文档（进度、未决决策、下一步） |
+| [验收记录](docs/ACCEPTANCE.md) / [运行说明](docs/OPERATIONS.md) | 历史证据与当前代码的可执行命令 |
+
+> 项目文档统一放在 [`docs/`](docs/)；根目录只保留本 README 与开源仓库标配文件。
 
 以下核心机制属于可复用的审查引擎，不因平台升级而移除。
 
@@ -220,7 +223,7 @@ cd backend
 .venv\Scripts\python.exe -m parallax.cli audit .\parallax --out runs\report.md
 ```
 
-> 使用本机已有 Python、Node、JDK 21、Maven 和 Docker，先定位工具及缓存。当前完整链路与离线验证见 [OPERATIONS.md](OPERATIONS.md)；已有 `.toolchain/` 仅为本地缓存，不作为重新下载或安装的理由。
+> 使用本机已有 Python、Node、JDK 21、Maven 和 Docker，先定位工具及缓存。当前完整链路与离线验证见 [OPERATIONS.md](docs/OPERATIONS.md)；已有 `.toolchain/` 仅为本地缓存，不作为重新下载或安装的理由。
 
 ### 常用参数
 
@@ -291,7 +294,7 @@ class MyValidator:                    # ③ 可选：入账否决权
 
 真实无标注仓库不能报告 precision/recall。兼容端点 gpt-6.1-sol 的 urllib3/util 三文件子集完成 5 臂 × 3 次有效重复，不代表完整仓库或机制收益已获得统计证明。历史 DeepSeek/合成语料结果按原条件保留，不混入新验收。
 
-详见 [当前状态](PROJECT_STATUS.md)、[历史验收](ACCEPTANCE.md)、[最终目标](PROJECT_GOALS.md) 与 [实施方案](JAVA_BACKEND_PLAN_V2.md)。公网部署、正式执行镜像和现场运维验收仍未完成。
+详见 [当前状态](docs/PROJECT_STATUS.md)、[历史验收](docs/ACCEPTANCE.md)、[最终目标](docs/PROJECT_GOALS.md) 与 [实施方案](docs/JAVA_BACKEND_PLAN_V2.md)。公网部署、正式执行镜像和现场运维验收仍未完成。
 
 ---
 
@@ -319,21 +322,21 @@ gateway/                        Java 平台业务后端（身份、项目、任�
 ├─ src/test/java/.../support/         测试用的上游 HTTP 服务桩
 └─ README.md                          网关自身的说明与取舍
 
-eval/corpus/                    可复现语料（三档规模）
-eval/results/                   合成语料上的对照实验原始产物
-eval/real/                      真实开源仓库上的对照实验（urllib3 / anyio）与重复实验
+eval/acceptance/                验收与回归证据（修复流、Java 缺陷样本）
+eval/java-platform/             平台侧验收证据（真实 broker / MySQL / 多实例 / PR 接入 / 容器隔离）
+eval/labs/                      语言与中间件实验记录
+exp-20261029-v4/                当前一轮对照实验的计划、切片与结果
 ```
 
-> 最终目标、技术方案、当前状态、验收与运行文档均在本仓库内。工作区同级 `说明材料/` 额外保留计划摘要、历史复盘及参赛材料。
+> 最终目标、技术方案、当前状态、验收、运行与实验交接均在本仓库内。工作区同级 `说明材料/` 只保留参赛材料，且不入库。
 >
-> 这也意味着 README 里指向 `../说明材料/` 的链接**在 GitHub 上是打不开的**（那不在仓库里），
-> 但在本地开发环境中可达。
+> 仓库文档**不再链接** `../说明材料/`：那些文件不在仓库里，GitHub 上打不开。
 
 ---
 
 ## 8. 运行当前实现
 
-使用已有工具、依赖与缓存镜像，按 [OPERATIONS.md](OPERATIONS.md) 配置并运行。当前默认运行档为工作台 → Java → Python + MySQL/Redis；旧本机全链路验收显式使用 legacy-postgres。MySQL 真库与迁移检查见 [MySQL 运维](gateway/MYSQL_OPERATIONS.md)，RabbitMQ 尚未接管执行。
+使用已有工具、依赖与缓存镜像，按 [OPERATIONS.md](docs/OPERATIONS.md) 配置并运行。当前默认运行档为工作台 → Java → Python + MySQL/Redis；旧本机全链路验收显式使用 legacy-postgres。MySQL 真库与迁移检查见 [MySQL 运维](gateway/MYSQL_OPERATIONS.md)，RabbitMQ 尚未接管执行。
 
 仅校验生产合并配置，不启动服务或下载镜像：
 

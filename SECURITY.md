@@ -2,7 +2,7 @@
 
 ## 支持范围
 
-目前只维护 `main` 分支上的最新版本。最终权限目标见 [PROJECT_GOALS.md](PROJECT_GOALS.md)，当前实现及运行边界见 [PROJECT_STATUS.md](PROJECT_STATUS.md) 和 [OPERATIONS.md](OPERATIONS.md)。
+目前只维护 `main` 分支上的最新版本。最终权限目标见 [PROJECT_GOALS.md](docs/PROJECT_GOALS.md)，当前实现及运行边界见 [PROJECT_STATUS.md](docs/PROJECT_STATUS.md) 和 [OPERATIONS.md](docs/OPERATIONS.md)。
 
 ## 报告漏洞
 

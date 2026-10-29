@@ -1,6 +1,6 @@
 # Parallax Java 平台后端（当前实现为网关）
 
-最终方向：Java 管理组织/项目权限、任务、预算、报告和审批，平台统一使用 MySQL；Python 保留证据装配与隔离执行。见 [最终目标](../PROJECT_GOALS.md) 和 [升级方案](../JAVA_BACKEND_PLAN_V2.md)。
+最终方向：Java 管理组织/项目权限、任务、预算、报告和审批，平台统一使用 MySQL；Python 保留证据装配与隔离执行。见 [最终目标](../docs/PROJECT_GOALS.md) 和 [升级方案](../docs/JAVA_BACKEND_PLAN_V2.md)。
 
 本文配置、端点及测试描述当前网关实现，数据库仍为 PostgreSQL。新平台能力尚未实施，不能只改 JDBC URL 当作完成迁移。
 
@@ -157,7 +157,7 @@ export PARALLAX_CALLBACK_TOKEN=$PARALLAX_GATEWAY_INTERNAL_TOKEN
 ## 测试
 
 ```bat
-mvn -o test       :: 当前单元/集成；历史数量见 ../ACCEPTANCE.md
+mvn -o test       :: 当前单元/集成；历史数量见 ../docs/ACCEPTANCE.md
 mvn -o -Pit verify :: 需本地已有兼容测试镜像，禁拉取与覆盖配置见运行文档
 python tools/mutation_audit.py :: Java 关键策略变异门禁（临时副本，不修改工作树）
 ```
@@ -188,6 +188,6 @@ python tools/mutation_audit.py :: Java 关键策略变异门禁（临时副本�
 > mvn -o -B test
 > ```
 >
-> 详见 [../../说明材料/本地构建.md](../../说明材料/本地构建.md)。
+> 详见 [../docs/OPERATIONS.md](../docs/OPERATIONS.md)。
 
 MySQL 升级后需增加真实 MySQL 的迁移、锁和隔离测试；H2/历史 PG 结果不能代替。跳过的集成测试不得记为通过。

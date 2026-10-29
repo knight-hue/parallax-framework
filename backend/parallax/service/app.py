@@ -199,7 +199,7 @@ def create_app(
 
         刻意不挂在 `/api/` 下：内部边界中间件只守 `/api/`，而抓取端通常不携带
         网关凭据。因此这个端点**必须只绑定内部网络**，不要经公网反向代理暴露。
-        具体口径见 OPERATIONS.md。
+        具体口径见 docs/OPERATIONS.md。
         """
         records = store.list(limit=1000)
         active = sum(

@@ -2,7 +2,7 @@
 
 感谢你有兴趣参与 Parallax。本文档说明如何搭建环境、跑测试、以及提交代码的流程。
 
-开发前先阅读 [最终目标与范围](PROJECT_GOALS.md)、[技术实施方案](JAVA_BACKEND_PLAN_V2.md) 和 [当前状态](PROJECT_STATUS.md)。Java 管理平台业务、Python 保留审查机制；MySQL 为目标平台数据库。当前构建仍按 OPERATIONS.md 的既有实现执行，新增实验隔离于默认部署。
+开发前先阅读 [最终目标与范围](docs/PROJECT_GOALS.md)、[技术实施方案](docs/JAVA_BACKEND_PLAN_V2.md) 和 [当前状态](docs/PROJECT_STATUS.md)。Java 管理平台业务、Python 保留审查机制；MySQL 为目标平台数据库。当前构建仍按 docs/OPERATIONS.md 的既有实现执行，新增实验隔离于默认部署。
 
 ## 1. 环境准备
 
@@ -21,7 +21,7 @@ python -m venv .venv
 ```
 
 > 前端（Node >= 20）与网关（**必须是 JDK 21** + Maven >= 3.8）的构建命令，
-> 以及本机没有全局工具时如何用仓内 `.toolchain/`，见 [../说明材料/本地构建.md](../说明材料/本地构建.md)。
+> 以及本机没有全局工具时如何用仓内 `.toolchain/`，见 [OPERATIONS.md](docs/OPERATIONS.md)。
 
 **测试不需要网络、不需要 API key、也不会调用真实模型。** 这不是巧合——
 `tests/conftest.py` 里有一个 autouse 夹具会强制清空模型凭据，
@@ -104,7 +104,7 @@ python -m venv .venv
 - 新插件 / 新场景：用 [功能建议模板](.github/ISSUE_TEMPLATE/feature_request.yml)
 - 安全漏洞：**不要开公开 issue**，见 [SECURITY.md](SECURITY.md)
 
-报告实验相关的 Bug 时，请附上 `eval/results/<run_id>/summary.md` 或运行报告——
+报告实验相关的 Bug 时，请附上当次运行的 `summary.md` 或运行报告——
 框架承诺可复现，而没有原始数据的复现报告无法定位问题。
 
 ## 7. 许可证

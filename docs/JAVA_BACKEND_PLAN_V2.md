@@ -1,6 +1,6 @@
 # Java 后端主力项目升级方案 V2
 
-日期：2026-10-20。状态：实施中，按模块验收。实施记录见 [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md)；本文列出的整体范围不代表已全部完成。
+日期：2026-10-20。状态：实施中，按模块验收。实施记录见 [CHANGELOG.md](../CHANGELOG.md)；本文列出的整体范围不代表已全部完成。
 
 最终定位、范围和完成判据以 [PROJECT_GOALS.md](PROJECT_GOALS.md) 为准；本文负责技术实施和实验验收细节，当前事实见 [PROJECT_STATUS.md](PROJECT_STATUS.md)。
 
@@ -266,7 +266,7 @@ Redis 成功仅代表预受理，不能立即声称领取成功；以持久结�
 | E1 低优先级扩展 | 报告分享、短链与访问控制 | 过期、撤销、越权、热点及缓存策略 |
 | L1 独立实验 | labs/flash-sale、labs/distributed-tx，不新增生产依赖 | 防超卖/幂等/对账；XA/TCC/Seata 故障对照 |
 
-P0—P6 是平台交付主线；E1 在核心闭环后安排。L1 可与主线独立进行，其组件不成为平台启动或验收的前置条件；全套技术覆盖另验收这些实验。每个阶段包含实现、必要测试和证据归档后才标完成。原理学习可穿插进行，不必等到 P5 才学习 JVM。阶段完成情况以 IMPLEMENTATION_LOG.md 和 PROJECT_STATUS.md 为准。
+P0—P6 是平台交付主线；E1 在核心闭环后安排。L1 可与主线独立进行，其组件不成为平台启动或验收的前置条件；全套技术覆盖另验收这些实验。每个阶段包含实现、必要测试和证据归档后才标完成。原理学习可穿插进行，不必等到 P5 才学习 JVM。阶段完成情况以 PROJECT_STATUS.md 和 CHANGELOG.md 为准。
 
 ## 12. 总验收规则
 
