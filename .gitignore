@@ -50,6 +50,9 @@ labs/*/bin/
 .DS_Store
 Thumbs.db
 
-# 逐条 claim 明细含源码引用与推理，只留在本地
-eval/results/**/*.claims.json
-eval/results/**/*__*.md
+# 实验产物（语料、结果、分析、真实仓库报告）只留在本地，不随仓库分发。
+# 原因有两条：
+#   1) 逐条 claim 明细含被审代码的原文引用（quote）与推理过程；
+#   2) 部分实验跑在第三方开源项目上，报告里带着它们的代码片段。
+# 复现方式写在 README 里，产物本身不入库。
+eval/
