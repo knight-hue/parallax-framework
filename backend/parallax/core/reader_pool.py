@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from collections.abc import Awaitable, Callable, Sequence
 
 from pydantic import BaseModel, Field
@@ -39,6 +40,13 @@ class ReaderOutcome(BaseModel):
     reader_id: str
     round_index: int
     evidence_ids: list[str] = Field(default_factory=list)
+    """**实际送进模型**的证据 id。被 `max_units_per_reader` 截掉的不在这里。"""
+    units_available: int = 0
+    """本 Reader 的分区**给出**了多少条证据。与 `len(evidence_ids)` 的差就是被截掉的条数。
+
+    没有这个字段，截断是否真的生效在产物里无从验证——而「每 Reader 只读 N 条」
+    恰恰是「集中 vs 分散」对照成立与否的关键操纵。
+    """
     claims: list[Claim] = Field(default_factory=list)
     error: str | None = None
     schema_retries: int = 0
@@ -75,11 +83,16 @@ class ReaderPool:
         max_output_tokens: int = 8000,
         max_evidence_per_call: int = 6,
         max_chars_per_call: int = 0,
+        max_units_per_reader: int = 0,
+        equal_exposure: bool = False,
+        n_readers: int = 3,
     ) -> None:
         if visibility not in {"blind", "shared"}:
             raise ValueError("visibility 只能是 'blind' 或 'shared'")
         if max_evidence_per_call < 1:
             raise ValueError("max_evidence_per_call 至少为 1")
+        if max_units_per_reader < 0:
+            raise ValueError("max_units_per_reader 不能为负")
         self.client = client
         self.plugin = plugin
         self.max_schema_retries = max_schema_retries
@@ -90,6 +103,20 @@ class ReaderPool:
         self.max_evidence_per_call = max_evidence_per_call
         self.max_chars_per_call = max_chars_per_call
         """单批证据的累计字符上限。0 = 只按条数分批（旧行为）。"""
+        self.max_units_per_reader = max_units_per_reader
+        """单个 Reader 整轮最多读入几条证据。0 = 不限。"""
+        self.equal_exposure = equal_exposure
+        """是否按 `ceil(语料条数 / n_readers)` 自动推导每人曝光上限。"""
+        self.n_readers = max(1, n_readers)
+        """用于 `equal_exposure` 的分母。必须来自配置而不是 `len(partitions)`：
+        有 Reader 分到空分区时它不会进入本轮，用它做分母会把上限算大。"""
+        self.reader_evidence: dict[str, list[str]] = {}
+        """每个 Reader **实际读到**的证据 id，按 reader_id 索引。
+
+        这是「集中 vs 分散」唯一可验证的落点：汇总里必须能看出集中臂几个 Reader
+        读的是同一批、分散臂读的是不同批。只记条数不够——条数相同但内容不同的
+        两种情况会被混为一谈。
+        """
         self.failed_readers: list[str] = []
         """执行失败的 Reader。必须被实验报告出来——失败者会拉低召回，
         若不计入统计就会把「Reader 挂了」误读成「漏检」。"""
@@ -120,11 +147,14 @@ class ReaderPool:
                 partitions, question, reputation_lookup, usage_hook, prior_claims
             )
 
+        cap = self._resolve_cap(partitions)
         semaphore = asyncio.Semaphore(self.max_concurrency)
 
         async def guarded(part: Partition) -> ReaderOutcome:
             async with semaphore:
-                return await self._run_one(part, question, reputation_lookup, usage_hook)
+                return await self._run_one(
+                    part, question, reputation_lookup, usage_hook, cap=cap
+                )
 
         return list(await asyncio.gather(*(guarded(p) for p in partitions)))
 
@@ -143,9 +173,10 @@ class ReaderPool:
         """
         shared: list[Claim] = list(prior_claims)
         outcomes: list[ReaderOutcome] = []
+        cap = self._resolve_cap(partitions)
         for part in partitions:
             outcome = await self._run_one(
-                part, question, reputation_lookup, usage_hook, shared_context=shared
+                part, question, reputation_lookup, usage_hook, shared_context=shared, cap=cap
             )
             outcomes.append(outcome)
             shared.extend(outcome.claims)
@@ -160,6 +191,7 @@ class ReaderPool:
         reputation_lookup: Callable[[str], float],
         usage_hook: Callable[[bool, int], None] | None,
         shared_context: Sequence[Claim] = (),
+        cap: int = 0,
     ) -> ReaderOutcome:
         """读一个 Reader 的全部分片。
 
@@ -176,14 +208,19 @@ class ReaderPool:
         outcome = ReaderOutcome(
             reader_id=part.reader_id,
             round_index=part.round_index,
-            evidence_ids=part.evidence_ids,
+            units_available=len(part.units),
             saw_prior_claims=len(shared_context),
         )
         if not part.units:
             # 没有证据就不调用模型——空上下文必然诱发幻觉
+            self.reader_evidence[part.reader_id] = []
             return outcome
 
-        shard = list(part.units)
+        shard = self._cap(list(part.units), cap)
+        # 只记**实际读到**的 id。若照抄分区里的 id，覆盖率会把没读的文件算成已覆盖，
+        # 截断就变成了自欺。
+        outcome.evidence_ids = [u.evidence_id for u in shard]
+        self.reader_evidence[part.reader_id] = list(outcome.evidence_ids)
         reputation = reputation_lookup(part.reader_id)
         shared_claims = list(shared_context)
         failed_chunks = 0
@@ -204,6 +241,32 @@ class ReaderPool:
             if not outcome.claims:
                 self._mark_failed(part.reader_id)
         return outcome
+
+    def _resolve_cap(self, partitions: Sequence[Partition]) -> int:
+        """本轮实际生效的每人曝光上限。
+
+        `equal_exposure` 开启时按**候选全集**算 `ceil(N / n_readers)`：分母用全集
+        而不是单个分区，才能保证集中臂和分散臂拿到同一个上限——两臂分配方式不同，
+        但每人能读的条数完全一致，差异只可能来自「是否重复读同一批」。
+        """
+        if not self.equal_exposure:
+            return self.max_units_per_reader
+        universe = {eid for part in partitions for eid in part.evidence_ids}
+        if not universe:
+            return self.max_units_per_reader
+        return max(1, math.ceil(len(universe) / self.n_readers))
+
+    def _cap(self, units: list[EvidenceUnit], cap: int) -> list[EvidenceUnit]:
+        """按曝光上限截断本 Reader 的阅读量。
+
+        按 `evidence_id` 排序后取前 N 条：截断结果必须与并发完成顺序无关，
+        否则同一份语料两次运行会读到不同文件，两臂的差异里就混进了噪声。
+        排序后 `redundancy=all` 的臂里所有 Reader 恰好拿到**同一批**前 N 条，
+        「集中」才成立；`redundancy=1` 的臂里分区不相交，通常整份都不会被截。
+        """
+        if cap <= 0 or len(units) <= cap:
+            return units
+        return sorted(units, key=lambda u: u.evidence_id)[:cap]
 
     def _chunks(self, shard: list[EvidenceUnit]) -> list[list[EvidenceUnit]]:
         """按「条数 + 累计字符数」双重上限分批，任一先到即断批。

@@ -156,6 +156,13 @@ class ArmResult:
     # 该臂产出的全部 claim（未截断）。报告按档位只渲染前 40 条（已加显式提示），
     # 但结论质量抽查必须从完整集合里抽样——只从报告抽会偏向高置信，使结论不可外推。
     claims: list[Claim] = field(default_factory=list)
+    reader_evidence: dict[str, list[str]] = field(default_factory=dict)
+    """每个 Reader 实际读到的证据 id，落盘成 `<task>__<arm>.readers.json`。
+
+    为什么必须单独落盘：`reader_units` 只有条数，而「三个 Reader 读同一批」与
+    「三个 Reader 读不同批」的条数可以完全相同。集中 vs 分散的对照全靠这个区别，
+    不把 id 存下来就无法事后核验。
+    """
     config: dict = field(default_factory=dict)
     """该臂的**生效配置**快照。
 
@@ -181,6 +188,8 @@ def config_snapshot(settings: Settings, **extra: object) -> dict:
         "visibility": settings.reader_visibility,
         "seed": settings.seed,
         "max_evidence_per_call": settings.max_evidence_per_call,
+        "max_units_per_reader": settings.max_units_per_reader,
+        "equal_exposure": settings.equal_exposure,
         "max_batch_chars": settings.llm_max_batch_chars,
         "max_output_tokens": settings.llm_max_output_tokens,
         "max_llm_calls": settings.max_llm_calls,
@@ -190,6 +199,7 @@ def config_snapshot(settings: Settings, **extra: object) -> dict:
         "adaptive_scheduling": settings.adaptive_scheduling,
         "llm_falsifier": settings.enable_llm_falsifier,
         "semantic_partitioning": settings.semantic_partitioning,
+        "partition_assignment": settings.partition_assignment,
     }
     try:
         repo = Path(__file__).resolve().parents[3]
@@ -270,15 +280,22 @@ async def run_arm(
     arm: Arm,
     base_settings: Settings,
     client_factory,
+    group_depth: int = 2,
 ) -> ArmResult:
-    """在一个任务上跑一个实验臂。"""
+    """在一个任务上跑一个实验臂。
+
+    `group_depth` 属于**证据适配器**的粒度参数，不属于机制本身，但它直接决定了
+    分区是否均衡：实测各切片在深度 2 下只有 4~5 个分组，3 个 Reader 分 4 个组时
+    必然撞车（最坏 1/25/0）。做「每人预算相同」的受控对比时必须调到 3，
+    并配合 `partition_assignment=greedy`，否则分区不均会被读成机制效应。
+    """
     settings = make_settings(base_settings, arm)
     client: LLMClient = client_factory(settings)
     engine = ParallaxEngine.build(
         adapter=RepoAdapter(
             task.repo_path,
             extensions=(".py",),
-            group_depth=2,
+            group_depth=group_depth,
         ),
         plugin=CodeAuditReader(),
         client=client,
@@ -318,6 +335,7 @@ async def run_arm(
         usage=engine.usage_snapshot(),
         reader_count=settings.n_readers,
         readers_failed=len(engine.runtime.pool.failed_readers),
+        reader_evidence=dict(engine.runtime.pool.reader_evidence),
     )
 
     from parallax.reporting import render_markdown
@@ -333,7 +351,8 @@ async def run_arm(
         report_markdown=render_markdown(report, max_items=settings.report_max_items),
         errors=errors,
         claims=list(claims),
-        config=config_snapshot(settings, task=task.task_id),
+        reader_evidence=dict(engine.runtime.pool.reader_evidence),
+        config=config_snapshot(settings, task=task.task_id, group_depth=group_depth),
     )
 
 
@@ -343,6 +362,7 @@ async def run_experiment(
     arms: list[Arm] | None = None,
     client_factory=None,
     on_arm_done=None,
+    group_depth: int = 2,
 ) -> list[ArmResult]:
     """在所有任务 × 所有实验臂上跑一遍。"""
     arms = arms or ARMS
@@ -352,7 +372,9 @@ async def run_experiment(
     for task in tasks:
         for arm in arms:
             logger.info("══ 任务 %s ｜ 实验臂 %s ══", task.task_id, arm.name)
-            result = await run_arm(task, arm, base_settings, factory)
+            result = await run_arm(
+                task, arm, base_settings, factory, group_depth=group_depth
+            )
             results.append(result)
             if on_arm_done:
                 on_arm_done(task, arm, result)
@@ -373,6 +395,19 @@ def _render_precision(m: ArmMetrics) -> str:
     if m.precision is None:
         return "N/A"
     return f"{m.precision:.0%}"
+
+
+def _render_reader_units(m: ArmMetrics) -> str:
+    """每 Reader 实读单元数 —— **判断曝光量操纵是否生效的唯一落点**。
+
+    集中臂：几个 Reader 的数字相同且远小于语料规模；
+    分散臂：数字之和覆盖全集。只印总调用数会把两者混成同一个数字，
+    此前 P2 冒烟就是这样把「读完以后的预算耗尽」误读成「受预算限制」。
+    """
+    if not m.reader_units:
+        return "—"
+    per = "/".join(str(v) for v in m.reader_units.values())
+    return f"{per} → 合并 {m.reader_union}"
 
 
 # ---- 真实仓库（无 ground truth）----
@@ -467,6 +502,7 @@ async def run_repo_arm(
         usage=engine.usage_snapshot(),
         reader_count=settings.n_readers,
         readers_failed=len(engine.runtime.pool.failed_readers),
+        reader_evidence=dict(engine.runtime.pool.reader_evidence),
     )
 
     from parallax.reporting import render_markdown
@@ -527,17 +563,23 @@ def render_summary(results: list[ArmResult], arms: list[Arm] | None = None) -> s
     lines.append("## 主指标对照")
     lines.append("")
     lines.append(
-        "| 实验臂 | 召回率 | 精确率 | 冗余率 | 输出 K* / 产出者数 | 产出者归一化占比 | 矩阵填充 | 轮次 | 调用 | Reader 失败 |"
+        "| 实验臂 | 召回率 | 精确率 | 冗余率 | 输出 K* / 产出者数 | 产出者归一化占比 | 矩阵填充 | 轮次 | 调用 | Reader 失败 | 实读单元（每人 → 合并） |"
     )
-    lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+    lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
     for result in results:
         m = result.metrics
         lines.append(
             f"| `{m.arm}` | {_render_recall(m)} | {_render_precision(m)} | "
             f"{m.redundancy:.0%} | {m.effective_channels} / {m.agent_count} | "
             f"{m.channels_ratio:.0%} | {m.coverage_fill_rate:.0%} | "
-            f"{m.rounds} | {m.llm_calls} | {m.readers_failed} |"
+            f"{m.rounds} | {m.llm_calls} | {m.readers_failed} | {_render_reader_units(m)} |"
         )
+    lines.append("")
+    lines.append(
+        "> **「实读单元（每人 → 合并）」是曝光量操纵的验证点。** "
+        "若各臂在这一列上看不出差别，就说明「集中臂每人只读 N 条」根本没生效，"
+        "此时两臂的召回差异**不能**归因于分配方式。"
+    )
     lines.append("")
 
     if any(m.metrics.recall is None for m in results):
@@ -605,6 +647,9 @@ def render_summary(results: list[ArmResult], arms: list[Arm] | None = None) -> s
             lines.append(
                 f"- 非空分区 Reader {m.assigned_reader_count}｜产出 Claim 的 Reader {m.agent_count}｜输出 K*/已分配 Reader {m.assigned_channels_ratio:.1%}"
             )
+        if m.reader_units:
+            per = "、".join(f"{k}={v}" for k, v in m.reader_units.items())
+            lines.append(f"- 每 Reader 实读单元：{per}｜合并去重 {m.reader_union}")
         distinct = (
             str(m.distinct_fingerprints)
             if m.distinct_fingerprints is not None
@@ -659,6 +704,13 @@ def save_results(results: list[ArmResult], out_dir: Path) -> Path:
         if result.report_markdown:
             name = f"{result.metrics.task_id}__{result.metrics.arm}.md"
             (out_dir / name).write_text(result.report_markdown, encoding="utf-8")
+        if result.reader_evidence:
+            # 每 Reader 实读的证据 id：集中 vs 分散的可核验落点，必须落盘
+            rname = f"{result.metrics.task_id}__{result.metrics.arm}.readers.json"
+            (out_dir / rname).write_text(
+                json.dumps(result.reader_evidence, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
         if result.claims is not None:
             # 完整 claim 清单：抽查与后续分析的事实来源，不受报告的 40 条展示上限影响
             payload = [

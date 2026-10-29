@@ -89,6 +89,18 @@ class Settings(BaseSettings):
     max_rounds: int = 3
     seed: int = 0
     semantic_partitioning: bool = False
+    partition_assignment: Literal["hash", "greedy"] = "hash"
+    """分组到 Reader 的分配算法。
+
+    `hash`（默认）：按 `(seed, 轮次, 分组)` 哈希旋转——旧行为，已发布结果不变。
+    `greedy`：按负载贪心，使各 Reader 的条数近似相等。
+
+    默认保留 `hash` 是因为它决定「哪些文件落到同一个 Reader 手里」，
+    改它会改变所有历史结果的可比性。但当分组数少时哈希会严重失衡：实测各切片在
+    `group_depth=2` 下只有 4~5 个分组，配 3 个 Reader 时最坏出现 `1 / 25 / 0`——
+    一个 Reader 空转、两个负载差 25 倍。那种分布下「每个 Reader 预算相同」不成立，
+    受控对比会被分区不均讲圆，所以做「均匀曝光」的实验必须显式选 `greedy`。
+    """
     semantic_closure_hops: int = Field(default=1, ge=1, le=4)
     semantic_max_context_units: int = Field(default=8, ge=1, le=64)
     max_concurrency: int = 4
@@ -114,6 +126,36 @@ class Settings(BaseSettings):
       - 真实仓库平均 11,500 字符/文件 → 收到约 2 文件/批，配合 16000 的输出上限不再截断。
 
     置 0 可关闭，退化为"只按条数分批"。"""
+    max_units_per_reader: int = 0
+    """单个 Reader **在一轮内最多读入的证据条数**。0 = 不限（默认，旧行为完全不变）。
+
+    与 `max_evidence_per_call` 是两个不同维度的上限，不能互相替代：
+      - `max_evidence_per_call` 控制**一次模型调用**读几条，防的是单次输出被截断；
+      - 本项控制**一个 Reader 整轮**总共读几条，限定的是曝光量（预算）。
+
+    为什么要单独加这一项（实测教训）：S4 切片 26 个文件、每批 6 条、3 个 Reader，
+    共 6 次调用就把全部文件读完了——`stop_reason=budget_exhausted` 发生在**读完之后**。
+    于是 `redundancy=all` 的臂里「每个 Reader 读多少」根本不是变量，
+    「集中 vs 分散」的对照在数据上不成立。要构造这个对照，必须能强制每个 Reader
+    只读固定条数。
+
+    截断规则：按 `evidence_id` 排序后取前 N 条。排序而非随机，是为了让同一份语料
+    在任何臂、任何并发顺序下截断到**同一批**证据，否则截断噪声会污染两臂的差异。
+      - `redundancy=all`（集中）：所有 Reader 拿到同一批前 N 条 → 联合覆盖 = N；
+      - `redundancy=1`（分散）：各分区不相交，分区条数 ≤ N 时不被截断 → 联合覆盖 = 全集。
+    """
+    equal_exposure: bool = False
+    """是否让每个 Reader 的曝光量严格相等，即自动取 `ceil(语料条数 / Reader 数)`。
+
+    开启后 `max_units_per_reader` 的正数值被忽略（0 仍表示不限制）。
+
+    为什么要自动推导而不写死一个数字：受控对比要求「每人预算相同」**随语料规模伸缩**。
+    手写一个固定值，换个切片就不再是「每人 N/R」，而是一个既非平均、也非全部的数，
+    两臂的差异里就混进了「语料变大而预算没变」这个混淆因素。
+
+    配套使用 `partition_assignment=greedy`：如果分散臂的分区本身就不均匀
+    （实测出现过 `1 / 25 / 0`），再怎么设上限也无法让「每人预算相同」成立。
+    """
     report_max_items: int = 40
     """报告每个结论档位最多列出多少条。
 

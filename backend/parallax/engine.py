@@ -102,6 +102,7 @@ class ParallaxEngine:
             n_readers=settings.n_readers,
             redundancy=settings.redundancy,
             seed=settings.seed,
+            assignment=settings.partition_assignment,
         )
         if settings.semantic_partitioning:
             partitioner = SemanticClosurePartitioner(
@@ -110,6 +111,7 @@ class ParallaxEngine:
                 seed=settings.seed,
                 closure_hops=settings.semantic_closure_hops,
                 max_context_units=settings.semantic_max_context_units,
+                assignment=settings.partition_assignment,
             )
         pool = ReaderPool(
             client=client,
@@ -121,6 +123,9 @@ class ParallaxEngine:
             max_output_tokens=settings.llm_max_output_tokens,
             max_evidence_per_call=settings.max_evidence_per_call,
             max_chars_per_call=settings.llm_max_batch_chars,
+            max_units_per_reader=settings.max_units_per_reader,
+            equal_exposure=settings.equal_exposure,
+            n_readers=settings.n_readers,
         )
         store = reputation_store or InMemoryReputationStore()
 

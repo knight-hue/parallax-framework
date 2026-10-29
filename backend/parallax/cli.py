@@ -112,6 +112,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="逗号分隔的实验臂名，默认全部（见 experiment 帮助）",
     )
     experiment.add_argument("--readers", type=int, default=None, help="Reader 数量")
+    experiment.add_argument(
+        "--group-depth",
+        type=int,
+        default=2,
+        help="模块分组深度（证据适配器粒度）。默认 2 与历史结果一致；"
+        "但深度 2 下各切片只有 4~5 个分组，做「每人预算相同」的对比时分区会严重不均，"
+        "此时应改用 3 并配 --partition-assignment greedy",
+    )
+    experiment.add_argument(
+        "--equal-exposure",
+        action="store_true",
+        default=None,
+        help="每人曝光量自动取 ceil(语料条数 / Reader 数)：集中臂大家读同一批 N/R，"
+        "分散臂各读不同批、合并覆盖全集。这是「每人预算相同」受控对比的正确姿势",
+    )
     experiment.add_argument("--tasks", default=None, help="逗号分隔的任务 id，默认全部")
     experiment.add_argument("--list-arms", action="store_true", help="只列出可用实验臂后退出")
     experiment.add_argument(
@@ -131,6 +146,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="总 token 预算（不是单次输出上限，那个是 PARALLAX_LLM_MAX_OUTPUT_TOKENS），"
         "逗号分隔多档；达到预算后引擎停止",
+    )
+    experiment.add_argument(
+        "--max-units-per-reader",
+        type=int,
+        default=None,
+        help="单个 Reader **整轮**最多读几条证据（0=不限）。这是曝光量上限，"
+        "与单次调用条数（max_evidence_per_call）不是一回事；"
+        "集中臂设 N 后所有 Reader 读同一批 N 条，分散臂通常不会被截断",
+    )
+    experiment.add_argument(
+        "--partition-assignment",
+        choices=["hash", "greedy"],
+        default=None,
+        help="分组到 Reader 的分配算法。hash（默认）=旧行为；greedy=按负载贪心均衡，"
+        "分组数少（如 4 个组配 3 个 Reader）时必须用它，否则会分出空转的 Reader",
     )
     experiment.add_argument(
         "--variance-control",
@@ -249,6 +279,9 @@ def _overrides(args: argparse.Namespace) -> dict:
         "adaptive_scheduling": getattr(args, "adaptive_scheduling", None),
         "semantic_partitioning": getattr(args, "semantic_partitioning", None),
         "arbitrator": getattr(args, "arbitrator", None),
+        "max_units_per_reader": getattr(args, "max_units_per_reader", None),
+        "partition_assignment": getattr(args, "partition_assignment", None),
+        "equal_exposure": getattr(args, "equal_exposure", None),
     }
     return {k: v for k, v in pairs.items() if v is not None}
 
@@ -391,7 +424,9 @@ async def _run_experiment_cli(args: argparse.Namespace) -> int:
         if args.repeat > 1:
             print(f"══ 第 {rep_index}/{args.repeat} 次重复 ══")
 
-        results = await run_experiment(tasks, settings, arms=arms, on_arm_done=on_done)
+        results = await run_experiment(
+            tasks, settings, arms=arms, on_arm_done=on_done, group_depth=args.group_depth
+        )
         if not results:
             raise SystemExit("没有任何成功的实验臂")
 

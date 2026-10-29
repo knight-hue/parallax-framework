@@ -84,6 +84,7 @@ class BlindPartitioner:
         redundancy: int = 2,
         seed: int = 0,
         max_units_per_group: int = 0,
+        assignment: str = "hash",
     ) -> None:
         if n_readers < 1:
             raise ConfigurationError("n_readers 至少为 1")
@@ -91,11 +92,19 @@ class BlindPartitioner:
             raise ConfigurationError(
                 f"redundancy 必须落在 [1, n_readers] 内，当前 n_readers={n_readers} redundancy={redundancy}"
             )
+        if assignment not in {"hash", "greedy"}:
+            raise ConfigurationError("assignment 只能是 'hash' 或 'greedy'")
         self.n_readers = n_readers
         self.redundancy = redundancy
         self.seed = seed
         self.max_units_per_group = max_units_per_group
         """0 = 自动（ceil(N / n_readers)）。显式给值可覆盖，便于实验对比。"""
+        self.assignment = assignment
+        """分组到 Reader 的分配算法。
+
+        `hash`（默认）：按 `(seed, round, group)` 的哈希旋转，等价于旧行为。
+        `greedy`：按块大小降序贪心装到当前负载最低的 Reader，使各 Reader 条数近似相等。
+        """
 
     def reader_ids(self, round_index: int) -> list[str]:
         """**每一轮生成全新的 Reader 身份**。
@@ -123,13 +132,17 @@ class BlindPartitioner:
         reader_ids = self.reader_ids(round_index)
         buckets: dict[str, list[EvidenceUnit]] = {rid: [] for rid in reader_ids}
 
-        for group, group_units, chunk_index in self._chunked_groups(candidates):
-            # 块序号参与旋转：否则同组的各块会分给同一批 Reader，切块就白做了。
-            # 未切块的组 chunk_index 恒为 0，旋转结果与旧实现完全一致。
-            offset = (self._rotation_offset(group, round_index) + chunk_index) % self.n_readers
-            for k in range(self.redundancy):
-                rid = reader_ids[(offset + k) % self.n_readers]
-                buckets[rid].extend(group_units)
+        chunks = self._chunked_groups(candidates)
+        if self.assignment == "greedy":
+            self._assign_greedy(chunks, reader_ids, buckets)
+        else:
+            for group, group_units, chunk_index in chunks:
+                # 块序号参与旋转：否则同组的各块会分给同一批 Reader，切块就白做了。
+                # 未切块的组 chunk_index 恒为 0，旋转结果与旧实现完全一致。
+                offset = (self._rotation_offset(group, round_index) + chunk_index) % self.n_readers
+                for k in range(self.redundancy):
+                    rid = reader_ids[(offset + k) % self.n_readers]
+                    buckets[rid].extend(group_units)
 
         return [
             Partition(
@@ -186,6 +199,36 @@ class BlindPartitioner:
                 out.append((group, group_units[cursor : cursor + size], i))
                 cursor += size
         return out
+
+    def _assign_greedy(
+        self,
+        chunks: list[tuple[str, list[EvidenceUnit], int]],
+        reader_ids: list[str],
+        buckets: dict[str, list[EvidenceUnit]],
+    ) -> None:
+        """按负载贪心分配，使每个 Reader 的条数尽量相等。
+
+        ## 为什么需要这个模式（实测事故）
+
+        按组哈希轮转在**组数少**时会严重失衡。各切片在 `group_depth=2` 下只有
+        4~5 个分组，而真实项目的分组大小天然不均，于是 3 个 Reader 分 4 个组时
+        必然撞车。实测最坏情况（S4 深度 3）出现 `1 / 25 / 0`——一个 Reader 空转，
+        两个 Reader 负载差 25 倍。这种分布下「每个 Reader 预算相同」根本不成立，
+        「集中 vs 分散」的受控对比也就失去了意义（差异会被分区不均讲圆）。
+
+        ## 默认仍是 hash
+
+        `hash` 唯一对应旧行为，已发布的实验结果不受影响；`greedy` 是需要均衡
+        分配时的**显式选择**。分配过程完全确定：块按条数降序（同条数按分组名、
+        块序号），Reader 按负载升序（同负载按下标），因此可复现、可重算。
+        """
+        ordered = sorted(chunks, key=lambda c: (-len(c[1]), c[0], c[2]))
+        loads: dict[str, int] = dict.fromkeys(reader_ids, 0)
+        for _group, group_units, _chunk_index in ordered:
+            targets = sorted(reader_ids, key=lambda rid: (loads[rid], rid))[: self.redundancy]
+            for rid in targets:
+                buckets[rid].extend(group_units)
+                loads[rid] += len(group_units)
 
     def _rotation_offset(self, group: str, round_index: int) -> int:
         """由 (seed, round_index, group) 派生起始 Reader 下标。

@@ -349,6 +349,18 @@ class ArmMetrics(BaseModel):
     必须与「漏检」分开统计：Reader 挂了会拉低召回，
     若混在一起就会把工程故障误读成机制缺陷。
     """
+    reader_units: dict[str, int] = Field(default_factory=dict)
+    """每个 Reader **实际读入**的证据条数（reader_id -> 条数）。多轮运行含每轮的 Reader。
+
+    存在的理由：`metrics.json` 里此前没有任何字段能证明「每个 Reader 读了多少」，
+    于是「让集中臂每人只读 N 个文件」这类操纵是否真生效，只能靠嘴说。
+    """
+    reader_union: int = 0
+    """所有 Reader 合并后读到的**不同**证据条数。
+
+    集中臂 ≈ 单人所读（大家都读同一批），分散臂 ≈ 全集。
+    这个数与 `coverage_fill_rate` 不是一回事：后者看的是每条证据被几个 Reader 看到。
+    """
     prompt_tokens: int = 0
     completion_tokens: int = 0
     stop_reason: str = ""
@@ -397,6 +409,7 @@ def compute_metrics(
     usage: dict[str, int],
     reader_count: int,
     readers_failed: int = 0,
+    reader_evidence: dict[str, list[str]] | None = None,
 ) -> ArmMetrics:
     match = match_claims(claims, defects)
 
@@ -439,6 +452,8 @@ def compute_metrics(
         llm_failures=usage.get("failures", 0),
         schema_retries=usage.get("schema_retries", 0),
         readers_failed=readers_failed,
+        reader_units={rid: len(ids) for rid, ids in (reader_evidence or {}).items()},
+        reader_union=len({eid for ids in (reader_evidence or {}).values() for eid in ids}),
         prompt_tokens=usage.get("prompt_tokens", 0),
         completion_tokens=usage.get("completion_tokens", 0),
         stop_reason=report.manifest.stop_reason.value if report.manifest.stop_reason else "",
