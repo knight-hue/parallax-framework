@@ -1,0 +1,2768 @@
+[
+  {
+    "claim_id": "a1a825b81647",
+    "fingerprint": "app/infrastructure/budget.py#logic@80",
+    "statement": "[logic] app/infrastructure/budget.py:88-94 init_budget 对 total_limit == 0 的处理与文档约定不一致（0 应表示不启用，但实际创建了预算实例）（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/budget.py:88-94",
+    "rationale": "模块文档与 settings 都约定 TOKEN_BUDGET_TOTAL=0 表示不启用预算（默认值就是 0）。但 init_budget 只在 total_limit < 0 时返回 None，total_limit == 0 时会创建一个 total_limit=0 的 TokenBudget 并写入 ContextVar。此时 remaining_ratio 因 total_limit<=0 返回 1.0，tier 恒为 main，看似无害；但一旦 charge 被调用，used 增长，remaining 变负，而 remaining_ratio 仍返回 1.0（因为 total_limit<=0 分支），所以档位永远停在 main，预算护栏完全失效——既没有按预期“不启用”，也没有真正生效。更关键的是 get_budget() 返回非 None，调用方会认为预算已启用并据此做分支（例如判断 exhausted、注入 hint），行为与“未启用”路径不同。",
+    "title": "init_budget 对 total_limit == 0 的处理与文档约定不一致（0 应表示不启用，但实际创建了预算实例）",
+    "line_start": 88,
+    "line_end": 94,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "27d90514a9b4",
+        "adapter": "repo",
+        "locator": "app/infrastructure/budget.py:88-94",
+        "quote": "def init_budget(total_limit: int) -> Optional[TokenBudget]:\n    \"\"\"在意图入口初始化预算；total_limit <= 0 表示不启用。\"\"\"\n    if total_limit < 0:\n        _budget_var.set(None)\n        return None\n    budget = TokenBudget(total_limit=total_limit)\n    _budget_var.set(budget)\n    return budget"
+      }
+    ]
+  },
+  {
+    "claim_id": "84f71c80ef8a",
+    "fingerprint": "app/infrastructure/budget.py#boundary@60",
+    "statement": "[boundary] app/infrastructure/budget.py:76-80 remaining_ratio 在 total_limit<=0 时恒为 1.0，导致超支后档位永不降级（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/budget.py:76-80",
+    "rationale": "remaining_ratio 对 total_limit<=0 直接返回 1.0，这是把“未启用”的语义塞进了比例计算。若 total_limit 为 0 的实例被创建（见上一条），无论 used 多大，ratio 都是 1.0，tier 恒为 main，exhausted 恒为 False。这使“预算耗尽”这一安全兜底在边界值 0 上完全失效。",
+    "title": "remaining_ratio 在 total_limit<=0 时恒为 1.0，导致超支后档位永不降级",
+    "line_start": 76,
+    "line_end": 80,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "27d90514a9b4",
+        "adapter": "repo",
+        "locator": "app/infrastructure/budget.py:76-80",
+        "quote": "    @property\n    def remaining_ratio(self) -> float:\n        if self.total_limit <= 0:\n            return 1.0\n        return self.remaining / self.total_limit"
+      }
+    ]
+  },
+  {
+    "claim_id": "7bd462502d5d",
+    "fingerprint": "app/infrastructure/resilience.py#concurrency@80",
+    "statement": "[concurrency] app/infrastructure/resilience.py:88-99 熔断半开探测状态在 allow 中被无条件置位，并发调用会放行多个探测请求（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/resilience.py:88-99",
+    "rationale": "allow() 在冷却期满后无条件设置 half_open_probing=True 并返回 True，没有检查是否已有探测在飞。多个并发工具调用同时到达时，每个都会看到 opened_at 非空、elapsed>=reset_seconds，于是全部被放行，半开状态被重复进入，失去“只放一次探测”的语义。若这些探测都失败，record_failure 中 half_open_probing 分支会把 opened_at 重置并清 half_open_probing，但多个并发失败会互相覆盖计时，冷却窗口被反复重置，熔断器可能长期无法稳定打开。",
+    "title": "熔断半开探测状态在 allow 中被无条件置位，并发调用会放行多个探测请求",
+    "line_start": 88,
+    "line_end": 99,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "195131b30098",
+        "adapter": "repo",
+        "locator": "app/infrastructure/resilience.py:88-99",
+        "quote": "    def allow(self, tool_name: str, now: Optional[float] = None) -> bool:\n        \"\"\"是否放行本次调用；冷却期满自动转半开并放行一次探测。\"\"\"\n        state = self._state(tool_name)\n        if state.opened_at is None:\n            return True\n        elapsed = (now or time.monotonic()) - state.opened_at\n        if elapsed < self.reset_seconds:\n            return False\n        state.half_open_probing = True\n        return True"
+      }
+    ]
+  },
+  {
+    "claim_id": "8e83bc270ffb",
+    "fingerprint": "app/infrastructure/resilience.py#logic@100",
+    "statement": "[logic] app/infrastructure/resilience.py:101-113 record_failure 在非半开路径下不重置 opened_at，连续失败计数在熔断打开后继续累加但无影响；真正问题是半开失败后 consecutive_failures 未清零（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/resilience.py:101-113",
+    "rationale": "半开探测失败时直接重置 opened_at 并清 half_open_probing，consecutive_failures 保持原值（>=threshold）。下次冷却期满再探测失败仍走半开分支，行为正确；探测成功则 record_success 整体替换为新的 _CircuitState，计数归零。因此计数残留不会导致错误行为，不构成缺陷。",
+    "title": "record_failure 在非半开路径下不重置 opened_at，连续失败计数在熔断打开后继续累加但无影响；真正问题是半开失败后 consecutive_failures 未清零",
+    "line_start": 101,
+    "line_end": 113,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "195131b30098",
+        "adapter": "repo",
+        "locator": "app/infrastructure/resilience.py:101-113",
+        "quote": "    def record_failure(self, tool_name: str, now: Optional[float] = None) -> None:\n        state = self._state(tool_name)\n        if state.half_open_probing:\n            # 半开探测再次失败：重新打开并重置冷却计时\n            state.opened_at = now or time.monotonic()\n            state.half_open_probing = False\n            return\n        state.consecutive_failures += 1\n        if state.consecutive_failures >= self.failure_threshold:\n            state.opened_at = now or time.monotonic()"
+      }
+    ]
+  },
+  {
+    "claim_id": "c5d4b41604ff",
+    "fingerprint": "app/infrastructure/resilience.py#resource_leak@140",
+    "statement": "[resource_leak] app/infrastructure/resilience.py:155-175 超时/异常路径下 _collect 已消费的 chunk 被丢弃，且 next_handler 的生成器未被显式关闭（确认存在缺陷）",
+    "claim_type": "resource_leak",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/resilience.py:155-175",
+    "rationale": "asyncio.wait_for 在超时时会取消 _collect 协程，但 _collect 内部 `async for chunk in next_handler(...)` 的异步生成器在协程被取消时是否被正确 aclose 取决于事件循环与生成器实现；若未关闭，下游工具持有的资源（如 HTTP 连接、数据库游标）可能泄漏。此外，超时前已收集的 chunks 被整体丢弃，Agent 看不到任何部分结果，这与“不把半截流交给 Agent”的设计一致，但资源清理未被显式保证。",
+    "title": "超时/异常路径下 _collect 已消费的 chunk 被丢弃，且 next_handler 的生成器未被显式关闭",
+    "line_start": 155,
+    "line_end": 175,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "195131b30098",
+        "adapter": "repo",
+        "locator": "app/infrastructure/resilience.py:155-175",
+        "quote": "            async def _collect() -> list[ToolChunk]:\n                collected: list[ToolChunk] = []\n                async for chunk in next_handler(**input_kwargs):\n                    collected.append(chunk)\n                return collected\n\n            chunks = await asyncio.wait_for(_collect(), timeout=timeout)"
+      }
+    ]
+  },
+  {
+    "claim_id": "3f8766e153a3",
+    "fingerprint": "app/infrastructure/resilience.py#error_handling@180",
+    "statement": "[error_handling] app/infrastructure/resilience.py:186-191 工具返回空 chunks 时被当作成功，可能掩盖下游静默失败（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/resilience.py:186-191",
+    "rationale": "空 chunks 走 else 分支 record_success，这是合理的：工具正常返回但无内容不应计为失败，否则会误熔断。不构成缺陷。",
+    "title": "工具返回空 chunks 时被当作成功，可能掩盖下游静默失败",
+    "line_start": 186,
+    "line_end": 191,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "195131b30098",
+        "adapter": "repo",
+        "locator": "app/infrastructure/resilience.py:186-191",
+        "quote": "        if chunks and chunks[-1].state == ToolResultState.ERROR:\n            await _record_failure(self._registry, tool_name)\n        else:\n            await _record_success(self._registry, tool_name)"
+      }
+    ]
+  },
+  {
+    "claim_id": "c8c5675c09ee",
+    "fingerprint": "app/domain/catalog/product_search_spec.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/product_search_spec.py:27-30 ProductSearchSpec 未校验 top_k 为正，注释称由调用方保证但无强制（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product_search_spec.py:27-30",
+    "rationale": "注释明确说明 top_k 由调用方保证为正，且该值对象是内部构造，未校验不构成可复现的错误行为；若调用方传入 0 或负数，检索链路会自行处理。属于设计取舍，不报告为缺陷。",
+    "title": "ProductSearchSpec 未校验 top_k 为正，注释称由调用方保证但无强制",
+    "line_start": 27,
+    "line_end": 30,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "13e4eea2c850",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product_search_spec.py:27-30",
+        "quote": "    def __post_init__(self) -> None:\n        if not self.normalized_query or not self.normalized_query.strip():\n            raise ValueError(\"ProductSearchSpec.normalized_query required\")\n        # top_k 由调用方保证为正"
+      }
+    ]
+  },
+  {
+    "claim_id": "09521222316a",
+    "fingerprint": "app/infrastructure/settings.py#logic@160",
+    "statement": "[logic] app/infrastructure/settings.py:175-176 settings 中布尔解析对 'FALSE'/'False ' 等大小写与空白变体处理不一致（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [
+      "b84ebef15759"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/settings.py:175-176",
+    "rationale": "多处使用 `os.getenv(..., \"1\") not in (\"0\", \"false\", \"False\")` 解析布尔。若环境变量设为 \"FALSE\"、\"False \"（带空格）或 \"no\"，会被当作 True，与运维预期相反。例如 SEMANTIC_CACHE_ENABLED=FALSE 仍会开启语义缓存。这是可复现的配置解析缺陷。",
+    "title": "settings 中布尔解析对 'FALSE'/'False ' 等大小写与空白变体处理不一致",
+    "line_start": 175,
+    "line_end": 176,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "2cc7c376f2fe",
+        "adapter": "repo",
+        "locator": "app/infrastructure/settings.py:175-176",
+        "quote": "        semantic_cache_enabled=os.getenv(\"SEMANTIC_CACHE_ENABLED\", \"1\") not in (\"0\", \"false\", \"False\"),"
+      }
+    ]
+  },
+  {
+    "claim_id": "b84ebef15759",
+    "fingerprint": "app/infrastructure/settings.py#logic@160",
+    "statement": "[logic] app/infrastructure/settings.py:168-172 database_url 使用 `or` 链，空字符串 DATABASE_URL 会回落到 MYSQL_URL 或 SQLite，符合预期（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [
+      "09521222316a",
+      "d8991c7e689a"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/settings.py:168-172",
+    "rationale": "`os.getenv(\"DATABASE_URL\") or os.getenv(\"MYSQL_URL\") or default` 对空字符串会继续回落，这是有意为之的兼容逻辑，不构成缺陷。",
+    "title": "database_url 使用 `or` 链，空字符串 DATABASE_URL 会回落到 MYSQL_URL 或 SQLite，符合预期",
+    "line_start": 168,
+    "line_end": 172,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "2cc7c376f2fe",
+        "adapter": "repo",
+        "locator": "app/infrastructure/settings.py:168-172",
+        "quote": "        database_url=(\n            os.getenv(\"DATABASE_URL\")\n            or os.getenv(\"MYSQL_URL\")\n            or f\"sqlite+aiosqlite:///{data_dir / 'globex.db'}\"\n        ),"
+      }
+    ]
+  },
+  {
+    "claim_id": "7abb9e52e8e9",
+    "fingerprint": "app/infrastructure/context.py#error_handling@20",
+    "statement": "[error_handling] app/infrastructure/context.py:38-40 ShoppingContext.reset 未校验 token 来源，跨上下文 reset 会抛 ValueError 而非静默（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/context.py:38-40",
+    "rationale": "ContextVar.reset 在 token 不属于当前上下文时抛 ValueError，这是标准库行为，调用方应保证 set/reset 配对。不构成缺陷。",
+    "title": "ShoppingContext.reset 未校验 token 来源，跨上下文 reset 会抛 ValueError 而非静默",
+    "line_start": 38,
+    "line_end": 40,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "24481c1442d8",
+        "adapter": "repo",
+        "locator": "app/infrastructure/context.py:38-40",
+        "quote": "    @staticmethod\n    def reset(token) -> None:\n        _current_snapshot.reset(token)"
+      }
+    ]
+  },
+  {
+    "claim_id": "78baf40d63e5",
+    "fingerprint": "app/infrastructure/llm.py#resource_leak@80",
+    "statement": "[resource_leak] app/infrastructure/llm.py:88-100 流式分支的闸门释放依赖调用方消费生成器，未消费则名额永久泄漏（确认存在缺陷）",
+    "claim_type": "resource_leak",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/llm.py:88-100",
+    "rationale": "__call__ 在流式分支把 slot 交给 _release_after_stream 包装生成器，只有生成器被 async for 消费（或 aclose）时 finally 才会执行 slot.__aexit__。若调用方拿到生成器后未迭代、或仅部分迭代后丢弃引用，asyncio 生成器被 GC 时 finally 虽可能执行，但依赖 GC 时机；更关键的是若调用方把生成器存起来不消费，闸门名额一直不释放，GatewayThrottle 并发额度被永久占用，后续请求全部阻塞。这是把资源生命周期交给调用方的典型泄漏点。",
+    "title": "流式分支的闸门释放依赖调用方消费生成器，未消费则名额永久泄漏",
+    "line_start": 88,
+    "line_end": 100,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "935ea9c03d01",
+        "adapter": "repo",
+        "locator": "app/infrastructure/llm.py:88-100",
+        "quote": "        if not hasattr(result, \"__aiter__\"):\n            await slot.__aexit__(None, None, None)\n            _charge_budget(result)\n            return result\n        return self._release_after_stream(slot, result)"
+      }
+    ]
+  },
+  {
+    "claim_id": "d3cf43f3fa66",
+    "fingerprint": "app/infrastructure/llm.py#error_handling@160",
+    "statement": "[error_handling] app/infrastructure/llm.py:168-180 重试循环捕获 BaseException 会把 CancelledError 当作瞬时错误重试（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/llm.py:168-180",
+    "rationale": "_call_with_fallback 用 except BaseException 捕获，随后 is_transient_error(err) 判断。若 is_transient_error 对 asyncio.CancelledError 返回 True（或实现宽松），任务取消会被吞掉并进入 asyncio.sleep 重试，导致取消无法及时生效、请求被延长。即便 is_transient_error 返回 False，用 BaseException 捕获也会把 KeyboardInterrupt/SystemExit 纳入判断路径，语义不当。正确做法是只捕获 Exception 并显式放行 CancelledError。",
+    "title": "重试循环捕获 BaseException 会把 CancelledError 当作瞬时错误重试",
+    "line_start": 168,
+    "line_end": 180,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "935ea9c03d01",
+        "adapter": "repo",
+        "locator": "app/infrastructure/llm.py:168-180",
+        "quote": "            except BaseException as err:\n                if not is_transient_error(err):\n                    raise\n                last_error = err"
+      }
+    ]
+  },
+  {
+    "claim_id": "9d307f7ad620",
+    "fingerprint": "app/infrastructure/llm.py#logic@120",
+    "statement": "[logic] app/infrastructure/llm.py:128-140 预算档位降级时 _publish_budget_tier 在 fallback 为 None 时静默跳过，与文档'降级不静默'不符（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/llm.py:128-140",
+    "rationale": "_invoke_upstream 中只有 self._fallback is not None 才切模型并发布事件；_publish_budget_tier 内部也再次判空。当没有备用模型时确实无法降级，不发布事件是合理的——没有发生降级就无需告知。文档'降级不静默'针对的是实际发生的降级，此处逻辑自洽。",
+    "title": "预算档位降级时 _publish_budget_tier 在 fallback 为 None 时静默跳过，与文档'降级不静默'不符",
+    "line_start": 128,
+    "line_end": 140,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "935ea9c03d01",
+        "adapter": "repo",
+        "locator": "app/infrastructure/llm.py:128-140",
+        "quote": "            if self._fallback is not None:\n                logger.info(\"Token 预算档位 %s，切用备用模型 %s\", tier, self._fallback.model)\n                self._publish_budget_tier(tier)\n                return await self._fallback(messages, tools, tool_choice, **kwargs)"
+      }
+    ]
+  },
+  {
+    "claim_id": "f9f2e055fd4e",
+    "fingerprint": "app/infrastructure/eventbus.py#concurrency@100",
+    "statement": "[concurrency] app/infrastructure/eventbus.py:118-130 deliver_local 对同一事件重复投递时 seq 会重复递增，背板回环导致客户端 seq 不单调（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/eventbus.py:118-130",
+    "rationale": "publish 先 deliver_local 赋 seq 并广播到背板；背板把事件转发回本进程时又调用 deliver_local，_sequence 再次 +1 生成新 seq 并再次 _remember。若背板把本进程自己发布的事件也回传（Redis pub/sub 默认会回传给发布者所在订阅），同一逻辑事件会被投递两次、占用两个 seq，客户端时间线出现重复事件且 seq 跳号。代码注释声称'避免回环广播'，但 deliver_local 本身没有任何去重/来源标记机制，仅靠调用方约定。",
+    "title": "deliver_local 对同一事件重复投递时 seq 会重复递增，背板回环导致客户端 seq 不单调",
+    "line_start": 118,
+    "line_end": 130,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "31d1e54cf47c",
+        "adapter": "repo",
+        "locator": "app/infrastructure/eventbus.py:118-130",
+        "quote": "    def deliver_local(self, event: TradeEvent) -> TradeEvent:\n        sequenced = self._sequence(event)\n        for queue in self._subscribers.get(sequenced.shopping_session_id, []):\n            queue.put_nowait(sequenced)\n        return sequenced"
+      }
+    ]
+  },
+  {
+    "claim_id": "4ae4ff07561d",
+    "fingerprint": "app/infrastructure/eventbus.py#boundary@140",
+    "statement": "[boundary] app/infrastructure/eventbus.py:148-158 会话淘汰时只清 _seq 不清 _history 之外的订阅者，且淘汰后 seq 从 1 重新开始导致客户端补发错乱（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/eventbus.py:148-158",
+    "rationale": "_remember 在会话数超限时 popitem 淘汰最久未活跃会话并 self._seq.pop(evicted)。但该会话的 _subscribers 队列并未清理（若仍有活跃订阅者，其队列继续存在但历史被清空）。更严重的是被淘汰会话若之后再次 publish，_seq 从 0 重新计数，新事件 seq=1，而客户端此前已收到 seq 到 N，重连时带 last_event_id=N 请求补发，replay 返回空且新事件 seq=1 < N，客户端按 seq 去重会丢弃这些新事件，时间线永久缺失。",
+    "title": "会话淘汰时只清 _seq 不清 _history 之外的订阅者，且淘汰后 seq 从 1 重新开始导致客户端补发错乱",
+    "line_start": 148,
+    "line_end": 158,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "31d1e54cf47c",
+        "adapter": "repo",
+        "locator": "app/infrastructure/eventbus.py:148-158",
+        "quote": "        if buffer is None:\n            while len(self._history) >= MAX_TRACKED_SESSIONS:\n                evicted, _ = self._history.popitem(last=False)\n                self._seq.pop(evicted, None)\n            buffer = deque(maxlen=HISTORY_LIMIT)\n            self._history[session_id] = buffer"
+      }
+    ]
+  },
+  {
+    "claim_id": "33fb473fc09f",
+    "fingerprint": "app/infrastructure/eventbus.py#error_handling@160",
+    "statement": "[error_handling] app/infrastructure/eventbus.py:175-185 publish 在无运行事件循环时静默跳过广播，跨进程事件丢失（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/eventbus.py:175-185",
+    "rationale": "_broadcast 捕获 RuntimeError 并跳过广播，注释说明这是同步测试场景的兜底，本地投递已完成。生产环境 publish 都在事件循环内调用，不会触发。这是有意的降级设计，不是缺陷。",
+    "title": "publish 在无运行事件循环时静默跳过广播，跨进程事件丢失",
+    "line_start": 175,
+    "line_end": 185,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "31d1e54cf47c",
+        "adapter": "repo",
+        "locator": "app/infrastructure/eventbus.py:175-185",
+        "quote": "        except RuntimeError:\n            # 没有运行中的事件循环（例如同步测试里直接调 publish）：跳过广播，本地投递已完成\n            pass"
+      }
+    ]
+  },
+  {
+    "claim_id": "e42285601e91",
+    "fingerprint": "app/infrastructure/tracing.py#logic@20",
+    "statement": "[logic] app/infrastructure/tracing.py:33-52 setup_tracing 的 _initialized 在导入失败时不置位，但重复调用会重复创建 provider（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/tracing.py:33-52",
+    "rationale": "_initialized 在成功创建 provider 后才置 True，若中途抛异常（如导入失败）则下次调用会重试，这是合理的重试语义。成功路径下幂等。不是缺陷。",
+    "title": "setup_tracing 的 _initialized 在导入失败时不置位，但重复调用会重复创建 provider",
+    "line_start": 33,
+    "line_end": 52,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "91a8dc35e497",
+        "adapter": "repo",
+        "locator": "app/infrastructure/tracing.py:33-52",
+        "quote": "    provider = TracerProvider(resource=Resource.create({\"service.name\": \"globex-agent\"}))\n    provider.add_span_processor(\n        BatchSpanProcessor(OTLPSpanExporter(endpoint=f\"{settings.otlp_endpoint.rstrip('/')}/v1/traces\")),\n    )\n    trace.set_tracer_provider(provider)\n    _initialized = True"
+      }
+    ]
+  },
+  {
+    "claim_id": "9d9a7dcaa23e",
+    "fingerprint": "app/infrastructure/llm.py#api_misuse@240",
+    "statement": "[api_misuse] app/infrastructure/llm.py:246-262 create_chat_model 中 fallback 与主模型共用同一 credential 对象（确认并非缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/llm.py:246-262",
+    "rationale": "fallback 与主模型共用 credential 是合理的——同一网关同一 api_key，只是 model 名不同。OpenAICredential 是不可变配置对象，共享无副作用。不是缺陷。",
+    "title": "create_chat_model 中 fallback 与主模型共用同一 credential 对象",
+    "line_start": 246,
+    "line_end": 262,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "935ea9c03d01",
+        "adapter": "repo",
+        "locator": "app/infrastructure/llm.py:246-262",
+        "quote": "    fallback = (\n        OpenAIChatModel(model=settings.llm_fallback_model, **common)\n        if settings.llm_fallback_model and settings.llm_fallback_model != settings.llm_model\n        else None\n    )"
+      }
+    ]
+  },
+  {
+    "claim_id": "b7fd4f7f6c72",
+    "fingerprint": "app/infrastructure/llm.py#error_handling@100",
+    "statement": "[error_handling] app/infrastructure/llm.py:102-114 _release_after_stream 在流异常时用 __aexit__(None,None,None) 掩盖异常（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/llm.py:102-114",
+    "rationale": "_release_after_stream 的 finally 中调用 slot.__aexit__(None, None, None)，无论流是正常结束还是抛异常都传 None。若 GatewayThrottle 的 __aexit__ 依赖异常信息做统计/熔断（如记录失败次数），流式路径的异常永远不会被上报，熔断器无法感知上游流式失败。同时 finally 中若 __aexit__ 自身抛异常会覆盖原始异常。",
+    "title": "_release_after_stream 在流异常时用 __aexit__(None,None,None) 掩盖异常",
+    "line_start": 102,
+    "line_end": 114,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "935ea9c03d01",
+        "adapter": "repo",
+        "locator": "app/infrastructure/llm.py:102-114",
+        "quote": "        finally:\n            # 流式的 usage 在最后一个 chunk 上，读完再记账\n            _charge_budget(last)\n            await slot.__aexit__(None, None, None)"
+      }
+    ]
+  },
+  {
+    "claim_id": "5f1cf0aa0e13",
+    "fingerprint": "app/domain/catalog/money.py#error_handling@20",
+    "statement": "[error_handling] app/domain/catalog/money.py:33-36 Money.from_major_units 对非数值输入抛出 TypeError 而非 ValueError，且未校验 currency 前先做乘法（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/money.py:33-36",
+    "rationale": "from_major_units 直接调用 round(major * 100)，若 major 为 None 或字符串会抛 TypeError；但这是 Python 常规行为，且最终仍会经 Money.of 校验 currency 与 amount。round 返回 int，amount 校验通过。不构成真实缺陷。",
+    "title": "Money.from_major_units 对非数值输入抛出 TypeError 而非 ValueError，且未校验 currency 前先做乘法",
+    "line_start": 33,
+    "line_end": 36,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "9e8d5943dd21",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/money.py:33-36",
+        "quote": "    @staticmethod\n    def from_major_units(major: float, currency: str) -> \"Money\":\n        # 简化处理：所有支持币种均按 100 倍换算（JPY 实际为 1，demo 暂统一）\n        return Money.of(round(major * 100), currency)"
+      }
+    ]
+  },
+  {
+    "claim_id": "d22b8800e863",
+    "fingerprint": "app/domain/catalog/money.py#logic@20",
+    "statement": "[logic] app/domain/catalog/money.py:33-36 JPY 等零小数位币种按 100 倍换算导致金额放大 100 倍（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [
+      "e43fdf0c37f2"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/money.py:33-36",
+    "rationale": "SUPPORTED_CURRENCIES 包含 JPY，而 JPY 的最小货币单位就是 1 日元（无小数位）。from_major_units 对所有币种统一乘 100，to_major_units 统一除 100，因此 1000 JPY 会被存成 100000 minor units，再显示为 1000.00 JPY，语义上把 1000 日元当成了 1000 分。注释承认是简化，但代码对外暴露的 to_major_units/__str__ 会给出错误金额，属于真实逻辑缺陷（跨境结算场景）。",
+    "title": "JPY 等零小数位币种按 100 倍换算导致金额放大 100 倍",
+    "line_start": 33,
+    "line_end": 36,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "9e8d5943dd21",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/money.py:33-36",
+        "quote": "    @staticmethod\n    def from_major_units(major: float, currency: str) -> \"Money\":\n        # 简化处理：所有支持币种均按 100 倍换算（JPY 实际为 1，demo 暂统一）\n        return Money.of(round(major * 100), currency)"
+      }
+    ]
+  },
+  {
+    "claim_id": "e43fdf0c37f2",
+    "fingerprint": "app/domain/catalog/money.py#logic@20",
+    "statement": "[logic] app/domain/catalog/money.py:38-46 Money.add/multiply 直接构造实例绕过 of 校验，但结果仍满足不变量（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [
+      "d22b8800e863"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/money.py:38-46",
+    "rationale": "add 与 multiply 用 Money(...) 直接构造而非 Money.of(...)，但两者输入均已校验为非负整数（add 的两个操作数来自已构造的 Money，multiply 校验了 quantity），结果必然非负整数，currency 也来自已校验实例。不变量未被破坏，不构成缺陷。",
+    "title": "Money.add/multiply 直接构造实例绕过 of 校验，但结果仍满足不变量",
+    "line_start": 38,
+    "line_end": 46,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "9e8d5943dd21",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/money.py:38-46",
+        "quote": "    def add(self, other: \"Money\") -> \"Money\":\n        self._assert_same_currency(other)\n        return Money(self.amount_in_minor_units + other.amount_in_minor_units, self.currency)"
+      }
+    ]
+  },
+  {
+    "claim_id": "6163f157c57b",
+    "fingerprint": "app/domain/catalog/product.py#logic@20",
+    "statement": "[logic] app/domain/catalog/product.py:38-39 primary_sku 返回 skus[-1] 而非首个 SKU，与“主 SKU”语义相反（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [
+      "0dce63d15651"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product.py:38-39",
+    "rationale": "方法名为 primary_sku，但返回列表最后一个元素。若 SKU 列表按默认/主推顺序排列（常见约定首个为主 SKU），则返回的是最次要的 SKU，导致展示价、加购默认项错误。代码中没有任何排序或标记说明最后一个才是主 SKU，语义与实现不一致。",
+    "title": "primary_sku 返回 skus[-1] 而非首个 SKU，与“主 SKU”语义相反",
+    "line_start": 38,
+    "line_end": 39,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "e0e973290a93",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product.py:38-39",
+        "quote": "    def primary_sku(self) -> Sku:\n        return self.skus[-1]"
+      }
+    ]
+  },
+  {
+    "claim_id": "54d25a28ee3a",
+    "fingerprint": "app/domain/catalog/product.py#logic@40",
+    "statement": "[logic] app/domain/catalog/product.py:45-51 searchable_text 对 highlight.detail 为空时产生多余空格，但不影响召回（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product.py:45-51",
+    "rationale": "detail 默认空串时 f\"{h.label} {h.detail}\" 会带尾随空格，join 后出现连续空格。这只是文本格式瑕疵，不影响分词/召回正确性，不构成真实缺陷。",
+    "title": "searchable_text 对 highlight.detail 为空时产生多余空格，但不影响召回",
+    "line_start": 45,
+    "line_end": 51,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "e0e973290a93",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product.py:45-51",
+        "quote": "        highlight_text = \" \".join(f\"{h.label} {h.detail}\" for h in self.highlights)"
+      }
+    ]
+  },
+  {
+    "claim_id": "122fb43b0c52",
+    "fingerprint": "app/infrastructure/throttle.py#performance@40",
+    "statement": "[performance] app/infrastructure/throttle.py:47-55 GatewayThrottle._space_out 在持锁期间 sleep，串行化所有请求起跑，吞吐被 min_interval 严格限制（确认并非缺陷）",
+    "claim_type": "performance",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/throttle.py:47-55",
+    "rationale": "在 _interval_lock 内 sleep 确实会串行化起跑时刻，但这正是“请求起点间隔”限流的预期语义：相邻请求起点至少间隔 min_interval。锁只保护起跑时刻计算，不覆盖请求执行，因此不会把并发压成 1。属于设计意图，不是缺陷。",
+    "title": "GatewayThrottle._space_out 在持锁期间 sleep，串行化所有请求起跑，吞吐被 min_interval 严格限制",
+    "line_start": 47,
+    "line_end": 55,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "a39c62399ddd",
+        "adapter": "repo",
+        "locator": "app/infrastructure/throttle.py:47-55",
+        "quote": "        async with self._interval_lock:\n            wait = self._min_interval - (time.monotonic() - self._last_start)\n            if wait > 0:\n                await asyncio.sleep(wait)\n            self._last_start = time.monotonic()"
+      }
+    ]
+  },
+  {
+    "claim_id": "068c64a4b2f7",
+    "fingerprint": "app/infrastructure/transient.py#error_handling@0",
+    "statement": "[error_handling] app/infrastructure/transient.py:17-40 is_transient_error 用子串匹配 '429'/'timeout' 等，业务错误文案含这些词会被误判为可重试（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/transient.py:17-40",
+    "rationale": "判据是对 str(error).lower() 做子串包含匹配。'429' 会命中任何包含该数字的业务错误（如商品 ID、金额、订单号含 429），'timeout' 会命中“timeout 配置非法”这类永久性配置错误，'connection error' 会命中参数校验错误。这些非瞬时错误会被重试，放大故障并延迟失败反馈。模块注释也承认只能看文案，但当前标记表过宽，缺少对永久性错误的排除。",
+    "title": "is_transient_error 用子串匹配 '429'/'timeout' 等，业务错误文案含这些词会被误判为可重试",
+    "line_start": 17,
+    "line_end": 40,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "988d418a4818",
+        "adapter": "repo",
+        "locator": "app/infrastructure/transient.py:17-40",
+        "quote": "_TRANSIENT_ERROR_MARKERS = (\n    \"too many concurrent\",\n    \"rate limit\",\n    \"request rate\",\n    \"too many requests\",\n    \"throttling\",\n    \"429\",\n    \"timeout\","
+      }
+    ]
+  },
+  {
+    "claim_id": "e04ba75a2a21",
+    "fingerprint": "app/infrastructure/transient.py#error_handling@20",
+    "statement": "[error_handling] app/infrastructure/transient.py:37-40 is_transient_error 对空 message 的异常返回 False，可能漏判无文案的 httpx 超时（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/transient.py:37-40",
+    "rationale": "httpx.TimeoutException 的 str() 通常包含 'timed out' 或 'timeout'，能命中标记。空 message 的异常确实会漏判，但这是按文案匹配方案的固有边界，且注释已说明覆盖范围；没有证据表明存在无文案的超时异常被漏判。不认定为缺陷。",
+    "title": "is_transient_error 对空 message 的异常返回 False，可能漏判无文案的 httpx 超时",
+    "line_start": 37,
+    "line_end": 40,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "988d418a4818",
+        "adapter": "repo",
+        "locator": "app/infrastructure/transient.py:37-40",
+        "quote": "def is_transient_error(error: BaseException) -> bool:\n    \"\"\"判断异常是否属于可重试的上游瞬时故障。\"\"\"\n    message = str(error).lower()\n    return any(marker in message for marker in _TRANSIENT_ERROR_MARKERS)"
+      }
+    ]
+  },
+  {
+    "claim_id": "bd72b9cc2ea3",
+    "fingerprint": "app/domain/catalog/ports/product_repository.py#api_misuse@0",
+    "statement": "[api_misuse] app/domain/catalog/ports/product_repository.py:14-25 ProductRepository 抽象方法使用 list[str] 注解，在 Python 3.8 下运行期求值会报错（确认并非缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/ports/product_repository.py:14-25",
+    "rationale": "文件顶部有 from __future__ import annotations，注解被延迟为字符串，不会在运行期求值，因此 list[str] 在 3.8 下也不会报错。不构成缺陷。",
+    "title": "ProductRepository 抽象方法使用 list[str] 注解，在 Python 3.8 下运行期求值会报错",
+    "line_start": 14,
+    "line_end": 25,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "cd820f3991be",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/ports/product_repository.py:14-25",
+        "quote": "    @abstractmethod\n    async def find_by_ids(self, product_ids: list[str]) -> list[Product]:\n        ..."
+      }
+    ]
+  },
+  {
+    "claim_id": "34bb98bdb9bd",
+    "fingerprint": "app/domain/catalog/exchange_rate.py#boundary@40",
+    "statement": "[boundary] app/domain/catalog/exchange_rate.py:44-49 convert 使用 round() 对负数金额做银行家舍入，且未校验 Money 币种是否在汇率表中（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/exchange_rate.py:44-49",
+    "rationale": "convert 先检查 to_currency 是否在 SUPPORTED_CURRENCIES，但 money.currency 只通过 self.rate() 间接校验（rate 会检查 from_currency 是否在 rates_to_cny 中）。问题在于：SUPPORTED_CURRENCIES 与 _RATES_TO_CNY 的键集合可能不一致——若 SUPPORTED_CURRENCIES 含某币种而 _RATES_TO_CNY 不含，则 to_currency 通过校验后 rate() 抛 ValueError，错误信息是“汇率表不支持币种”而非“不受支持”，语义混乱但仍是异常。更实质的缺陷是 round() 对 .5 采用银行家舍入（round-half-to-even），例如 2.5 分→2、3.5 分→4，导致同一批换算金额出现系统性偏差，且与业务上通常期望的四舍五入不一致。触发条件：换算结果恰为 x.5 分。",
+    "title": "convert 使用 round() 对负数金额做银行家舍入，且未校验 Money 币种是否在汇率表中",
+    "line_start": 44,
+    "line_end": 49,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "ec883e6fa727",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/exchange_rate.py:44-49",
+        "quote": "        converted_minor = round(money.amount_in_minor_units * self.rate(money.currency, to_currency))\n        return Money.of(converted_minor, to_currency)"
+      }
+    ]
+  },
+  {
+    "claim_id": "5b97925bc4ea",
+    "fingerprint": "app/domain/catalog/exchange_rate.py#logic@20",
+    "statement": "[logic] app/domain/catalog/exchange_rate.py:36-40 rate() 未校验 from_currency 是否在 SUPPORTED_CURRENCIES，与 convert 的校验口径不一致（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/exchange_rate.py:36-40",
+    "rationale": "convert 只校验 to_currency 在 SUPPORTED_CURRENCIES 中，from_currency（即 money.currency）仅由 rate() 检查是否在 rates_to_cny 中。若 SUPPORTED_CURRENCIES 是 rates_to_cny 的子集（例如 SUPPORTED_CURRENCIES 不含某币种但 rates_to_cny 含），则 Money 可以持有该币种并通过 convert 的 from 侧校验，产生一个“不受支持”的 Money 参与换算，破坏 Money 的币种不变量。反之若 rates_to_cny 缺某 SUPPORTED 币种，to 侧通过后 rate() 抛错。两处校验集合不一致是真实缺陷。",
+    "title": "rate() 未校验 from_currency 是否在 SUPPORTED_CURRENCIES，与 convert 的校验口径不一致",
+    "line_start": 36,
+    "line_end": 40,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "ec883e6fa727",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/exchange_rate.py:36-40",
+        "quote": "    def rate(self, from_currency: str, to_currency: str) -> float:\n        for currency in (from_currency, to_currency):\n            if currency not in self.rates_to_cny:\n                raise ValueError(f\"汇率表不支持币种：{currency}\")\n        return self.rates_to_cny[from_currency] / self.rates_to_cny[to_currency]"
+      }
+    ]
+  },
+  {
+    "claim_id": "8eabea08e8aa",
+    "fingerprint": "app/domain/catalog/exchange_rate.py#security@20",
+    "statement": "[security] app/domain/catalog/exchange_rate.py:28-30 ExchangeRateTable 为 frozen dataclass 但 rates_to_cny 是可变 dict，可被外部修改破坏汇率快照（确认存在缺陷）",
+    "claim_type": "security",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/exchange_rate.py:28-30",
+    "rationale": "frozen=True 只阻止属性重新赋值，不阻止对 rates_to_cny 这个 dict 的原地修改。default_factory 返回的是 dict(_RATES_TO_CNY) 的浅拷贝，实例间不共享，但实例自身的 dict 仍可被调用方通过 table.rates_to_cny['USD']=1.0 篡改，且该对象被当作不可变值对象在领域内传递，篡改会静默影响后续所有换算。",
+    "title": "ExchangeRateTable 为 frozen dataclass 但 rates_to_cny 是可变 dict，可被外部修改破坏汇率快照",
+    "line_start": 28,
+    "line_end": 30,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "ec883e6fa727",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/exchange_rate.py:28-30",
+        "quote": "@dataclass(frozen=True)\nclass ExchangeRateTable:\n    rates_to_cny: dict[str, float] = field(default_factory=lambda: dict(_RATES_TO_CNY))"
+      }
+    ]
+  },
+  {
+    "claim_id": "fa5aec08b606",
+    "fingerprint": "app/domain/catalog/ports/stock_repository.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/ports/stock_repository.py:30-40 StockRepository 端口缺少对 quantity<=0 的契约约束，reserve/release 语义未定义（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/ports/stock_repository.py:30-40",
+    "rationale": "reserve 文档只说明“库存不足返回 False”，未规定 quantity<=0 的行为。若实现直接执行 stock -= quantity，传入负数 quantity 会变成加库存（reserve(-5) 反而增加库存），release(-5) 会扣库存。端口作为契约未约束边界，实现者极易写出可被负数绕过的原子扣减，属于真实的可利用边界缺陷。",
+    "title": "StockRepository 端口缺少对 quantity<=0 的契约约束，reserve/release 语义未定义",
+    "line_start": 30,
+    "line_end": 40,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "ec90a212b976",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/ports/stock_repository.py:30-40",
+        "quote": "    @abstractmethod\n    async def reserve(self, sku_id: str, quantity: int) -> bool:\n        \"\"\"原子扣减。成功返回 True；库存不足返回 False（不改变状态）。\"\"\"\n\n    @abstractmethod\n    async def release(self, sku_id: str, quantity: int) -> None:\n        \"\"\"回补库存（取消订单或下单失败回滚）。\"\"\""
+      }
+    ]
+  },
+  {
+    "claim_id": "8b5ee048b78f",
+    "fingerprint": "app/domain/catalog/ports/stock_repository.py#api_misuse@40",
+    "statement": "[api_misuse] app/domain/catalog/ports/stock_repository.py:42-44 get_many 返回 Mapping[str,int] 但未约定未登记 SKU 的表示，与 get 返回 None 不一致（确认存在缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/ports/stock_repository.py:42-44",
+    "rationale": "get 明确“未登记的 SKU 返回 None”，而 get_many 返回 Mapping[str,int]，无法表达 None。调用方若用 get_many 批量查库存，未登记 SKU 要么被省略（KeyError/缺键）要么被填 0，两种实现都符合当前文档，但语义不同：填 0 会让“未登记”与“库存为 0”混淆，导致商品卡显示售罄而非未知。端口契约不自洽。",
+    "title": "get_many 返回 Mapping[str,int] 但未约定未登记 SKU 的表示，与 get 返回 None 不一致",
+    "line_start": 42,
+    "line_end": 44,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "ec90a212b976",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/ports/stock_repository.py:42-44",
+        "quote": "    @abstractmethod\n    async def get_many(self, sku_ids: Iterable[str]) -> Mapping[str, int]:\n        \"\"\"批量查询，避免商品卡逐个查库存。\"\"\""
+      }
+    ]
+  },
+  {
+    "claim_id": "73b8429383c1",
+    "fingerprint": "app/application/usecases/catalog_search.py#boundary@0",
+    "statement": "[boundary] app/application/usecases/catalog_search.py:1-1 价格上限过滤使用严格小于，导致恰好等于预算的商品被拒绝（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:1-1",
+    "rationale": "在 _within_price_cap 中，判断条件是 `primary_in_target.to_major_units() < spec.price_max_major`。当商品价格恰好等于用户给出的 price_max_major（例如用户说“预算 500 元以内”，商品正好 500 元）时，该商品会被判为 over_price_cap 并进入 filtered_out，而不是作为命中返回。通常“价格上限”语义应包含边界（<=），这里用严格小于造成边界商品被错误过滤，属于边界缺陷。",
+    "title": "价格上限过滤使用严格小于，导致恰好等于预算的商品被拒绝",
+    "line_start": 1,
+    "line_end": 1,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:1-1",
+        "quote": "        if spec.price_max_major is None:\n            return True\n        primary_in_target = self._tariff.rates.convert(product.primary_sku().price, spec.target_currency)\n        return primary_in_target.to_major_units() < spec.price_max_major"
+      }
+    ]
+  },
+  {
+    "claim_id": "3dd361c14760",
+    "fingerprint": "app/application/usecases/catalog_search.py#logic@0",
+    "statement": "[logic] app/application/usecases/catalog_search.py:1-1 关键词召回在无匹配时返回 0.0 而非负分，导致所有商品都被当作候选（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [
+      "e7260e09e372",
+      "e7260e09e372"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:1-1",
+    "rationale": "_keyword_recall 用 `if score >= 0` 过滤候选，而 _keyword_score 在没有任何词命中时返回 0.0（不是负数）。因此 `score >= 0` 恒为真，所有商品都会进入候选列表，包括与查询完全无关的商品。这会让关键词降级召回退化为“返回全库”，再靠 top_k 截断，可能把无关商品排进结果（尤其当所有商品都 0 分时，顺序取决于 list_all 顺序）。过滤条件与打分函数的约定不一致。",
+    "title": "关键词召回在无匹配时返回 0.0 而非负分，导致所有商品都被当作候选",
+    "line_start": 1,
+    "line_end": 1,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:1-1",
+        "quote": "        for product in await self._product_repo.list_all():\n            score = self._keyword_score(query_terms, product, spec)\n            if score >= 0:\n                candidates.append((score, product))"
+      }
+    ]
+  },
+  {
+    "claim_id": "39cea195b5d5",
+    "fingerprint": "app/application/usecases/catalog_search.py#error_handling@0",
+    "statement": "[error_handling] app/application/usecases/catalog_search.py:1-1 rerank 分数与召回分数长度不匹配时索引越界（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:1-1",
+    "rationale": "_rerank 用 `rerank_scores[i]` 按 scored 的下标取值，但没有校验 rerank_scores 的长度是否等于 scored 的长度。如果 Reranker 实现返回的分数数量少于文档数（例如截断、过滤或实现缺陷），会抛出 IndexError；该异常会被 execute 中的 except 捕获并降级为按向量分排序，但此时 rerank 已经部分执行，且错误被静默吞掉，掩盖了 Reranker 的真实缺陷。更严重的是若返回多于文档数则多余分数被忽略。缺少长度一致性校验。",
+    "title": "rerank 分数与召回分数长度不匹配时索引越界",
+    "line_start": 1,
+    "line_end": 1,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:1-1",
+        "quote": "        rerank_scores = await self._reranker.rerank(spec.normalized_query, documents)\n        reranked = [\n            (rerank_scores[i], product)\n            for i, (_, product) in enumerate(scored)\n        ]"
+      }
+    ]
+  },
+  {
+    "claim_id": "e7260e09e372",
+    "fingerprint": "app/application/usecases/catalog_search.py#logic@0",
+    "statement": "[logic] app/application/usecases/catalog_search.py:1-1 向量召回成功但结果为空时不会尝试关键词召回（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [
+      "3dd361c14760",
+      "3dd361c14760"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:1-1",
+    "rationale": "当向量召回成功但返回空列表时，recall_strategy 被设为 embedding_only，scored 为空；第一个 if 条件 `recall_strategy == \"embedding_only\" and scored` 为假，进入 `elif not scored` 分支执行关键词召回。因此空结果确实会触发关键词兜底，行为符合预期，不是缺陷。",
+    "title": "向量召回成功但结果为空时不会尝试关键词召回",
+    "line_start": 1,
+    "line_end": 1,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:1-1",
+        "quote": "        if recall_strategy == \"embedding_only\" and scored:\n            # 二阶段精排；失败降级按向量分排序\n            try:\n                scored = await self._rerank(spec, scored)\n                recall_strategy = \"embedding_rerank\"\n                rerank_applied = True\n            except Exception as err:  # noqa: BLE001\n                logger.warning(\"rerank 不可用，按向量分排序：%s\", err)\n        elif not scored:\n            scored = await self._keyword_recall(spec)\n            recall_strategy = \"keyword_2gram\""
+      }
+    ]
+  },
+  {
+    "claim_id": "f520c62e6d90",
+    "fingerprint": "app/domain/catalog/product_search_spec.py#boundary@0",
+    "statement": "[boundary] app/domain/catalog/product_search_spec.py:1-1 ProductSearchSpec 未校验 top_k 为正，注释把责任推给调用方（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product_search_spec.py:1-1",
+    "rationale": "值对象在 __post_init__ 中校验了 normalized_query，却对 top_k 只留注释“由调用方保证为正”。若调用方传入 top_k=0 或负数，execute 中 `filtered[: spec.top_k]` 会返回空列表或意外切片（负数会从尾部截取），产生静默错误结果而非明确报错。值对象既然承担校验职责，应在此处校验 top_k > 0。",
+    "title": "ProductSearchSpec 未校验 top_k 为正，注释把责任推给调用方",
+    "line_start": 1,
+    "line_end": 1,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "13e4eea2c850",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product_search_spec.py:1-1",
+        "quote": "    def __post_init__(self) -> None:\n        if not self.normalized_query or not self.normalized_query.strip():\n            raise ValueError(\"ProductSearchSpec.normalized_query required\")\n        # top_k 由调用方保证为正"
+      }
+    ]
+  },
+  {
+    "claim_id": "e623e8997b71",
+    "fingerprint": "app/application/usecases/order_usecases.py#concurrency@80",
+    "statement": "[concurrency] app/application/usecases/order_usecases.py:96-130 幂等键在订单保存后才登记，并发重投会重复扣库存并产生第二张订单（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/order_usecases.py:96-130",
+    "rationale": "execute 先 reserve 库存、再 Order.place、再 save(order)，最后才调用 idempotency.record 抢占幂等键。两个并发请求携带同一 idempotency_key 时，二者都会在 _replay 阶段查不到键（record 尚未发生），于是各自 reserve 库存、各自 next_order_id、各自 save 一张订单。随后只有一路 record 成功，另一路 claimed=False 时执行 _rollback(reserved) 并回放赢家订单——但此时输家已经 save 的订单仍留在 order_repo 中，成为一张孤儿订单（库存已回补但订单存在），且 next_order_id 已被消耗。注释声称“队列重投不会产生第二张订单”，与实现不符：幂等键的抢占发生在副作用之后，无法阻止并发下的重复下单。",
+    "title": "幂等键在订单保存后才登记，并发重投会重复扣库存并产生第二张订单",
+    "line_start": 96,
+    "line_end": 130,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "817d1b432231",
+        "adapter": "repo",
+        "locator": "app/application/usecases/order_usecases.py:96-130",
+        "quote": "        await self._order_repo.save(order)\n\n        if idempotency_key and self._idempotency is not None:\n            claimed = await self._idempotency.record(idempotency_key, order.order_id)\n            if not claimed:\n                # 并发下另一路先登记了同一个键：本次的扣减与订单都要撤销，返回赢家的结果\n                await self._rollback(reserved)"
+      }
+    ]
+  },
+  {
+    "claim_id": "d691f6b465d8",
+    "fingerprint": "app/application/usecases/order_usecases.py#error_handling@160",
+    "statement": "[error_handling] app/application/usecases/order_usecases.py:168-176 取消订单时先回补库存再 save，save 失败会导致库存被重复回补（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/order_usecases.py:168-176",
+    "rationale": "CancelOrderUseCase.execute 先 order.cancel(reason)（内存状态变更），随后逐行 release 库存，最后才 save(order)。若 save 抛异常（DB 故障、乐观锁冲突等），订单在持久层仍是未取消状态，但库存已经被回补。调用方重试取消时，order.cancel 在内存对象上再次成功（因为重新从 repo 读出的订单仍是未取消状态），于是再次 release，造成库存被重复回补、超卖。注释“重复取消会被状态机挡在上一步，因此不会重复回补”只在 save 成功的前提下成立。",
+    "title": "取消订单时先回补库存再 save，save 失败会导致库存被重复回补",
+    "line_start": 168,
+    "line_end": 176,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "817d1b432231",
+        "adapter": "repo",
+        "locator": "app/application/usecases/order_usecases.py:168-176",
+        "quote": "        order.cancel(reason)\n        # 取消后回补库存。重复取消会被状态机挡在上一步，因此不会重复回补。\n        for line in order.lines:\n            await self._stock_repo.release(line.sku_id, line.quantity)\n        await self._order_repo.save(order)"
+      }
+    ]
+  },
+  {
+    "claim_id": "1c3b40bfc1d6",
+    "fingerprint": "app/application/usecases/order_usecases.py#logic@100",
+    "statement": "[logic] app/application/usecases/order_usecases.py:118-130 幂等键冲突回滚后未删除已保存的订单，留下孤儿订单（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/order_usecases.py:118-130",
+    "rationale": "claimed=False 分支只调用 _rollback(reserved) 回补库存，没有删除此前 save(order) 写入的订单。该订单在 order_repo 中永久存在，但库存已释放，形成“有订单无库存占用”的不一致状态；买家若查询该 order_id 会看到一张实际未成立的订单。注释说“本次的扣减与订单都要撤销”，但代码只撤销了扣减。",
+    "title": "幂等键冲突回滚后未删除已保存的订单，留下孤儿订单",
+    "line_start": 118,
+    "line_end": 130,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "817d1b432231",
+        "adapter": "repo",
+        "locator": "app/application/usecases/order_usecases.py:118-130",
+        "quote": "            if not claimed:\n                # 并发下另一路先登记了同一个键：本次的扣减与订单都要撤销，返回赢家的结果\n                await self._rollback(reserved)\n                replay = await self._replay(buyer_id, idempotency_key)"
+      }
+    ]
+  },
+  {
+    "claim_id": "f7e9a166cd05",
+    "fingerprint": "app/application/agents/context_policy.py#boundary@60",
+    "statement": "[boundary] app/application/agents/context_policy.py:62-68 context_policy 的 trigger_ratio 与 reserve_ratio 之和超过 1，压缩后仍超窗口（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/agents/context_policy.py:62-68",
+    "rationale": "trigger_ratio=0.15 表示上下文占用达 15% 即触发压缩，reserve_ratio=0.75 表示压缩后保留末段 75% 的原始消息。二者之和 0.90 虽小于 1，但语义上压缩触发点（15%）远低于保留量（75%）：一旦占用达到 15% 就触发压缩，而压缩策略要求保留 75% 的原始消息，压缩后占用仍约为 75%，远超触发阈值，导致每次请求都再次触发压缩，形成压缩抖动/死循环，且压缩几乎无法把占用降到阈值以下。此外 reserve_ratio 通常应小于 1 - trigger_ratio 才能保证压缩有效。",
+    "title": "context_policy 的 trigger_ratio 与 reserve_ratio 之和超过 1，压缩后仍超窗口",
+    "line_start": 62,
+    "line_end": 68,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "5777be85cf0d",
+        "adapter": "repo",
+        "locator": "app/application/agents/context_policy.py:62-68",
+        "quote": "    return ContextConfig(\n        trigger_ratio=0.15,\n        reserve_ratio=0.75,\n        compression_prompt=_COMPRESSION_PROMPT,\n        summary_template=_SUMMARY_TEMPLATE,\n        tool_result_limit=tool_result_limit,\n    )"
+      }
+    ]
+  },
+  {
+    "claim_id": "d38ddacd5bec",
+    "fingerprint": "app/application/agents/context_policy.py#api_misuse@40",
+    "statement": "[api_misuse] app/application/agents/context_policy.py:55-68 build_context_config 丢弃 context_size 参数，无法校验窗口一致性（确认并非缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/agents/context_policy.py:55-68",
+    "rationale": "del context_size 只是显式声明该参数未使用，注释说明窗口由 model 侧提供。这不会导致错误行为，属于设计取舍而非缺陷。",
+    "title": "build_context_config 丢弃 context_size 参数，无法校验窗口一致性",
+    "line_start": 55,
+    "line_end": 68,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "5777be85cf0d",
+        "adapter": "repo",
+        "locator": "app/application/agents/context_policy.py:55-68",
+        "quote": "    del context_size  # 窗口由 model 侧提供，这里仅保留参数以标明配套关系"
+      }
+    ]
+  },
+  {
+    "claim_id": "cfcb250d9798",
+    "fingerprint": "app/application/agents/trade_agent.py#concurrency@60",
+    "statement": "[concurrency] app/application/agents/trade_agent.py:60-78 TradeAgent 每次 build_tools 都新建中间件实例，但无共享状态问题（确认并非缺陷）",
+    "claim_type": "concurrency",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/agents/trade_agent.py:60-78",
+    "rationale": "_resilience() 每次返回新的 ToolResilienceMiddleware 列表，但熔断状态存放在共享的 circuit_registry 中，中间件本身无状态，因此 MainAgent 与 TradeAgent 各自持有实例不会导致熔断状态分裂。不构成缺陷。",
+    "title": "TradeAgent 每次 build_tools 都新建中间件实例，但无共享状态问题",
+    "line_start": 60,
+    "line_end": 78,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "67641266b07e",
+        "adapter": "repo",
+        "locator": "app/application/agents/trade_agent.py:60-78",
+        "quote": "    def _resilience(self) -> list:\n        return [ToolResilienceMiddleware(self._circuit_registry, self._bus)]"
+      }
+    ]
+  },
+  {
+    "claim_id": "4b9c2d2cd8ac",
+    "fingerprint": "app/domain/catalog/ports/retrieval_ports.py#boundary@40",
+    "statement": "[boundary] app/domain/catalog/ports/retrieval_ports.py:44-46 retrieval_ports 的 upsert_products 未校验 products 与 embeddings 等长（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/ports/retrieval_ports.py:44-46",
+    "rationale": "这是抽象端口定义，契约由实现方保证；端口层不做参数校验是常见做法，且没有具体代码表明会越界。不构成可引用的缺陷。",
+    "title": "retrieval_ports 的 upsert_products 未校验 products 与 embeddings 等长",
+    "line_start": 44,
+    "line_end": 46,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "73fcc31c85be",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/ports/retrieval_ports.py:44-46",
+        "quote": "    @abstractmethod\n    async def upsert_products(self, products: list[Product], embeddings: list[list[float]]) -> None:\n        ..."
+      }
+    ]
+  },
+  {
+    "claim_id": "857c68649656",
+    "fingerprint": "app/domain/catalog/product.py#logic@20",
+    "statement": "[logic] app/domain/catalog/product.py:36-37 primary_sku 返回最后一个 SKU 而非主 SKU（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [
+      "0dce63d15651"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product.py:36-37",
+    "rationale": "primary_sku() 返回 self.skus[-1]，即列表最后一个 SKU。通常主 SKU 是第一个（默认/主推），返回最后一个会让商品卡展示、默认加购、价格展示都落到非主推 SKU 上。若 skus 顺序为 [主SKU, 备用SKU]，则 primary_sku 返回备用 SKU，价格/库存展示错误。",
+    "title": "primary_sku 返回最后一个 SKU 而非主 SKU",
+    "line_start": 36,
+    "line_end": 37,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "e0e973290a93",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product.py:36-37",
+        "quote": "    def primary_sku(self) -> Sku:\n        return self.skus[-1]"
+      }
+    ]
+  },
+  {
+    "claim_id": "7ddaed6ff2bd",
+    "fingerprint": "app/domain/catalog/money.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/money.py:30-32 Money.from_major_units 对 JPY 按 100 倍换算，与最小单位口径不符（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/money.py:30-32",
+    "rationale": "JPY 没有小数位（最小单位就是 1 日元），但 from_major_units 对所有币种统一乘 100。传入 1000 JPY 会得到 100000 minor units，to_major_units 再除 100 得 1000，看似自洽，但与真实 JPY 最小单位口径不一致；一旦与外部支付/汇率服务（按真实最小单位）对接，金额会放大 100 倍。注释也承认这是简化。",
+    "title": "Money.from_major_units 对 JPY 按 100 倍换算，与最小单位口径不符",
+    "line_start": 30,
+    "line_end": 32,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "9e8d5943dd21",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/money.py:30-32",
+        "quote": "    @staticmethod\n    def from_major_units(major: float, currency: str) -> \"Money\":\n        # 简化处理：所有支持币种均按 100 倍换算（JPY 实际为 1，demo 暂统一）\n        return Money.of(round(major * 100), currency)"
+      }
+    ]
+  },
+  {
+    "claim_id": "7092d89ca7dc",
+    "fingerprint": "app/domain/catalog/exchange_rate.py#boundary@40",
+    "statement": "[boundary] app/domain/catalog/exchange_rate.py:40-44 ExchangeRateTable.convert 用 round 做银行家舍入，可能产生 0 金额或偏差（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/exchange_rate.py:40-44",
+    "rationale": "Python 内置 round 使用银行家舍入（round-half-to-even），且对 .5 情形向偶数取整，与业务上常见的四舍五入不一致；小额换算（如 1 分 JPY→CNY）会 round 到 0，产生零金额 Money，后续 add/multiply 语义异常。",
+    "title": "ExchangeRateTable.convert 用 round 做银行家舍入，可能产生 0 金额或偏差",
+    "line_start": 40,
+    "line_end": 44,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "ec883e6fa727",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/exchange_rate.py:40-44",
+        "quote": "        converted_minor = round(money.amount_in_minor_units * self.rate(money.currency, to_currency))\n        return Money.of(converted_minor, to_currency)"
+      }
+    ]
+  },
+  {
+    "claim_id": "a1b9a699a2d1",
+    "fingerprint": "app/application/agents/permissions.py#logic@40",
+    "statement": "[logic] app/application/agents/permissions.py:40-52 allow_business_tools 幂等判断只认 source，可能漏加或重复（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [
+      "132e9a617535"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/application/agents/permissions.py:40-52",
+    "rationale": "以 source == 'projectSettings' 作为幂等标记，只要该工具已有任意 projectSettings 规则就跳过追加。若持久化状态里存在同 source 但 behavior 为 DENY 的规则，则不会补 ALLOW，但这是权限引擎按规则优先级裁决的预期行为，且注释明确说明兼容恢复的持久化状态。未发现确定的错误行为。",
+    "title": "allow_business_tools 幂等判断只认 source，可能漏加或重复",
+    "line_start": 40,
+    "line_end": 52,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "c2c9683377ac",
+        "adapter": "repo",
+        "locator": "app/application/agents/permissions.py:40-52",
+        "quote": "        rules = allow_rules.setdefault(tool_name, [])\n        if any(rule.source == \"projectSettings\" for rule in rules):\n            continue"
+      }
+    ]
+  },
+  {
+    "claim_id": "0dce63d15651",
+    "fingerprint": "app/domain/catalog/product.py#logic@20",
+    "statement": "[logic] app/domain/catalog/product.py:20-33 Product 为可变 dataclass 且暴露 list 字段，聚合不变量可被外部破坏（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [
+      "6163f157c57b",
+      "857c68649656"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product.py:20-33",
+    "rationale": "Product 非 frozen，skus 是可变 list，外部可以 append/clear 绕过 __post_init__ 的“至少一个 Sku”不变量。但这是领域模型的常见取舍，仓库内未见清空 skus 的调用路径，无法引用具体触发代码，故不判定为缺陷。",
+    "title": "Product 为可变 dataclass 且暴露 list 字段，聚合不变量可被外部破坏",
+    "line_start": 20,
+    "line_end": 33,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "e0e973290a93",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product.py:20-33",
+        "quote": "    skus: list[Sku] = field(default_factory=list)\n\n    def __post_init__(self) -> None:\n        if not self.product_id:\n            raise ValueError(\"Product.product_id required\")\n        if not self.skus:\n            raise ValueError(f\"Product 至少要有一个 Sku：{self.product_id}\")"
+      }
+    ]
+  },
+  {
+    "claim_id": "5955308af67c",
+    "fingerprint": "app/application/agents/search_agent.py#logic@60",
+    "statement": "[logic] app/application/agents/search_agent.py:60-92 build_tools 每次调用都新建中间件与工具实例，MainAgent 与 SearchAgent 各自持有独立熔断中间件（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/agents/search_agent.py:60-92",
+    "rationale": "build_tools() 每次调用都会重新构造 FunctionTool 与 ToolResilienceMiddleware，但熔断状态保存在共享的 self._circuit_registry 中，因此即使中间件实例不同，熔断计数仍然共享，不会出现“各限一份等于没限”的问题。工具本身是无状态包装，重复构造不产生错误行为。",
+    "title": "build_tools 每次调用都新建中间件与工具实例，MainAgent 与 SearchAgent 各自持有独立熔断中间件",
+    "line_start": 60,
+    "line_end": 92,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "f90300631d22",
+        "adapter": "repo",
+        "locator": "app/application/agents/search_agent.py:60-92",
+        "quote": "    def _resilience(self) -> list:\n        return [ToolResilienceMiddleware(self._circuit_registry, self._bus)]"
+      }
+    ]
+  },
+  {
+    "claim_id": "a45fdc50732e",
+    "fingerprint": "app/application/agents/search_agent.py#error_handling@80",
+    "statement": "[error_handling] app/application/agents/search_agent.py:83-91 web_search_tool 仅在配置 tavily_api_key 时注册，但系统提示词可能仍指示使用该工具（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/agents/search_agent.py:83-91",
+    "rationale": "代码注释明确说明该工具按“有 TAVILY_API_KEY 才注册”设计，未配置时 Agent 看不到它，属于有意的可选能力降级。是否与提示词冲突取决于 prompts 内容，本文件无法证实存在缺陷。",
+    "title": "web_search_tool 仅在配置 tavily_api_key 时注册，但系统提示词可能仍指示使用该工具",
+    "line_start": 83,
+    "line_end": 91,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "f90300631d22",
+        "adapter": "repo",
+        "locator": "app/application/agents/search_agent.py:83-91",
+        "quote": "        if self._settings.tavily_api_key:\n            tools.append(\n                FunctionTool(\n                    build_web_search_tool(self._settings, self._bus),\n                    is_read_only=True,\n                    middlewares=self._resilience(),\n                ),\n            )"
+      }
+    ]
+  },
+  {
+    "claim_id": "9c7c7b7f838c",
+    "fingerprint": "app/infrastructure/budget.py#logic@80",
+    "statement": "[logic] app/infrastructure/budget.py:88-95 init_budget 对 total_limit=0 仍创建预算实例，与文档“0 表示不启用”矛盾（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/budget.py:88-95",
+    "rationale": "模块文档与 settings 都声明 TOKEN_BUDGET_TOTAL=0 表示不启用预算（默认关闭）。但 init_budget 只在 total_limit < 0 时返回 None，total_limit == 0 时会创建一个 TokenBudget(total_limit=0) 并写入 ContextVar。此时 remaining_ratio 因 total_limit<=0 返回 1.0，tier 恒为 main，看似无害；但 get_budget() 不再返回 None，任何以 `get_budget() is not None` 判断“预算是否启用”的调用方会误判为已启用，并且 charge() 会持续累加 used 与 entries（无上限增长），与“默认不启用”的契约不一致。",
+    "title": "init_budget 对 total_limit=0 仍创建预算实例，与文档“0 表示不启用”矛盾",
+    "line_start": 88,
+    "line_end": 95,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "27d90514a9b4",
+        "adapter": "repo",
+        "locator": "app/infrastructure/budget.py:88-95",
+        "quote": "def init_budget(total_limit: int) -> Optional[TokenBudget]:\n    \"\"\"在意图入口初始化预算；total_limit <= 0 表示不启用。\"\"\"\n    if total_limit < 0:\n        _budget_var.set(None)\n        return None\n    budget = TokenBudget(total_limit=total_limit)\n    _budget_var.set(budget)\n    return budget"
+      }
+    ]
+  },
+  {
+    "claim_id": "88ef5ee2b747",
+    "fingerprint": "app/infrastructure/budget.py#boundary@60",
+    "statement": "[boundary] app/infrastructure/budget.py:62-66 charge 接受负数 token，可反向“充值”预算使降级失效（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/budget.py:62-66",
+    "rationale": "charge 只对 tokens == 0 提前返回，未校验负数。若上游用量统计出现负值（例如 usage 字段缺失被算成 0 再减去预估、或某 SDK 返回负的 completion_tokens），used 会被减小，remaining_ratio 上升，档位从 minimal/fallback 回退到 main，预算护栏被绕过。这是边界值未校验导致的逻辑失效。",
+    "title": "charge 接受负数 token，可反向“充值”预算使降级失效",
+    "line_start": 62,
+    "line_end": 66,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "27d90514a9b4",
+        "adapter": "repo",
+        "locator": "app/infrastructure/budget.py:62-66",
+        "quote": "    def charge(self, source: str, tokens: int) -> None:\n        if tokens == 0:\n            return\n        self.used += tokens\n        self.entries.append((source, tokens))"
+      }
+    ]
+  },
+  {
+    "claim_id": "7516d79f27de",
+    "fingerprint": "app/infrastructure/resilience.py#concurrency@60",
+    "statement": "[concurrency] app/infrastructure/resilience.py:78-88 熔断半开探测状态在并发下可被多个请求同时放行（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/resilience.py:78-88",
+    "rationale": "allow() 在冷却期满后无条件把 half_open_probing 置 True 并返回 True，没有检查该标志是否已被置位。多个协程在同一事件循环里并发调用同一工具时，第一个请求把状态转半开，后续请求 elapsed 仍 >= reset_seconds，同样返回 True，于是“只放一次探测请求”的语义被破坏，可能同时向已故障的下游打多个请求。此外 half_open_probing 置位后若探测请求成功，record_success 会重置状态；但若探测请求在 record_failure 之前被取消（CancelledError 不被 except Exception 捕获），half_open_probing 会永久停留在 True，status 永远报 half_open。",
+    "title": "熔断半开探测状态在并发下可被多个请求同时放行",
+    "line_start": 78,
+    "line_end": 88,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "195131b30098",
+        "adapter": "repo",
+        "locator": "app/infrastructure/resilience.py:78-88",
+        "quote": "        elapsed = (now or time.monotonic()) - state.opened_at\n        if elapsed < self.reset_seconds:\n            return False\n        state.half_open_probing = True\n        return True"
+      }
+    ]
+  },
+  {
+    "claim_id": "39930792b0a4",
+    "fingerprint": "app/infrastructure/resilience.py#logic@160",
+    "statement": "[logic] app/infrastructure/resilience.py:168-176 超时/异常分支在 record_failure 之后读取 status，可能把刚打开的熔断误报为 closed（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/resilience.py:168-176",
+    "rationale": "初看 _publish_circuit 在 _record_failure 之后调用 _status，担心读到旧状态。但本地注册表 record_failure 是同步的，_status 紧随其后读取的是更新后的状态；共享注册表若提供 status_async，其读到的也是写入后的值。因此发布的事件里 circuit 字段反映的是本次失败后的真实状态，不构成缺陷。",
+    "title": "超时/异常分支在 record_failure 之后读取 status，可能把刚打开的熔断误报为 closed",
+    "line_start": 168,
+    "line_end": 176,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "195131b30098",
+        "adapter": "repo",
+        "locator": "app/infrastructure/resilience.py:168-176",
+        "quote": "        except asyncio.TimeoutError:\n            await _record_failure(self._registry, tool_name)\n            detail = f\"{tool_name} 执行超过 {timeout:.0f} 秒已中断\"\n            logger.warning(\"工具超时：%s（%.0fs）\", tool_name, timeout)\n            self._publish_circuit(tool_name, await _status(self._registry, tool_name), detail)"
+      }
+    ]
+  },
+  {
+    "claim_id": "988939970ae5",
+    "fingerprint": "app/infrastructure/resilience.py#performance@140",
+    "statement": "[performance] app/infrastructure/resilience.py:155-166 超时收集全部 chunk 到内存，长流式工具会放大内存与首字节延迟（确认并非缺陷）",
+    "claim_type": "performance",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/resilience.py:155-166",
+    "rationale": "中间件刻意先把所有 chunk 收集完再 yield，注释已说明这是为了保证超时能拦在中间件内部、不把半截流交给 Agent。这是有意的设计取舍而非缺陷；代价是首字节延迟与内存占用，但工具结果本身受 tool_result_limit 约束，量级可控。",
+    "title": "超时收集全部 chunk 到内存，长流式工具会放大内存与首字节延迟",
+    "line_start": 155,
+    "line_end": 166,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "195131b30098",
+        "adapter": "repo",
+        "locator": "app/infrastructure/resilience.py:155-166",
+        "quote": "            async def _collect() -> list[ToolChunk]:\n                collected: list[ToolChunk] = []\n                async for chunk in next_handler(**input_kwargs):\n                    collected.append(chunk)\n                return collected\n\n            chunks = await asyncio.wait_for(_collect(), timeout=timeout)"
+      }
+    ]
+  },
+  {
+    "claim_id": "f760b6c6b76a",
+    "fingerprint": "app/infrastructure/resilience.py#resource_leak@160",
+    "statement": "[resource_leak] app/infrastructure/resilience.py:160-166 asyncio.wait_for 超时后底层生成器未被显式关闭（确认并非缺陷）",
+    "claim_type": "resource_leak",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/resilience.py:160-166",
+    "rationale": "asyncio.wait_for 在超时时会取消内部任务，_collect 协程被取消后其 async for 会收到 CancelledError，Python 的 async generator 在协程被取消时会执行 aclose，从而关闭 next_handler 的生成器。因此不会稳定泄漏；仅在底层工具忽略取消、自行吞掉 CancelledError 时才可能残留，属于工具实现问题而非本中间件缺陷。",
+    "title": "asyncio.wait_for 超时后底层生成器未被显式关闭",
+    "line_start": 160,
+    "line_end": 166,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "195131b30098",
+        "adapter": "repo",
+        "locator": "app/infrastructure/resilience.py:160-166",
+        "quote": "            chunks = await asyncio.wait_for(_collect(), timeout=timeout)"
+      }
+    ]
+  },
+  {
+    "claim_id": "65e470a89348",
+    "fingerprint": "app/infrastructure/context.py#concurrency@20",
+    "statement": "[concurrency] app/infrastructure/context.py:36-38 ShoppingContext.reset 未校验 token 归属，跨任务 reset 会抛错或串台（确认并非缺陷）",
+    "claim_type": "concurrency",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/context.py:36-38",
+    "rationale": "ContextVar.reset(token) 本身会校验 token 是否属于当前上下文，跨上下文使用会抛 ValueError，这是 Python 的保护而非本模块缺陷。set/reset 成对使用是调用方责任，模块只是薄封装，未引入额外错误行为。",
+    "title": "ShoppingContext.reset 未校验 token 归属，跨任务 reset 会抛错或串台",
+    "line_start": 36,
+    "line_end": 38,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "24481c1442d8",
+        "adapter": "repo",
+        "locator": "app/infrastructure/context.py:36-38",
+        "quote": "    @staticmethod\n    def reset(token) -> None:\n        _current_snapshot.reset(token)"
+      }
+    ]
+  },
+  {
+    "claim_id": "d8991c7e689a",
+    "fingerprint": "app/infrastructure/settings.py#logic@160",
+    "statement": "[logic] app/infrastructure/settings.py:175-176 布尔环境变量解析只识别 0/false/False，其他假值如 no/off 被当作真（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [
+      "b84ebef15759"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/settings.py:175-176",
+    "rationale": "多处使用 `os.getenv(..., \"1\") not in (\"0\", \"false\", \"False\")` 解析布尔开关。若运维按常见约定设置 SEMANTIC_CACHE_ENABLED=no、QUEUE_ENABLED=off、HARNESS_ENABLED=FALSE（大写）等，会被解析为 True，与预期相反——尤其 harness_enabled/output_guard_enabled 这类安全护栏，误开通常无害，但 queue_enabled/semantic_cache_enabled 误开会在无 Redis 时走非预期路径。这是配置解析的边界缺陷。",
+    "title": "布尔环境变量解析只识别 0/false/False，其他假值如 no/off 被当作真",
+    "line_start": 175,
+    "line_end": 176,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "2cc7c376f2fe",
+        "adapter": "repo",
+        "locator": "app/infrastructure/settings.py:175-176",
+        "quote": "        semantic_cache_enabled=os.getenv(\"SEMANTIC_CACHE_ENABLED\", \"1\") not in (\"0\", \"false\", \"False\"),"
+      }
+    ]
+  },
+  {
+    "claim_id": "73a38766763e",
+    "fingerprint": "app/infrastructure/settings.py#error_handling@140",
+    "statement": "[error_handling] app/infrastructure/settings.py:148-150 load_settings 在导入期创建 data_dir，导入即产生副作用（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/settings.py:148-150",
+    "rationale": "data_dir.mkdir(parents=True, exist_ok=True) 在 load_settings 内执行，若目录不可写会抛 OSError 而非给出清晰配置错误，但这是启动期快速失败，属于可接受行为；且注释已说明建库前必须存在。不构成缺陷。",
+    "title": "load_settings 在导入期创建 data_dir，导入即产生副作用",
+    "line_start": 148,
+    "line_end": 150,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "2cc7c376f2fe",
+        "adapter": "repo",
+        "locator": "app/infrastructure/settings.py:148-150",
+        "quote": "    data_dir = Path(os.getenv(\"DATA_DIR\", str(PROJECT_ROOT / \"data\")))\n    data_dir.mkdir(parents=True, exist_ok=True)  # SQLite 默认落在此目录，建库前必须存在"
+      }
+    ]
+  },
+  {
+    "claim_id": "9da07a663753",
+    "fingerprint": "app/application/usecases/catalog_search.py#logic@160",
+    "statement": "[logic] app/application/usecases/catalog_search.py:168-172 排序注释声称按 product_id 兜底但实际只按分数排序，并列分数顺序不稳定（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:168-172",
+    "rationale": "注释明确说明“分数相同时按 product_id 兜底排序”，理由是向量检索在分数并列时返回顺序由后端决定，不固定会导致同一 query 结果不稳定、评测指标不可复现。但实际代码 filtered.sort(key=lambda item: -item[0]) 只按分数排序，Python 的 sort 是稳定排序，因此并列项保持 scored 中的原始顺序——而该顺序正是来自 Qdrant 返回顺序（_vector_recall 直接按 vector_hits 顺序构造列表）。所以注释承诺的确定性并未实现，缺陷真实存在。",
+    "title": "排序注释声称按 product_id 兜底但实际只按分数排序，并列分数顺序不稳定",
+    "line_start": 168,
+    "line_end": 172,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:168-172",
+        "quote": "        # 分数相同时按 product_id 兜底排序。向量检索在分数并列时的返回顺序由后端内部\n        # 决定（Qdrant 版本/分片不同就可能变），不固定的话同一个 query 在不同次运行\n        # 会给出不同结果——除了\"同问句答案不稳定\"，还会让召回评测指标（recall/nDCG）无法复现。\n        filtered.sort(key=lambda item: -item[0])"
+      }
+    ]
+  },
+  {
+    "claim_id": "7cfa3695bd0d",
+    "fingerprint": "app/application/usecases/catalog_search.py#logic@220",
+    "statement": "[logic] app/application/usecases/catalog_search.py:236-244 关键词召回在无匹配时返回 0 分候选，导致无关商品被当作命中返回（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:236-244",
+    "rationale": "_keyword_score 在没有任何词命中时返回 0.0，而 _keyword_recall 的过滤条件是 score >= 0，因此所有商品（包括与查询毫无关系的）都会进入候选列表。降级到 keyword_2gram 时（embedding 服务异常），结果会包含大量完全不相关的商品，且 total_candidates 被虚高，模型会误以为库里有这些商品。若意图是“无匹配则排除”，阈值应为 > 0。",
+    "title": "关键词召回在无匹配时返回 0 分候选，导致无关商品被当作命中返回",
+    "line_start": 236,
+    "line_end": 244,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:236-244",
+        "quote": "        for product in await self._product_repo.list_all():\n            score = self._keyword_score(query_terms, product, spec)\n            if score >= 0:\n                candidates.append((score, product))"
+      }
+    ]
+  },
+  {
+    "claim_id": "4b95274345b4",
+    "fingerprint": "app/application/usecases/catalog_search.py#boundary@200",
+    "statement": "[boundary] app/application/usecases/catalog_search.py:213-216 价格上限比较使用严格小于，等于上限的商品被误判为超预算（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:213-216",
+    "rationale": "price_max_major 语义是“预算上限”，通常应包含等于上限的商品。代码用 < 而非 <=，恰好等于上限的商品会被 _reject_reason 判为 over_price_cap 并进入 filtered_out，模型会告知买家“超预算”，与用户预期（上限内可买）不符。",
+    "title": "价格上限比较使用严格小于，等于上限的商品被误判为超预算",
+    "line_start": 213,
+    "line_end": 216,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:213-216",
+        "quote": "        if spec.price_max_major is None:\n            return True\n        primary_in_target = self._tariff.rates.convert(product.primary_sku().price, spec.target_currency)\n        return primary_in_target.to_major_units() < spec.price_max_major"
+      }
+    ]
+  },
+  {
+    "claim_id": "c295ccc97f0c",
+    "fingerprint": "app/application/usecases/catalog_search.py#error_handling@240",
+    "statement": "[error_handling] app/application/usecases/catalog_search.py:253-262 rerank 分数数量与候选数不一致时索引越界或静默丢候选（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:253-262",
+    "rationale": "_rerank 直接用 rerank_scores[i] 按 scored 的下标取值，未校验 rerank_scores 长度是否等于 len(scored)。若 Reranker 实现返回的分数少于候选数（例如内部截断、过滤空文档），会抛 IndexError；该异常被 execute 的 except 捕获后降级为“按向量分排序”，但此时 scored 已被部分覆盖/异常中断，且 rerank_applied 仍为 False——行为虽不崩溃，但错误被吞掉且日志只显示“rerank 不可用”，掩盖了真实的数据契约问题。若返回多于候选数则多余分数被静默丢弃。",
+    "title": "rerank 分数数量与候选数不一致时索引越界或静默丢候选",
+    "line_start": 253,
+    "line_end": 262,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "55804a11a232",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:253-262",
+        "quote": "        rerank_scores = await self._reranker.rerank(spec.normalized_query, documents)\n        reranked = [\n            (rerank_scores[i], product)\n            for i, (_, product) in enumerate(scored)\n        ]"
+      }
+    ]
+  },
+  {
+    "claim_id": "4f2e96fb30ee",
+    "fingerprint": "app/infrastructure/eventbus.py#error_handling@180",
+    "statement": "[error_handling] app/infrastructure/eventbus.py:196-205 publish 在无运行事件循环时静默跳过背板广播，跨进程事件丢失（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/eventbus.py:196-205",
+    "rationale": "注释已明确说明该分支用于同步测试场景，此时本地投递已完成，跳过广播是预期行为。生产环境 publish 均在事件循环内调用，不会触发 RuntimeError。因此不构成缺陷。",
+    "title": "publish 在无运行事件循环时静默跳过背板广播，跨进程事件丢失",
+    "line_start": 196,
+    "line_end": 205,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "31d1e54cf47c",
+        "adapter": "repo",
+        "locator": "app/infrastructure/eventbus.py:196-205",
+        "quote": "        except RuntimeError:\n            # 没有运行中的事件循环（例如同步测试里直接调 publish）：跳过广播，本地投递已完成\n            pass"
+      }
+    ]
+  },
+  {
+    "claim_id": "32ac5868aaa5",
+    "fingerprint": "app/infrastructure/eventbus.py#concurrency@140",
+    "statement": "[concurrency] app/infrastructure/eventbus.py:148-156 deliver_local 对背板转发事件重新赋 seq，可能与本地已发 seq 冲突（确认并非缺陷）",
+    "claim_type": "concurrency",
+    "polarity": -1,
+    "severity": "medium",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/eventbus.py:148-156",
+    "rationale": "注释说明 seq 在 deliver_local 赋值，因为 WS 客户端只连一个进程，无论事件来自本进程还是背板转发都经由此处进入订阅者，因此对客户端单调。_sequence 用 _seq[session_id]+1 递增，同一进程内不会重复。背板转发的事件若已带 seq 会被 replace 覆盖，但客户端只看到本进程的 seq 序列，仍单调。除非同一事件既本地投递又被背板回环转发（注释称 deliver_local 用于避免回环），否则无缺陷。",
+    "title": "deliver_local 对背板转发事件重新赋 seq，可能与本地已发 seq 冲突",
+    "line_start": 148,
+    "line_end": 156,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "31d1e54cf47c",
+        "adapter": "repo",
+        "locator": "app/infrastructure/eventbus.py:148-156",
+        "quote": "        sequenced = self._sequence(event)\n        for queue in self._subscribers.get(sequenced.shopping_session_id, []):\n            queue.put_nowait(sequenced)\n        return sequenced"
+      }
+    ]
+  },
+  {
+    "claim_id": "b3532366931e",
+    "fingerprint": "app/application/agents/context_policy.py#logic@60",
+    "statement": "[logic] app/application/agents/context_policy.py:62-72 context_policy 忽略 context_size 参数，trigger_ratio 固定 0.15 可能对小窗口过早压缩（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/agents/context_policy.py:62-72",
+    "rationale": "del context_size 有注释说明窗口由 model 侧提供，参数仅用于标明配套关系。trigger_ratio/reserve_ratio 是固定策略，是否合理取决于产品取舍而非代码错误。不构成可引用的缺陷。",
+    "title": "context_policy 忽略 context_size 参数，trigger_ratio 固定 0.15 可能对小窗口过早压缩",
+    "line_start": 62,
+    "line_end": 72,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "5777be85cf0d",
+        "adapter": "repo",
+        "locator": "app/application/agents/context_policy.py:62-72",
+        "quote": "    del context_size  # 窗口由 model 侧提供，这里仅保留参数以标明配套关系\n    return ContextConfig(\n        trigger_ratio=0.15,\n        reserve_ratio=0.75,"
+      }
+    ]
+  },
+  {
+    "claim_id": "f7da7b871240",
+    "fingerprint": "app/infrastructure/llm.py#resource_leak@80",
+    "statement": "[resource_leak] app/infrastructure/llm.py:88-90 流式分支的闸门名额在生成器未被消费时永不释放（确认存在缺陷）",
+    "claim_type": "resource_leak",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/llm.py:88-90",
+    "rationale": "__call__ 在流式分支返回 self._release_after_stream(slot, result) 这个异步生成器，但此时 slot.__aenter__() 已经执行、名额已被占用。如果调用方拿到生成器后没有迭代（例如 AgentScope 在拿到响应后因异常/取消/提前判断而丢弃生成器，或生成器对象被 GC 前从未 __anext__），生成器体内的 try/finally 从未开始执行，finally 里的 slot.__aexit__ 也不会运行，信号量名额永久泄漏。多次发生后 GatewayThrottle 的 Semaphore 计数归零，所有后续模型调用在 slot.__aenter__ 处永久阻塞。",
+    "title": "流式分支的闸门名额在生成器未被消费时永不释放",
+    "line_start": 88,
+    "line_end": 90,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "935ea9c03d01",
+        "adapter": "repo",
+        "locator": "app/infrastructure/llm.py:88-90",
+        "quote": "        if not hasattr(result, \"__aiter__\"):\n            await slot.__aexit__(None, None, None)\n            _charge_budget(result)\n            return result\n        return self._release_after_stream(slot, result)"
+      }
+    ]
+  },
+  {
+    "claim_id": "f50434f127a5",
+    "fingerprint": "app/infrastructure/llm.py#error_handling@160",
+    "statement": "[error_handling] app/infrastructure/llm.py:168-176 重试循环捕获 BaseException 会把取消/KeyboardInterrupt 当作可重试错误（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/llm.py:168-176",
+    "rationale": "_call_with_fallback 用 except BaseException 捕获，随后仅靠 is_transient_error(str(err)) 判断。asyncio.CancelledError 的字符串通常不含任何瞬时标记，因此会 re-raise，这点尚可；但若取消发生在 httpx 超时包装内（消息含 timeout）或 CancelledError 被上游包装成含 'timeout' 文案的异常，则会被当作瞬时错误重试，导致取消请求后仍 sleep 6s/18s 并继续打上游，取消语义被破坏。此外 BaseException 捕获会吞掉 KeyboardInterrupt/SystemExit 若其消息碰巧含标记。",
+    "title": "重试循环捕获 BaseException 会把取消/KeyboardInterrupt 当作可重试错误",
+    "line_start": 168,
+    "line_end": 176,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "935ea9c03d01",
+        "adapter": "repo",
+        "locator": "app/infrastructure/llm.py:168-176",
+        "quote": "            except BaseException as err:\n                if not is_transient_error(err):\n                    raise\n                last_error = err\n                if attempt < self._max_transient_retries:\n                    # 指数退避：网关速率类限流对固定间隔重试不敏感\n                    delay = self._retry_base_seconds * (3**attempt)"
+      }
+    ]
+  },
+  {
+    "claim_id": "0d803a54c34f",
+    "fingerprint": "app/infrastructure/llm.py#error_handling@180",
+    "statement": "[error_handling] app/infrastructure/llm.py:185-190 重试用尽后回退调用未再受瞬时错误保护且 last_error 可能为 None（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/llm.py:185-190",
+    "rationale": "循环至少执行一次（range(max_transient_retries+1) 且 max_transient_retries>=0），若走到循环外必然至少捕获过一次瞬时错误，last_error 非 None；回退调用直接 await 备用模型，其异常向上传播是合理设计（不再无限重试）。因此不构成缺陷。",
+    "title": "重试用尽后回退调用未再受瞬时错误保护且 last_error 可能为 None",
+    "line_start": 185,
+    "line_end": 190,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "935ea9c03d01",
+        "adapter": "repo",
+        "locator": "app/infrastructure/llm.py:185-190",
+        "quote": "        if self._fallback is None:\n            raise last_error  # type: ignore[misc]\n\n        logger.warning(\"模型 %s 重试用尽，回退到 %s：%s\", self.model, self._fallback.model, last_error)\n        self._publish_fallback(str(last_error))\n        return await self._fallback(messages, tools, tool_choice, **kwargs)"
+      }
+    ]
+  },
+  {
+    "claim_id": "4ca3a03c3080",
+    "fingerprint": "app/infrastructure/llm.py#concurrency@120",
+    "statement": "[concurrency] app/infrastructure/llm.py:137-143 预算降级分支直接 await 备用模型，绕过闸门与流式名额移交（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/llm.py:137-143",
+    "rationale": "_invoke_upstream 在 tier != main 且存在 fallback 时直接 `return await self._fallback(...)`。若 fallback 是流式模型，返回的是异步生成器，外层 __call__ 会把它交给 _release_after_stream 持有名额——这部分尚可；但 fallback 模型自身是普通 OpenAIChatModel，不经过 GatewayThrottle，因此降级期间对备用模型的并发/速率完全不受闸门约束，与模块文档“配额闸门”目标矛盾，网关配额紧张时降级流量会再次触发 429。",
+    "title": "预算降级分支直接 await 备用模型，绕过闸门与流式名额移交",
+    "line_start": 137,
+    "line_end": 143,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "935ea9c03d01",
+        "adapter": "repo",
+        "locator": "app/infrastructure/llm.py:137-143",
+        "quote": "            if self._fallback is not None:\n                logger.info(\"Token 预算档位 %s，切用备用模型 %s\", tier, self._fallback.model)\n                self._publish_budget_tier(tier)\n                return await self._fallback(messages, tools, tool_choice, **kwargs)"
+      }
+    ]
+  },
+  {
+    "claim_id": "d53adcc3fa35",
+    "fingerprint": "app/infrastructure/llm.py#logic@80",
+    "statement": "[logic] app/infrastructure/llm.py:96-106 流式记账只取最后一个 chunk 的 usage，usage 缺失时静默不计（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/llm.py:96-106",
+    "rationale": "OpenAI 流式协议中 usage 仅在最后一个 chunk（stream_options.include_usage）出现，取 last 是正确做法；_charge_budget 内部对 None/缺失字段做了容错并明确“记账失败不影响主链路”。属于有意的降级设计，不是缺陷。",
+    "title": "流式记账只取最后一个 chunk 的 usage，usage 缺失时静默不计",
+    "line_start": 96,
+    "line_end": 106,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "935ea9c03d01",
+        "adapter": "repo",
+        "locator": "app/infrastructure/llm.py:96-106",
+        "quote": "        last: Any = None\n        try:\n            async for chunk in stream:\n                last = chunk\n                yield chunk\n        finally:\n            # 流式的 usage 在最后一个 chunk 上，读完再记账\n            _charge_budget(last)"
+      }
+    ]
+  },
+  {
+    "claim_id": "8574a9995d2b",
+    "fingerprint": "app/application/usecases/order_usecases.py#logic@180",
+    "statement": "[logic] app/application/usecases/order_usecases.py:196-202 取消订单先回补库存再保存订单，保存失败会导致库存重复回补（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/order_usecases.py:196-202",
+    "rationale": "execute 中先 order.cancel(reason) 修改内存状态，然后循环 release 回补库存，最后才 await self._order_repo.save(order)。若 save 抛异常（DB 故障/乐观锁冲突），订单在持久层仍是未取消状态，但库存已经回补。调用方重试取消时，状态机允许再次 cancel（因为持久层未变），于是库存被第二次回补，造成库存虚增。注释“重复取消会被状态机挡在上一步”只在 save 成功时成立。",
+    "title": "取消订单先回补库存再保存订单，保存失败会导致库存重复回补",
+    "line_start": 196,
+    "line_end": 202,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "817d1b432231",
+        "adapter": "repo",
+        "locator": "app/application/usecases/order_usecases.py:196-202",
+        "quote": "        order.cancel(reason)\n        # 取消后回补库存。重复取消会被状态机挡在上一步，因此不会重复回补。\n        for line in order.lines:\n            await self._stock_repo.release(line.sku_id, line.quantity)\n        await self._order_repo.save(order)"
+      }
+    ]
+  },
+  {
+    "claim_id": "d77fd6c00063",
+    "fingerprint": "app/application/usecases/order_usecases.py#logic@100",
+    "statement": "[logic] app/application/usecases/order_usecases.py:118-126 下单幂等键冲突回滚后未撤销已保存的订单（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/order_usecases.py:118-126",
+    "rationale": "并发下两路使用同一幂等键：两路都通过 _replay（键尚未登记），各自 reserve 库存并 save 订单，随后 record 只有一路成功。失败那一路执行 _rollback(reserved) 释放库存，但它在前面已经 await self._order_repo.save(order) 把订单写进了库，却没有删除/取消该订单。结果是库存被释放但订单仍存在，形成“有订单无库存占用”的脏数据，后续发货会超卖。",
+    "title": "下单幂等键冲突回滚后未撤销已保存的订单",
+    "line_start": 118,
+    "line_end": 126,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "817d1b432231",
+        "adapter": "repo",
+        "locator": "app/application/usecases/order_usecases.py:118-126",
+        "quote": "        if idempotency_key and self._idempotency is not None:\n            claimed = await self._idempotency.record(idempotency_key, order.order_id)\n            if not claimed:\n                # 并发下另一路先登记了同一个键：本次的扣减与订单都要撤销，返回赢家的结果\n                await self._rollback(reserved)\n                replay = await self._replay(buyer_id, idempotency_key)"
+      }
+    ]
+  },
+  {
+    "claim_id": "8ab75dc2ab89",
+    "fingerprint": "app/application/usecases/order_usecases.py#security@120",
+    "statement": "[security] app/application/usecases/order_usecases.py:133-141 幂等回放命中他人订单时抛 OrderAccessDenied 而非继续新建（确认并非缺陷）",
+    "claim_type": "security",
+    "polarity": -1,
+    "severity": "medium",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/order_usecases.py:133-141",
+    "rationale": "幂等键若被其他买家占用，_replay 抛 OrderAccessDenied 阻止本次下单，避免把他人订单快照返回给当前买家，这是正确的安全行为；虽然会拒绝合法下单，但属于保守失败，不构成信息泄露或越权。",
+    "title": "幂等回放命中他人订单时抛 OrderAccessDenied 而非继续新建",
+    "line_start": 133,
+    "line_end": 141,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "817d1b432231",
+        "adapter": "repo",
+        "locator": "app/application/usecases/order_usecases.py:133-141",
+        "quote": "        order = await self._order_repo.find_by_id(order_id)\n        if order is None:\n            return None\n        if order.buyer_id != buyer_id:\n            raise OrderAccessDenied(f\"订单不存在：{order_id}\")\n        return order.snapshot()"
+      }
+    ]
+  },
+  {
+    "claim_id": "3a10cf2e5db6",
+    "fingerprint": "app/application/usecases/order_usecases.py#error_handling@100",
+    "statement": "[error_handling] app/application/usecases/order_usecases.py:108-116 库存预留循环中部分成功后异常回滚正确，但 release 失败会掩盖原始异常（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/order_usecases.py:108-116",
+    "rationale": "except Exception 中 await self._rollback(reserved) 若 release 抛异常，会替换原始异常向上传播，丢失根因；但这是常见的补偿逻辑取舍，且 _rollback 内部无 try 保护。严格说属于可改进点，未达到确认缺陷的强度，因为主流程仍会失败并触发上层重试。",
+    "title": "库存预留循环中部分成功后异常回滚正确，但 release 失败会掩盖原始异常",
+    "line_start": 108,
+    "line_end": 116,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "817d1b432231",
+        "adapter": "repo",
+        "locator": "app/application/usecases/order_usecases.py:108-116",
+        "quote": "        except Exception:\n            await self._rollback(reserved)\n            raise"
+      }
+    ]
+  },
+  {
+    "claim_id": "7cf6c4dcb55f",
+    "fingerprint": "app/infrastructure/llm.py#concurrency@60",
+    "statement": "[concurrency] app/infrastructure/llm.py:78-90 ThrottledChatModel 未覆盖流式 fallback 的闸门，且 __call__ 中 slot 进入后异常路径重复退出风险（确认并非缺陷）",
+    "claim_type": "concurrency",
+    "polarity": -1,
+    "severity": "medium",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/llm.py:78-90",
+    "rationale": "except BaseException 分支调用 slot.__aexit__(*sys.exc_info()) 后 raise，非流式分支正常退出，流式分支把 slot 交给生成器；三条路径互斥，不会重复 __aexit__。asyncio.Semaphore 的 __aexit__ 重复调用会多释放名额，但此处路径互斥，故不是缺陷。",
+    "title": "ThrottledChatModel 未覆盖流式 fallback 的闸门，且 __call__ 中 slot 进入后异常路径重复退出风险",
+    "line_start": 78,
+    "line_end": 90,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "935ea9c03d01",
+        "adapter": "repo",
+        "locator": "app/infrastructure/llm.py:78-90",
+        "quote": "        slot = self._throttle.slot()\n        await slot.__aenter__()\n        try:\n            result = await self._call_with_fallback(messages, tools, tool_choice, **kwargs)\n        except BaseException:\n            await slot.__aexit__(*sys.exc_info())\n            raise"
+      }
+    ]
+  },
+  {
+    "claim_id": "127b5f305ab0",
+    "fingerprint": "app/infrastructure/transient.py#logic@20",
+    "statement": "[logic] app/infrastructure/transient.py:20-36 is_transient_error 用子串 '429' 匹配，可能误判含 429 的正常业务错误（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/transient.py:20-36",
+    "rationale": "标记表包含裸字符串 \"429\"，任何消息里出现 429（如订单号、trace id、token 数、端口号、时间戳片段）都会被判为瞬时错误并触发最多两次 6s/18s 退避重试，把确定性业务错误变成长时间挂起后仍失败。子串匹配缺少边界约束。",
+    "title": "is_transient_error 用子串 '429' 匹配，可能误判含 429 的正常业务错误",
+    "line_start": 20,
+    "line_end": 36,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "988d418a4818",
+        "adapter": "repo",
+        "locator": "app/infrastructure/transient.py:20-36",
+        "quote": "_TRANSIENT_ERROR_MARKERS = (\n    \"too many concurrent\",\n    \"rate limit\",\n    \"request rate\",\n    \"too many requests\",\n    \"throttling\",\n    \"429\","
+      }
+    ]
+  },
+  {
+    "claim_id": "3425d0d7bc91",
+    "fingerprint": "app/infrastructure/throttle.py#performance@40",
+    "statement": "[performance] app/infrastructure/throttle.py:44-51 GatewayThrottle._space_out 在持锁期间 sleep，串行化所有请求起点（确认并非缺陷）",
+    "claim_type": "performance",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/throttle.py:44-51",
+    "rationale": "在 _interval_lock 内 sleep 是刻意设计：保证相邻请求起点间隔不小于 min_interval，串行化起跑正是目标。虽然会排队，但这是限流语义要求，不是缺陷。",
+    "title": "GatewayThrottle._space_out 在持锁期间 sleep，串行化所有请求起点",
+    "line_start": 44,
+    "line_end": 51,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "a39c62399ddd",
+        "adapter": "repo",
+        "locator": "app/infrastructure/throttle.py:44-51",
+        "quote": "        async with self._interval_lock:\n            wait = self._min_interval - (time.monotonic() - self._last_start)\n            if wait > 0:\n                await asyncio.sleep(wait)\n            self._last_start = time.monotonic()"
+      }
+    ]
+  },
+  {
+    "claim_id": "e413b25fab71",
+    "fingerprint": "app/infrastructure/tracing.py#concurrency@20",
+    "statement": "[concurrency] app/infrastructure/tracing.py:33-36 setup_tracing 的 _initialized 检查与设置非线程安全，且未配置时 TracingMiddleware 仍被挂载（确认并非缺陷）",
+    "claim_type": "concurrency",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/tracing.py:33-36",
+    "rationale": "setup_tracing 通常在进程启动单线程调用，_initialized 竞态在实践中不触发；未配置 endpoint 时 TracingMiddleware 逐 hook 短路是文档声明的设计。不构成确认缺陷。",
+    "title": "setup_tracing 的 _initialized 检查与设置非线程安全，且未配置时 TracingMiddleware 仍被挂载",
+    "line_start": 33,
+    "line_end": 36,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "91a8dc35e497",
+        "adapter": "repo",
+        "locator": "app/infrastructure/tracing.py:33-36",
+        "quote": "    global _initialized\n    if _initialized or not settings.otlp_endpoint:\n        return"
+      }
+    ]
+  },
+  {
+    "claim_id": "8d2db9a013cb",
+    "fingerprint": "app/application/agents/trade_agent.py#logic@60",
+    "statement": "[logic] app/application/agents/trade_agent.py:60-78 TradeAgentFactory.build_tools 每次调用新建中间件实例，MainAgent 与子 Agent 共享工具时熔断状态不共享（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/agents/trade_agent.py:60-78",
+    "rationale": "ToolResilienceMiddleware 持有的是同一个 circuit_registry（构造注入），熔断状态在 registry 中共享，中间件实例本身无状态，因此新建实例不影响熔断语义。不是缺陷。",
+    "title": "TradeAgentFactory.build_tools 每次调用新建中间件实例，MainAgent 与子 Agent 共享工具时熔断状态不共享",
+    "line_start": 60,
+    "line_end": 78,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "67641266b07e",
+        "adapter": "repo",
+        "locator": "app/application/agents/trade_agent.py:60-78",
+        "quote": "    def _resilience(self) -> list:\n        return [ToolResilienceMiddleware(self._circuit_registry, self._bus)]"
+      }
+    ]
+  },
+  {
+    "claim_id": "132e9a617535",
+    "fingerprint": "app/application/agents/permissions.py#logic@40",
+    "statement": "[logic] app/application/agents/permissions.py:40-52 allow_business_tools 幂等判断只检查 source，会跳过用户自定义的 projectSettings 规则并重复追加（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [
+      "a1b9a699a2d1"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/application/agents/permissions.py:40-52",
+    "rationale": "幂等判断 `any(rule.source == \"projectSettings\" for rule in rules)` 只按 source 判断，不检查 rule_content/behavior。若持久化状态里已存在同 source 但不同内容（例如用户或项目配置的 DENY/ASK 规则，或 rule_content 非空的规则），函数会认为已配置而跳过追加 ALLOW，导致业务写工具仍被默认策略拦截（RequireUserConfirmEvent 挂起），与模块文档声明的“显式配置 allow 规则”目标不符。反之，若已有同 source 的 ALLOW 规则但 tool_name 不同（rules 是按 tool_name 分桶的，所以这点不成立），则不会重复。核心缺陷是 source 不足以唯一标识本函数追加的规则。",
+    "title": "allow_business_tools 幂等判断只检查 source，会跳过用户自定义的 projectSettings 规则并重复追加",
+    "line_start": 40,
+    "line_end": 52,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "c2c9683377ac",
+        "adapter": "repo",
+        "locator": "app/application/agents/permissions.py:40-52",
+        "quote": "        rules = allow_rules.setdefault(tool_name, [])\n        if any(rule.source == \"projectSettings\" for rule in rules):\n            continue\n        rules.append(\n            PermissionRule(\n                tool_name=tool_name,\n                rule_content=None,\n                behavior=PermissionBehavior.ALLOW,\n                source=\"projectSettings\",\n            ),\n        )"
+      }
+    ]
+  },
+  {
+    "claim_id": "9743ed06f7d2",
+    "fingerprint": "app/application/agents/search_agent.py#logic@40",
+    "statement": "[logic] app/application/agents/search_agent.py:55-60 build_tools 每次调用都新建中间件与工具实例，MainAgent 与 SearchAgent 不共享熔断状态（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/agents/search_agent.py:55-60",
+    "rationale": "`_resilience()` 每次返回新的 ToolResilienceMiddleware 列表，但熔断状态存放在构造时传入的共享 `self._circuit_registry` 中，中间件本身无状态，因此多次调用 build_tools 不会导致熔断计数分裂。工具实例重复创建只是对象开销，不构成行为缺陷。",
+    "title": "build_tools 每次调用都新建中间件与工具实例，MainAgent 与 SearchAgent 不共享熔断状态",
+    "line_start": 55,
+    "line_end": 60,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "f90300631d22",
+        "adapter": "repo",
+        "locator": "app/application/agents/search_agent.py:55-60",
+        "quote": "    def _resilience(self) -> list:\n        return [ToolResilienceMiddleware(self._circuit_registry, self._bus)]"
+      }
+    ]
+  },
+  {
+    "claim_id": "86053ad918f3",
+    "fingerprint": "app/application/agents/search_agent.py#api_misuse@60",
+    "statement": "[api_misuse] app/application/agents/search_agent.py:61-84 web_search_tool 仅在配置 key 时注册，但 build_tools 返回类型标注为 list[FunctionTool] 且 MainAgent 复用同一批工具，未配置时行为差异未在调用方处理（确认并非缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/agents/search_agent.py:61-84",
+    "rationale": "条件注册是文档明确声明的设计（“未配置时 Agent 看不到它”），调用方通过 Toolkit 动态获取工具列表，不存在硬编码索引或数量假设。未发现引用具体代码证明调用方依赖固定工具数量。",
+    "title": "web_search_tool 仅在配置 key 时注册，但 build_tools 返回类型标注为 list[FunctionTool] 且 MainAgent 复用同一批工具，未配置时行为差异未在调用方处理",
+    "line_start": 61,
+    "line_end": 84,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "f90300631d22",
+        "adapter": "repo",
+        "locator": "app/application/agents/search_agent.py:61-84",
+        "quote": "        if self._settings.tavily_api_key:\n            tools.append(\n                FunctionTool(\n                    build_web_search_tool(self._settings, self._bus),\n                    is_read_only=True,\n                    middlewares=self._resilience(),\n                ),\n            )"
+      }
+    ]
+  }
+]

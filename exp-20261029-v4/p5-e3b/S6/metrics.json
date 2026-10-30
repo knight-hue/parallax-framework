@@ -1,0 +1,323 @@
+{
+  "generated_at": "2026-10-30T14:50:42+00:00",
+  "arms": [
+    {
+      "arm": "sharded_shared",
+      "task_id": "S6",
+      "reader_count": 3,
+      "recall": 0.8,
+      "precision": 0.1579,
+      "redundancy": 0.2895,
+      "effective_channels": 2.5089,
+      "agent_count": 3,
+      "assigned_reader_count": 3,
+      "coverage_fill_rate": 0.3462,
+      "rounds": 1,
+      "total_claims": 114,
+      "distinct_fingerprints": 81,
+      "hits": 8,
+      "planted": 10,
+      "duplicates": 10,
+      "unmatched": 96,
+      "llm_calls": 14,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "split_retries": 0,
+      "dropped_chunks": 0,
+      "readers_failed": 0,
+      "reader_units": {
+        "reader-r0-0": 21,
+        "reader-r0-1": 21,
+        "reader-r0-2": 20
+      },
+      "reader_union": 31,
+      "prompt_tokens": 97977,
+      "completion_tokens": 35428,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "d1-auto-pk-loses-sqlite-variant",
+          "title": "自增主键丢掉 SQLite 变体，内存库上主键不能自增",
+          "defect_class": "migration",
+          "file": "app/infrastructure/persistence/sql/tables.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "d2-preference-unique-key-narrowed",
+          "title": "偏好唯一约束少了 kind 列，同一句话记不成 like 与 dislike",
+          "defect_class": "constraint",
+          "file": "app/infrastructure/persistence/sql/tables.py",
+          "found_by": [
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d3-message-index-drops-turn",
+          "title": "对话消息索引只剩 session_id，按轮次取流水退化成全表扫",
+          "defect_class": "index",
+          "file": "app/infrastructure/persistence/sql/tables.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d4-order-line-loses-foreign-key",
+          "title": "订单行不再外键到订单，孤儿行可以静默写入",
+          "defect_class": "constraint",
+          "file": "app/infrastructure/persistence/sql/tables.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "d5-sku-stock-version-no-default",
+          "title": "库存行的 version 不再默认 0，插入即违反非空",
+          "defect_class": "default",
+          "file": "app/infrastructure/persistence/sql/tables.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d6-path-traversal-not-sanitized",
+          "title": "文件名清洗被取消，买家 ID 里的路径片段会写到目录外",
+          "defect_class": "security",
+          "file": "app/infrastructure/persistence/json_file_stores.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d7-preference-dedupe-ignores-kind",
+          "title": "偏好追加只按 statement 去重，把另一面吃掉",
+          "defect_class": "logic",
+          "file": "app/infrastructure/persistence/json_file_stores.py",
+          "found_by": [
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d8-jsonl-append-becomes-overwrite",
+          "title": "JSONL 流水改成覆盖写，每次追加都把历史抹掉",
+          "defect_class": "io",
+          "file": "app/infrastructure/persistence/json_file_stores.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d9-list-turns-includes-events",
+          "title": "list_turns 不再跳过事件行，把过程事件当对话解析",
+          "defect_class": "filter",
+          "file": "app/infrastructure/persistence/json_file_stores.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d10-delete-only-removes-dislike",
+          "title": "按 statement 删除退化成「只删 dislike」，like 那条被留下",
+          "defect_class": "logic",
+          "file": "app/infrastructure/persistence/json_file_stores.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        }
+      ],
+      "elapsed_s": 171.71,
+      "errors": [],
+      "config": {
+        "model": "deepseek-chat",
+        "reasoning_effort": null,
+        "readers": 3,
+        "redundancy": 2,
+        "support_threshold": 2,
+        "max_rounds": 1,
+        "visibility": "shared",
+        "seed": 0,
+        "max_evidence_per_call": 6,
+        "max_units_per_reader": 0,
+        "equal_exposure": false,
+        "max_batch_chars": 24000,
+        "max_output_tokens": 16000,
+        "max_llm_calls": 0,
+        "max_tokens": 0,
+        "min_independent_support": 2,
+        "max_evidence_overlap_rate": 1.0,
+        "adaptive_scheduling": false,
+        "llm_falsifier": false,
+        "semantic_partitioning": false,
+        "partition_assignment": "greedy",
+        "git_revision": "f19c5f02267b88f458788308eabeefdb32a7312b",
+        "implementation_sha256": "38a1314e62352306801b261d124d5a104d526ffd2cee6904a877fbd9a44d688d",
+        "task": "S6",
+        "group_depth": 3
+      },
+      "valid": true
+    },
+    {
+      "arm": "sharded_blind",
+      "task_id": "S6",
+      "reader_count": 3,
+      "recall": 1.0,
+      "precision": 0.1495,
+      "redundancy": 0.1682,
+      "effective_channels": 2.6852,
+      "agent_count": 3,
+      "assigned_reader_count": 3,
+      "coverage_fill_rate": 0.3269,
+      "rounds": 1,
+      "total_claims": 107,
+      "distinct_fingerprints": 89,
+      "hits": 10,
+      "planted": 10,
+      "duplicates": 6,
+      "unmatched": 91,
+      "llm_calls": 14,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "split_retries": 0,
+      "dropped_chunks": 0,
+      "readers_failed": 0,
+      "reader_units": {
+        "reader-r0-0": 21,
+        "reader-r0-1": 21,
+        "reader-r0-2": 20
+      },
+      "reader_union": 31,
+      "prompt_tokens": 85176,
+      "completion_tokens": 37371,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "d1-auto-pk-loses-sqlite-variant",
+          "title": "自增主键丢掉 SQLite 变体，内存库上主键不能自增",
+          "defect_class": "migration",
+          "file": "app/infrastructure/persistence/sql/tables.py",
+          "found_by": [
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d2-preference-unique-key-narrowed",
+          "title": "偏好唯一约束少了 kind 列，同一句话记不成 like 与 dislike",
+          "defect_class": "constraint",
+          "file": "app/infrastructure/persistence/sql/tables.py",
+          "found_by": [
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d3-message-index-drops-turn",
+          "title": "对话消息索引只剩 session_id，按轮次取流水退化成全表扫",
+          "defect_class": "index",
+          "file": "app/infrastructure/persistence/sql/tables.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d4-order-line-loses-foreign-key",
+          "title": "订单行不再外键到订单，孤儿行可以静默写入",
+          "defect_class": "constraint",
+          "file": "app/infrastructure/persistence/sql/tables.py",
+          "found_by": [
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d5-sku-stock-version-no-default",
+          "title": "库存行的 version 不再默认 0，插入即违反非空",
+          "defect_class": "default",
+          "file": "app/infrastructure/persistence/sql/tables.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d6-path-traversal-not-sanitized",
+          "title": "文件名清洗被取消，买家 ID 里的路径片段会写到目录外",
+          "defect_class": "security",
+          "file": "app/infrastructure/persistence/json_file_stores.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d7-preference-dedupe-ignores-kind",
+          "title": "偏好追加只按 statement 去重，把另一面吃掉",
+          "defect_class": "logic",
+          "file": "app/infrastructure/persistence/json_file_stores.py",
+          "found_by": [
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d8-jsonl-append-becomes-overwrite",
+          "title": "JSONL 流水改成覆盖写，每次追加都把历史抹掉",
+          "defect_class": "io",
+          "file": "app/infrastructure/persistence/json_file_stores.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d9-list-turns-includes-events",
+          "title": "list_turns 不再跳过事件行，把过程事件当对话解析",
+          "defect_class": "filter",
+          "file": "app/infrastructure/persistence/json_file_stores.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d10-delete-only-removes-dislike",
+          "title": "按 statement 删除退化成「只删 dislike」，like 那条被留下",
+          "defect_class": "logic",
+          "file": "app/infrastructure/persistence/json_file_stores.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        }
+      ],
+      "elapsed_s": 76.81,
+      "errors": [],
+      "config": {
+        "model": "deepseek-chat",
+        "reasoning_effort": null,
+        "readers": 3,
+        "redundancy": 2,
+        "support_threshold": 2,
+        "max_rounds": 1,
+        "visibility": "blind",
+        "seed": 0,
+        "max_evidence_per_call": 6,
+        "max_units_per_reader": 0,
+        "equal_exposure": false,
+        "max_batch_chars": 24000,
+        "max_output_tokens": 16000,
+        "max_llm_calls": 0,
+        "max_tokens": 0,
+        "min_independent_support": 2,
+        "max_evidence_overlap_rate": 1.0,
+        "adaptive_scheduling": false,
+        "llm_falsifier": false,
+        "semantic_partitioning": false,
+        "partition_assignment": "greedy",
+        "git_revision": "f19c5f02267b88f458788308eabeefdb32a7312b",
+        "implementation_sha256": "38a1314e62352306801b261d124d5a104d526ffd2cee6904a877fbd9a44d688d",
+        "task": "S6",
+        "group_depth": 3
+      },
+      "valid": true
+    }
+  ]
+}
