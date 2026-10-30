@@ -1,0 +1,806 @@
+[
+  {
+    "claim_id": "d13cca11a22e",
+    "fingerprint": "app/application/memory/preference_selector.py#logic@80",
+    "statement": "[logic] app/application/memory/preference_selector.py:88-105 dislike 偏好被 top_k 截断，违反“黑名单全量保留”的安全底线（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/memory/preference_selector.py:88-105",
+    "rationale": "模块文档明确声明 dislike 必须全量保留、不参与 top_k 截断，但 select() 最后返回 (dislikes + selected_likes)[:top_k]。当 dislike 数量本身超过 top_k，或 dislikes 与 selected_likes 之和超过 top_k 时，切片会把排在后面的 dislike 丢掉。例如 top_k=2、dislikes 有 3 条时，只返回前 2 条 dislike，第 3 条黑名单被静默丢弃，正是文档所说的“推了用户明确拒绝的东西”的安全问题。likes 分支虽然保证了 selected_likes 长度 <= top_k，但没有为 dislikes 预留预算，也没有对 dislikes 单独做不截断处理。",
+    "title": "dislike 偏好被 top_k 截断，违反“黑名单全量保留”的安全底线",
+    "line_start": 88,
+    "line_end": 105,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "1ea202d2ad5b",
+        "adapter": "repo",
+        "locator": "app/application/memory/preference_selector.py:88-105",
+        "quote": "        if len(likes) <= top_k:\n            selected_likes = likes\n        elif self._relevance_enabled:\n            selected_likes = await self._rank_by_relevance(likes, query, top_k)\n        else:\n            selected_likes = self._latest_first(likes, top_k)\n\n        return (dislikes + selected_likes)[:top_k]"
+      }
+    ]
+  },
+  {
+    "claim_id": "9ff7402ae7b7",
+    "fingerprint": "app/application/memory/preference_selector.py#logic@120",
+    "statement": "[logic] app/application/memory/preference_selector.py:137-143 相关性排序后未恢复原始相对顺序，与注释和 _latest_first 行为不一致（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/memory/preference_selector.py:137-143",
+    "rationale": "_rank_by_relevance 的注释写“回到原始相对顺序输出，避免注入块的行序每轮抖动导致重复注入”，但代码直接返回 scored[:top_k] 的偏好列表，该列表是按相似度降序排列的，并未按原始 index 重新排序。而 _latest_first 分支确实做了 `[p for p in likes if p in newest]` 的原始顺序复原。两条分支输出顺序语义不一致：相关性开启时注入块行序随 query 变化而抖动，与注释承诺相反，可能导致同一批偏好在不同轮次以不同顺序注入（影响 prompt 稳定性/缓存）。",
+    "title": "相关性排序后未恢复原始相对顺序，与注释和 _latest_first 行为不一致",
+    "line_start": 137,
+    "line_end": 143,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "1ea202d2ad5b",
+        "adapter": "repo",
+        "locator": "app/application/memory/preference_selector.py:137-143",
+        "quote": "        scored.sort(key=lambda item: (-item[0], item[1]))\n        picked = [preference for _, _, preference in scored[:top_k]]\n        # 回到原始相对顺序输出，避免注入块的行序每轮抖动导致重复注入\n        return picked"
+      }
+    ]
+  },
+  {
+    "claim_id": "52af0954f7c1",
+    "fingerprint": "app/application/memory/preference_selector.py#logic@140",
+    "statement": "[logic] app/application/memory/preference_selector.py:145-149 _latest_first 用 `p in newest` 依赖 dataclass 相等性，重复偏好会被重复保留（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/memory/preference_selector.py:145-149",
+    "rationale": "_latest_first 通过 `[p for p in likes if p in newest]` 复原顺序，`in` 使用 BuyerPreference 的相等性（dataclass 默认按字段比较）。若存在两条字段完全相同的偏好（同一 statement、同一 created_at、同一 kind），newest 只包含其中一条（sorted 后切片），但列表推导会把 likes 中所有相等对象都保留，导致返回条数超过 top_k，进而使 select 中 `len(selected_likes) <= top_k` 的假设被打破，最终切片可能挤掉 dislike。",
+    "title": "_latest_first 用 `p in newest` 依赖 dataclass 相等性，重复偏好会被重复保留",
+    "line_start": 145,
+    "line_end": 149,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "1ea202d2ad5b",
+        "adapter": "repo",
+        "locator": "app/application/memory/preference_selector.py:145-149",
+        "quote": "        newest = sorted(likes, key=lambda p: p.created_at, reverse=True)[:top_k]\n        return [p for p in likes if p in newest]"
+      }
+    ]
+  },
+  {
+    "claim_id": "3748c376e00b",
+    "fingerprint": "app/application/memory/preference_selector.py#error_handling@20",
+    "statement": "[error_handling] app/application/memory/preference_selector.py:30-37 embed_batch 返回向量维度与 query 向量不一致时静默按 0 分处理（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/memory/preference_selector.py:30-37",
+    "rationale": "_cosine 在维度不一致或零向量时返回 0.0，属于防御性降级而非崩溃；排序仍能完成，只是该条偏好得分为 0。虽然可能掩盖 embedding 服务异常，但不会产生错误的安全后果（dislike 不参与该路径），且注释说明选偏好失败不应阻断对话。判定为可接受设计。",
+    "title": "embed_batch 返回向量维度与 query 向量不一致时静默按 0 分处理",
+    "line_start": 30,
+    "line_end": 37,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "1ea202d2ad5b",
+        "adapter": "repo",
+        "locator": "app/application/memory/preference_selector.py:30-37",
+        "quote": "def _cosine(left: Sequence[float], right: Sequence[float]) -> float:\n    if len(left) != len(right):\n        return 0.0"
+      }
+    ]
+  },
+  {
+    "claim_id": "259176fc292a",
+    "fingerprint": "app/infrastructure/security/output_guard.py#boundary@60",
+    "statement": "[boundary] app/infrastructure/security/output_guard.py:62-63 audit_output 对空字符串返回安全，符合预期（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:62-63",
+    "rationale": "空文本直接返回 (True, text)，无敏感内容可泄露，行为正确。",
+    "title": "audit_output 对空字符串返回安全，符合预期",
+    "line_start": 62,
+    "line_end": 63,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "3af4356ea741",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:62-63",
+        "quote": "    if not text:\n        return True, text"
+      }
+    ]
+  },
+  {
+    "claim_id": "3eae41e42778",
+    "fingerprint": "app/domain/catalog/sku.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/sku.py:30-33 Sku.stock 仅校验非负，未校验类型（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/sku.py:30-33",
+    "rationale": "stock 为 int 类型标注，`self.stock < 0` 对非数值会抛 TypeError，属于调用方类型错误而非本类缺陷；文档明确 stock 为只读初始库存，不承担扣减逻辑。不构成真实缺陷。",
+    "title": "Sku.stock 仅校验非负，未校验类型",
+    "line_start": 30,
+    "line_end": 33,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "00e2b01edb94",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/sku.py:30-33",
+        "quote": "        if self.stock < 0:\n            raise ValueError(f\"Sku.stock 必须非负：{self.sku_id}\")"
+      }
+    ]
+  },
+  {
+    "claim_id": "54d25a28ee3a",
+    "fingerprint": "app/domain/catalog/product.py#logic@40",
+    "statement": "[logic] app/domain/catalog/product.py:47-51 searchable_text 中 highlight_text 为空时产生多余空格（非缺陷）（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product.py:47-51",
+    "rationale": "当 highlights 为空时 highlight_text 为空字符串，join 结果末尾会多一个空格。这只是可检索文本中的冗余空白，不影响召回语义，也不构成错误行为。",
+    "title": "searchable_text 中 highlight_text 为空时产生多余空格（非缺陷）",
+    "line_start": 47,
+    "line_end": 51,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "570f58fa92ef",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product.py:47-51",
+        "quote": "        highlight_text = \" \".join(f\"{h.label} {h.detail}\" for h in self.highlights)\n        return \" \".join(\n            [self.title, self.brand, self.category, self.origin_country, self.description, highlight_text],\n        )"
+      }
+    ]
+  },
+  {
+    "claim_id": "518dea6583f7",
+    "fingerprint": "app/domain/catalog/product.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/product.py:36-37 primary_sku 依赖 __post_init__ 保证非空，但 dataclass 非 frozen 可被外部清空 skus（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product.py:36-37",
+    "rationale": "Product 是可变 dataclass，skus 列表可被外部 append/clear，从而绕过 __post_init__ 的非空校验，使 primary_sku 抛 IndexError。但这是调用方主动破坏不变量的结果，构造路径本身有校验，属于设计取舍而非本文件内的确定缺陷。",
+    "title": "primary_sku 依赖 __post_init__ 保证非空，但 dataclass 非 frozen 可被外部清空 skus",
+    "line_start": 36,
+    "line_end": 37,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "570f58fa92ef",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product.py:36-37",
+        "quote": "    def primary_sku(self) -> Sku:\n        return self.skus[0]"
+      }
+    ]
+  },
+  {
+    "claim_id": "aeafa3eda806",
+    "fingerprint": "app/application/memory/preference_selector.py#logic@80",
+    "statement": "[logic] app/application/memory/preference_selector.py:88-100 dislike 偏好被 top_k 截断，违背“黑名单全量保留”的安全底线（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/memory/preference_selector.py:88-100",
+    "rationale": "模块文档明确声明 dislike 必须全量保留、不参与 top_k 截断，否则会推荐用户明确拒绝的东西（安全问题）。但 select() 在最后返回 (dislikes + selected_likes)[:top_k]，这个切片会同时截断 dislikes。当 dislike 数量 >= top_k 时，部分 dislike 被丢弃；当 dislike 数量 > top_k 时甚至可能把全部 like 挤掉。触发条件：买家有 3 条 dislike、top_k=2，则只注入前 2 条 dislike，第 3 条黑名单丢失，可能推荐被明确拒绝的商品。",
+    "title": "dislike 偏好被 top_k 截断，违背“黑名单全量保留”的安全底线",
+    "line_start": 88,
+    "line_end": 100,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "1ea202d2ad5b",
+        "adapter": "repo",
+        "locator": "app/application/memory/preference_selector.py:88-100",
+        "quote": "        if len(likes) <= top_k:\n            selected_likes = likes\n        elif self._relevance_enabled:\n            selected_likes = await self._rank_by_relevance(likes, query, top_k)\n        else:\n            selected_likes = self._latest_first(likes, top_k)\n\n        return (dislikes + selected_likes)[:top_k]"
+      }
+    ]
+  },
+  {
+    "claim_id": "47bf8104a2b6",
+    "fingerprint": "app/application/memory/preference_selector.py#boundary@80",
+    "statement": "[boundary] app/application/memory/preference_selector.py:92-94 top_k<=0 时连 dislike 也一并丢弃，与“黑名单全量保留”矛盾（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/memory/preference_selector.py:92-94",
+    "rationale": "当 top_k <= 0 时直接 return []，把 dislike 也全部丢弃。虽然注释说“预算为 0 时不注入任何偏好”，但模块核心安全约束是 dislike 全量保留、不参与截断。若调用方因配置错误或预算计算得到 top_k=0，黑名单将完全失效，可能推荐用户明确拒绝的商品。这是边界条件与安全约束的冲突。",
+    "title": "top_k<=0 时连 dislike 也一并丢弃，与“黑名单全量保留”矛盾",
+    "line_start": 92,
+    "line_end": 94,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "1ea202d2ad5b",
+        "adapter": "repo",
+        "locator": "app/application/memory/preference_selector.py:92-94",
+        "quote": "        if top_k <= 0:\n            # 预算为 0 时不注入任何偏好\n            return []"
+      }
+    ]
+  },
+  {
+    "claim_id": "c2e1f94bb45f",
+    "fingerprint": "app/application/memory/preference_selector.py#logic@120",
+    "statement": "[logic] app/application/memory/preference_selector.py:128-134 _rank_by_relevance 声称“回到原始相对顺序输出”但实际未复原顺序（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/memory/preference_selector.py:128-134",
+    "rationale": "注释说“回到原始相对顺序输出，避免注入块的行序每轮抖动”，但代码 `picked = [preference for _, _, preference in scored[:top_k]]` 直接按相似度排序输出，并未按原始 index 重新排序。这与注释意图不符，导致注入块行序随 query 变化而抖动，可能影响 Prompt Cache 命中率（模块文档强调避免行序抖动）。",
+    "title": "_rank_by_relevance 声称“回到原始相对顺序输出”但实际未复原顺序",
+    "line_start": 128,
+    "line_end": 134,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "1ea202d2ad5b",
+        "adapter": "repo",
+        "locator": "app/application/memory/preference_selector.py:128-134",
+        "quote": "        scored.sort(key=lambda item: (-item[0], item[1]))\n        picked = [preference for _, _, preference in scored[:top_k]]\n        # 回到原始相对顺序输出，避免注入块的行序每轮抖动导致重复注入\n        return picked"
+      }
+    ]
+  },
+  {
+    "claim_id": "72d0982b218f",
+    "fingerprint": "app/application/memory/preference_selector.py#error_handling@20",
+    "statement": "[error_handling] app/application/memory/preference_selector.py:33-40 embed_batch 返回向量维度不一致时 _cosine 静默返回 0.0（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/memory/preference_selector.py:33-40",
+    "rationale": "_cosine 在维度不一致时返回 0.0，属于防御性降级而非崩溃。虽然可能掩盖 embedding 服务返回错误维度的问题，但不会导致错误推荐（只是退化为同分），且上层有数量校验。不构成真实缺陷。",
+    "title": "embed_batch 返回向量维度不一致时 _cosine 静默返回 0.0",
+    "line_start": 33,
+    "line_end": 40,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "1ea202d2ad5b",
+        "adapter": "repo",
+        "locator": "app/application/memory/preference_selector.py:33-40",
+        "quote": "def _cosine(left: Sequence[float], right: Sequence[float]) -> float:\n    if len(left) != len(right):\n        return 0.0"
+      }
+    ]
+  },
+  {
+    "claim_id": "0767ed0f06dc",
+    "fingerprint": "app/domain/catalog/sku.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/sku.py:30-34 Sku.stock 非负校验正确，无缺陷（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/sku.py:30-34",
+    "rationale": "__post_init__ 校验 sku_id 非空与 stock 非负，逻辑正确。stock 作为只读初始库存，文档明确不提供扣减方法，符合设计。未发现缺陷。",
+    "title": "Sku.stock 非负校验正确，无缺陷",
+    "line_start": 30,
+    "line_end": 34,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "00e2b01edb94",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/sku.py:30-34",
+        "quote": "    def __post_init__(self) -> None:\n        if not self.sku_id:\n            raise ValueError(\"Sku.sku_id required\")\n        if self.stock < 0:\n            raise ValueError(f\"Sku.stock 必须非负：{self.sku_id}\")"
+      }
+    ]
+  },
+  {
+    "claim_id": "67602edf80ac",
+    "fingerprint": "app/infrastructure/security/output_guard.py#boundary@60",
+    "statement": "[boundary] app/infrastructure/security/output_guard.py:62-63 audit_output 对空字符串返回安全，逻辑正确（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:62-63",
+    "rationale": "空文本直接返回 (True, text)，避免对空串做正则替换，逻辑正确。SENSITIVE_PATTERNS 编译与 subn 使用正确，命中即置 safe=False 并脱敏。未发现缺陷。",
+    "title": "audit_output 对空字符串返回安全，逻辑正确",
+    "line_start": 62,
+    "line_end": 63,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "3af4356ea741",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:62-63",
+        "quote": "    if not text:\n        return True, text"
+      }
+    ]
+  },
+  {
+    "claim_id": "64fe03140726",
+    "fingerprint": "app/domain/catalog/product.py#logic@40",
+    "statement": "[logic] app/domain/catalog/product.py:47-51 searchable_text 中 highlight_text 为空时产生多余空格（非缺陷）（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product.py:47-51",
+    "rationale": "当 highlights 为空时 highlight_text 为空字符串，join 结果末尾会多一个空格，但这只影响召回文本的空白，不影响检索语义（分词/子串匹配均不受影响），不构成真实缺陷。",
+    "title": "searchable_text 中 highlight_text 为空时产生多余空格（非缺陷）",
+    "line_start": 47,
+    "line_end": 51,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "570f58fa92ef",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product.py:47-51",
+        "quote": "        highlight_text = \" \".join(f\"{h.label} {h.detail}\" for h in self.highlights)\n        return \" \".join(\n            [self.title, self.brand, self.category, self.origin_country, self.description, highlight_text],\n        )"
+      }
+    ]
+  },
+  {
+    "claim_id": "0cc5fb33ceb6",
+    "fingerprint": "app/domain/catalog/product.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/product.py:38-39 primary_sku 直接取 skus[0]，依赖 __post_init__ 保证非空（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product.py:38-39",
+    "rationale": "__post_init__ 已强制 skus 非空，构造后 skus 不会被清空（dataclass 非 frozen 但无删除接口），因此 primary_sku 不会 IndexError。属于可接受的不变式依赖。",
+    "title": "primary_sku 直接取 skus[0]，依赖 __post_init__ 保证非空",
+    "line_start": 38,
+    "line_end": 39,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "570f58fa92ef",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product.py:38-39",
+        "quote": "    def primary_sku(self) -> Sku:\n        return self.skus[0]"
+      }
+    ]
+  },
+  {
+    "claim_id": "257ad900adc8",
+    "fingerprint": "app/application/memory/preference_selector.py#logic@80",
+    "statement": "[logic] app/application/memory/preference_selector.py:96-108 dislike 偏好被 top_k 截断，违反「黑名单全量保留」的安全底线（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/memory/preference_selector.py:96-108",
+    "rationale": "模块文档明确声明 dislike 必须全量保留、不参与 top_k 截断，但 select() 最后返回 (dislikes + selected_likes)[:top_k]。当 dislike 数量 >= top_k 时，dislikes 自身会被截断；当 dislikes 与 selected_likes 之和超过 top_k 时，selected_likes 会被截断（这部分是预期），但更关键的是：当 len(dislikes) > top_k 时，部分 dislike 被丢弃，直接违反安全底线。此外，当 len(likes) <= top_k 时 selected_likes = likes 全量，再与 dislikes 拼接后截断，会优先保留 dislike、丢弃 like，行为与「like 走相关性排序」的语义不一致，但主要缺陷是 dislike 被截断。触发条件：dislikes 数量大于 top_k（例如 top_k=3 而买家有 5 条忌口）。",
+    "title": "dislike 偏好被 top_k 截断，违反「黑名单全量保留」的安全底线",
+    "line_start": 96,
+    "line_end": 108,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "1ea202d2ad5b",
+        "adapter": "repo",
+        "locator": "app/application/memory/preference_selector.py:96-108",
+        "quote": "        if len(likes) <= top_k:\n            selected_likes = likes\n        elif self._relevance_enabled:\n            selected_likes = await self._rank_by_relevance(likes, query, top_k)\n        else:\n            selected_likes = self._latest_first(likes, top_k)\n\n        return (dislikes + selected_likes)[:top_k]"
+      }
+    ]
+  },
+  {
+    "claim_id": "4d827bd3ec0f",
+    "fingerprint": "app/application/memory/preference_selector.py#logic@120",
+    "statement": "[logic] app/application/memory/preference_selector.py:137-141 _rank_by_relevance 注释声称回到原始相对顺序，实际按相关性排序输出（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/memory/preference_selector.py:137-141",
+    "rationale": "注释写「回到原始相对顺序输出，避免注入块的行序每轮抖动导致重复注入」，但代码 picked = [preference for _, _, preference in scored[:top_k]] 直接按相关性得分顺序输出，并未按原始 index 重排。这导致注入块行序随 query 变化而抖动，与注释意图相反，可能造成 prompt cache 命中率下降或重复注入。虽然不影响正确性，但注释与实现不符，且实现未达成其声明的稳定性目标。",
+    "title": "_rank_by_relevance 注释声称回到原始相对顺序，实际按相关性排序输出",
+    "line_start": 137,
+    "line_end": 141,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "1ea202d2ad5b",
+        "adapter": "repo",
+        "locator": "app/application/memory/preference_selector.py:137-141",
+        "quote": "        scored.sort(key=lambda item: (-item[0], item[1]))\n        picked = [preference for _, _, preference in scored[:top_k]]\n        # 回到原始相对顺序输出，避免注入块的行序每轮抖动导致重复注入\n        return picked"
+      }
+    ]
+  },
+  {
+    "claim_id": "f53f8b848528",
+    "fingerprint": "app/application/memory/preference_selector.py#logic@140",
+    "statement": "[logic] app/application/memory/preference_selector.py:143-147 _latest_first 用 `p in newest` 依赖 dataclass 相等性，可能误删/误留重复偏好（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/application/memory/preference_selector.py:143-147",
+    "rationale": "return [p for p in likes if p in newest] 使用 in 运算符，对 dataclass 而言是值相等比较（__eq__）。若两条偏好字段完全相同（同 kind、同 statement、同 created_at），它们会被视为相等，导致 newest 中只保留一条时，原 likes 中所有相等的重复项都会被保留（因为 in 判定为 True），从而返回超过 top_k 条；反之若 newest 截断掉了某条，其相等副本仍可能被保留。这破坏了 top_k 的严格性。",
+    "title": "_latest_first 用 `p in newest` 依赖 dataclass 相等性，可能误删/误留重复偏好",
+    "line_start": 143,
+    "line_end": 147,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "1ea202d2ad5b",
+        "adapter": "repo",
+        "locator": "app/application/memory/preference_selector.py:143-147",
+        "quote": "        newest = sorted(likes, key=lambda p: p.created_at, reverse=True)[:top_k]\n        return [p for p in likes if p in newest]"
+      }
+    ]
+  },
+  {
+    "claim_id": "1f9e662eb8a5",
+    "fingerprint": "app/infrastructure/security/output_guard.py#boundary@60",
+    "statement": "[boundary] app/infrastructure/security/output_guard.py:62-63 audit_output 对空字符串返回 True 但未处理 None 之外的非字符串（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:62-63",
+    "rationale": "if not text: return True, text 对空字符串和 None 都返回安全，符合「无内容即安全」的语义。虽然类型标注为 str，但传入 None 时不会崩溃，行为合理。不构成缺陷。",
+    "title": "audit_output 对空字符串返回 True 但未处理 None 之外的非字符串",
+    "line_start": 62,
+    "line_end": 63,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "3af4356ea741",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:62-63",
+        "quote": "    if not text:\n        return True, text"
+      }
+    ]
+  },
+  {
+    "claim_id": "57c54947c6ea",
+    "fingerprint": "app/infrastructure/security/output_guard.py#security@40",
+    "statement": "[security] app/infrastructure/security/output_guard.py:44-45 SENSITIVE_PATTERNS 中内部工具名正则未转义，但工具名均为安全字符（确认并非缺陷）",
+    "claim_type": "security",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:44-45",
+    "rationale": "_INTERNAL_TOOLS 中所有名称仅含字母和下划线，拼接进正则后无需转义，不会产生正则注入或误匹配。\\b 边界确保不会匹配到更长标识符的子串。不构成缺陷。",
+    "title": "SENSITIVE_PATTERNS 中内部工具名正则未转义，但工具名均为安全字符",
+    "line_start": 44,
+    "line_end": 45,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "3af4356ea741",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:44-45",
+        "quote": "    r\"\\b(?:\" + \"|\".join(_INTERNAL_TOOLS) + r\")\\b\","
+      }
+    ]
+  },
+  {
+    "claim_id": "038f1798dd0c",
+    "fingerprint": "app/infrastructure/security/output_guard.py#logic@60",
+    "statement": "[logic] app/infrastructure/security/output_guard.py:70-76 audit_output 逐模式 subn 可能因脱敏文本再次命中后续模式而重复处理（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:70-76",
+    "rationale": "REDACTED 占位符为「[已脱敏]」，不含任何敏感模式可匹配的字符（无 URL、无工具名、无 session id 形态），因此后续模式不会再次命中已脱敏文本。逐模式处理是安全的。不构成缺陷。",
+    "title": "audit_output 逐模式 subn 可能因脱敏文本再次命中后续模式而重复处理",
+    "line_start": 70,
+    "line_end": 76,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "3af4356ea741",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:70-76",
+        "quote": "    safe = True\n    cleaned = text\n    for pattern in _compiled:\n        cleaned, count = pattern.subn(REDACTED, cleaned)\n        if count:\n            safe = False\n    return safe, cleaned"
+      }
+    ]
+  },
+  {
+    "claim_id": "f487a9426f32",
+    "fingerprint": "app/domain/catalog/product.py#logic@40",
+    "statement": "[logic] app/domain/catalog/product.py:47-51 searchable_text 中 highlight_text 为空时产生多余空格（非缺陷）（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product.py:47-51",
+    "rationale": "当 highlights 为空时 highlight_text 为空字符串，join 结果末尾会多一个空格，但这只影响召回文本的空白，不影响语义匹配，也不构成错误行为。",
+    "title": "searchable_text 中 highlight_text 为空时产生多余空格（非缺陷）",
+    "line_start": 47,
+    "line_end": 51,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "570f58fa92ef",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product.py:47-51",
+        "quote": "        highlight_text = \" \".join(f\"{h.label} {h.detail}\" for h in self.highlights)\n        return \" \".join(\n            [self.title, self.brand, self.category, self.origin_country, self.description, highlight_text],\n        )"
+      }
+    ]
+  },
+  {
+    "claim_id": "56979a9cc0ef",
+    "fingerprint": "app/domain/catalog/product.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/product.py:38-39 primary_sku 直接取 skus[0]，依赖 __post_init__ 保证非空（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product.py:38-39",
+    "rationale": "__post_init__ 已强制 skus 非空，构造后 skus 列表仍可被外部 append/clear 修改（dataclass 非 frozen），但正常使用路径下 primary_sku 不会越界；仅在外部清空 skus 后才会 IndexError，属于调用方违约，不是本方法缺陷。",
+    "title": "primary_sku 直接取 skus[0]，依赖 __post_init__ 保证非空",
+    "line_start": 38,
+    "line_end": 39,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "570f58fa92ef",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product.py:38-39",
+        "quote": "    def primary_sku(self) -> Sku:\n        return self.skus[0]"
+      }
+    ]
+  }
+]

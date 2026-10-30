@@ -1,0 +1,1823 @@
+[
+  {
+    "claim_id": "fe15aa1d29f3",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#logic@300",
+    "statement": "[logic] app/infrastructure/persistence/sql/repositories.py:300-310 release 在未登记 SKU 分支中先 commit 再写 movement，且 movement 使用已关闭会话（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:300-310",
+    "rationale": "release() 在 update 影响 0 行时进入补登记分支：先 db.add(SkuStockRow(...)) 并 await db.commit()，然后才调用 self._log_movement(db, ...) 并再次 commit。第一次 commit 后 SQLAlchemy 默认 expire_on_commit=False（此处 session_factory 确实设了 expire_on_commit=False），但更关键的是：_log_movement 只是 db.add，第二次 commit 会把它写入，所以 movement 本身能落库。真正的问题是补登记分支里 movement 的 stock_after 传的是 quantity，而实际库存就是 quantity，这点一致。需要再核对：正常分支先 _log_movement 再 commit，补登记分支先 commit 再 _log_movement 再 commit，功能上都能落库。因此这不是缺陷。",
+    "title": "release 在未登记 SKU 分支中先 commit 再写 movement，且 movement 使用已关闭会话",
+    "line_start": 300,
+    "line_end": 310,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:300-310",
+        "quote": "            if row is None:\n                # 未登记的 SKU：补登记而不是丢弃，否则库存会凭空消失\n                db.add(SkuStockRow(sku_id=sku_id, stock=quantity))\n                await db.commit()\n                await self._log_movement(db, sku_id, quantity, quantity, \"release\")\n                return"
+      }
+    ]
+  },
+  {
+    "claim_id": "13d060078bf5",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#concurrency@160",
+    "statement": "[concurrency] app/infrastructure/persistence/sql/repositories.py:175-190 append_turn 的 turn_index 取 max+1 存在并发撞号（确认并非缺陷）",
+    "claim_type": "concurrency",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [
+      "21f65d9b6717",
+      "859b9e1971bb"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:175-190",
+    "rationale": "模块 docstring 已明确承认同会话并发写有极小概率撞号，且撞号只影响展示顺序不影响数据完整性。这是被显式接受的设计权衡，不是隐藏缺陷。",
+    "title": "append_turn 的 turn_index 取 max+1 存在并发撞号",
+    "line_start": 175,
+    "line_end": 190,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:175-190",
+        "quote": "            max_index = await db.scalar(\n                select(func.max(ConversationMessageRow.turn_index)).where(\n                    ConversationMessageRow.session_id == turn.session_id,\n                ),\n            )"
+      }
+    ]
+  },
+  {
+    "claim_id": "f378e5c972b0",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#api_misuse@240",
+    "statement": "[api_misuse] app/infrastructure/persistence/sql/repositories.py:258-268 next_order_id 使用 inserted_primary_key 在部分驱动下可能为 None（确认存在缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:258-268",
+    "rationale": "insert(OrderSequenceRow).values() 后通过 result.inserted_primary_key[0] 取自增值。SQLAlchemy 对 inserted_primary_key 的支持依赖方言：SQLite/PostgreSQL 的 RETURNING 或 lastrowid 通常可用，但某些异步驱动（如部分 MySQL 配置）在未显式 RETURNING 时 inserted_primary_key 可能抛 InvalidRequestError 或返回 None，导致 f\"GBX-{None:06d}\" 抛 TypeError。代码注释声称『自增列在任何引擎里都是原子分配』，但取回主键的方式并非所有引擎都可靠。",
+    "title": "next_order_id 使用 inserted_primary_key 在部分驱动下可能为 None",
+    "line_start": 258,
+    "line_end": 268,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:258-268",
+        "quote": "        async with self._session_factory() as db:\n            result = await db.execute(insert(OrderSequenceRow).values())\n            await db.commit()\n        return f\"GBX-{result.inserted_primary_key[0]:06d}\""
+      }
+    ]
+  },
+  {
+    "claim_id": "be7cfd18ac2a",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#concurrency@320",
+    "statement": "[concurrency] app/infrastructure/persistence/sql/repositories.py:330-345 seed 逐条查询后插入，非原子且并发下可能重复插入（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:330-345",
+    "rationale": "seed 对每个 sku 先 select 再 add，最后统一 commit。若两个进程同时 seed 同一 sku，二者都查不到、都 add，commit 时主键冲突抛 IntegrityError 且未捕获，导致启动失败。docstring 声称『INSERT OR IGNORE 语义』，但实现是先查后插，并非真正的 INSERT OR IGNORE，存在 TOCTOU 窗口。",
+    "title": "seed 逐条查询后插入，非原子且并发下可能重复插入",
+    "line_start": 330,
+    "line_end": 345,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:330-345",
+        "quote": "            for sku_id, stock in entries:\n                existing = await db.scalar(\n                    select(SkuStockRow.sku_id).where(SkuStockRow.sku_id == sku_id),\n                )\n                if existing is not None:\n                    continue\n                db.add(SkuStockRow(sku_id=sku_id, stock=stock))"
+      }
+    ]
+  },
+  {
+    "claim_id": "95767705c138",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#logic@200",
+    "statement": "[logic] app/infrastructure/persistence/sql/repositories.py:218-245 save 中 merge 订单后 delete 订单行再 add，未 flush 顺序可能导致行被删后未重建（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "medium",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [
+      "c7a84a3facc8"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:218-245",
+    "rationale": "SQLAlchemy 的 unit of work 会按依赖顺序 flush：delete 语句通过 db.execute 立即执行，随后 db.add_all 的 OrderLineRow 在 commit 时插入。delete 先于 add 执行，最终行被重建，顺序正确。",
+    "title": "save 中 merge 订单后 delete 订单行再 add，未 flush 顺序可能导致行被删后未重建",
+    "line_start": 218,
+    "line_end": 245,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:218-245",
+        "quote": "            await db.execute(delete(OrderLineRow).where(OrderLineRow.order_id == order.order_id))\n            db.add_all("
+      }
+    ]
+  },
+  {
+    "claim_id": "ab84901e4d1e",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#boundary@200",
+    "statement": "[boundary] app/infrastructure/persistence/sql/repositories.py:200-215 list_turns 的 limit 取最早 N 条而非最近 N 条（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:200-215",
+    "rationale": "list_turns 按 turn_index 升序排列后 limit(limit)，返回的是会话最早的 limit 条消息，而不是最近的 limit 条。对于长会话，注入上下文时会拿到最旧的历史而丢掉最新对话，与『取最近对话』的常规语义相反，直接影响模型上下文正确性。",
+    "title": "list_turns 的 limit 取最早 N 条而非最近 N 条",
+    "line_start": 200,
+    "line_end": 215,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:200-215",
+        "quote": "                    select(ConversationMessageRow)\n                    .where(ConversationMessageRow.session_id == session_id)\n                    .order_by(ConversationMessageRow.turn_index)\n                    .limit(limit),"
+      }
+    ]
+  },
+  {
+    "claim_id": "e9e1c36b0e24",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#api_misuse@400",
+    "statement": "[api_misuse] app/infrastructure/persistence/sql/repositories.py:400-410 delete 依赖 result.rowcount，部分异步驱动返回 -1 导致误判（确认存在缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:400-410",
+    "rationale": "bool(result.rowcount) 在 rowcount 为 -1（某些驱动/方言不报告行数）时为 True，即使没有删除任何行也会返回 True，破坏『返回是否真的删到了行』的契约。",
+    "title": "delete 依赖 result.rowcount，部分异步驱动返回 -1 导致误判",
+    "line_start": 400,
+    "line_end": 410,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:400-410",
+        "quote": "            await db.commit()\n        return bool(result.rowcount)"
+      }
+    ]
+  },
+  {
+    "claim_id": "7e988da7ac11",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#error_handling@280",
+    "statement": "[error_handling] app/infrastructure/persistence/sql/repositories.py:280-295 reserve 中 rollback 后 return False 但未提交 movement 之外的清理（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:280-295",
+    "rationale": "row 为 None 时 rollback 并返回 False，此时没有需要提交的变更，rollback 是安全的清理。",
+    "title": "reserve 中 rollback 后 return False 但未提交 movement 之外的清理",
+    "line_start": 280,
+    "line_end": 295,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:280-295",
+        "quote": "            if row is None:\n                await db.rollback()\n                return False"
+      }
+    ]
+  },
+  {
+    "claim_id": "51e2a81e456f",
+    "fingerprint": "app/infrastructure/persistence/in_memory_stock_repository.py#api_misuse@0",
+    "statement": "[api_misuse] app/infrastructure/persistence/in_memory_stock_repository.py:15-17 InMemoryStockRepository 未实现 StockRepository 端口，缺少 get_many 之外的接口契约保证（确认并非缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:15-17",
+    "rationale": "类没有显式继承 StockRepository 协议，但 Python 结构化子类型（Protocol）下只要方法签名一致即可被当作 StockRepository 使用；composition.py 中 stock_repo: StockRepository = InMemoryStockRepository() 在运行时不会报错。方法集合（reserve/release/get/get_many/seed）与 SQL 实现一致，因此不构成缺陷。",
+    "title": "InMemoryStockRepository 未实现 StockRepository 端口，缺少 get_many 之外的接口契约保证",
+    "line_start": 15,
+    "line_end": 17,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "48f4b9cac1c9",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:15-17",
+        "quote": "class InMemoryStockRepository:\n    def __init__(self) -> None:\n        self._stock: dict[str, int] = {}\n        self._lock = asyncio.Lock()"
+      }
+    ]
+  },
+  {
+    "claim_id": "1e0dd000af5e",
+    "fingerprint": "app/infrastructure/persistence/in_memory_stock_repository.py#logic@20",
+    "statement": "[logic] app/infrastructure/persistence/in_memory_stock_repository.py:33-40 release 对未登记 SKU 直接补登记 quantity，可能凭空创造库存（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:33-40",
+    "rationale": "release 在 SKU 未登记时把库存设为 quantity，而不是报错或忽略。若调用方对从未 reserve 成功的 SKU 调用 release（例如下单流程中 reserve 失败后仍走补偿路径，或重复补偿），库存会被凭空创建。注释声称“避免库存凭空消失”，但实际效果是凭空增加。与 SQL 实现（未登记分支只记 movement 不增加库存）行为不一致，导致两种持久化形态下库存语义漂移。",
+    "title": "release 对未登记 SKU 直接补登记 quantity，可能凭空创造库存",
+    "line_start": 33,
+    "line_end": 40,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "48f4b9cac1c9",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:33-40",
+        "quote": "        async with self._lock:\n            current = self._stock.get(sku_id)\n            if current is None:\n                # 未登记的 SKU 不该出现；补登记而不是静默丢弃，避免库存凭空消失\n                self._stock[sku_id] = quantity\n                return\n            self._stock[sku_id] = current + quantity"
+      }
+    ]
+  },
+  {
+    "claim_id": "05ba071c13aa",
+    "fingerprint": "app/infrastructure/persistence/in_memory_stock_repository.py#concurrency@40",
+    "statement": "[concurrency] app/infrastructure/persistence/in_memory_stock_repository.py:51-55 seed 使用 setdefault 只补缺失项，但并发 reserve 与 seed 交错时可能覆盖已扣减库存（确认并非缺陷）",
+    "claim_type": "concurrency",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:51-55",
+    "rationale": "seed 与 reserve 共用同一把 asyncio.Lock，且 setdefault 只在键不存在时写入。若 reserve 先执行把库存扣到 0，seed 不会覆盖；若 seed 先执行，reserve 在锁内看到已登记值再扣减。两种交错都不会丢失扣减结果，因此并发安全。",
+    "title": "seed 使用 setdefault 只补缺失项，但并发 reserve 与 seed 交错时可能覆盖已扣减库存",
+    "line_start": 51,
+    "line_end": 55,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "48f4b9cac1c9",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:51-55",
+        "quote": "        async with self._lock:\n            for sku_id, stock in entries:\n                # 只登记缺失项：已有值代表真实扣减结果，不能被 seed 重置\n                self._stock.setdefault(sku_id, stock)"
+      }
+    ]
+  },
+  {
+    "claim_id": "8c26feb29f16",
+    "fingerprint": "app/infrastructure/persistence/in_memory_stock_repository.py#boundary@40",
+    "statement": "[boundary] app/infrastructure/persistence/in_memory_stock_repository.py:45-47 get_many 在锁内对可迭代对象惰性求值，若传入生成器且被外部复用可能不一致（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:45-47",
+    "rationale": "get_many 在锁内一次性消费 sku_ids 构造字典，生成器在锁内被完整迭代，不存在锁外惰性求值问题。返回的是新字典，调用方修改不影响内部状态。",
+    "title": "get_many 在锁内对可迭代对象惰性求值，若传入生成器且被外部复用可能不一致",
+    "line_start": 45,
+    "line_end": 47,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "48f4b9cac1c9",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:45-47",
+        "quote": "        async with self._lock:\n            return {sku_id: self._stock[sku_id] for sku_id in sku_ids if sku_id in self._stock}"
+      }
+    ]
+  },
+  {
+    "claim_id": "bf7493f0148a",
+    "fingerprint": "app/infrastructure/persistence/in_memory_stock_repository.py#boundary@20",
+    "statement": "[boundary] app/infrastructure/persistence/in_memory_stock_repository.py:22-30 reserve 对 quantity<=0 抛 ValueError，但未校验 sku_id 为空（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:22-30",
+    "rationale": "空 sku_id 在 _stock 中查不到，reserve 返回 False，属于合理的“库存不足/不存在”语义，不会造成错误扣减。调用方需自行处理 False。",
+    "title": "reserve 对 quantity<=0 抛 ValueError，但未校验 sku_id 为空",
+    "line_start": 22,
+    "line_end": 30,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "48f4b9cac1c9",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:22-30",
+        "quote": "        if quantity <= 0:\n            raise ValueError(f\"reserve.quantity 必须为正：{quantity}\")\n        async with self._lock:\n            current = self._stock.get(sku_id)\n            if current is None or current < quantity:\n                return False"
+      }
+    ]
+  },
+  {
+    "claim_id": "fc8c95d53670",
+    "fingerprint": "app/composition.py#error_handling@60",
+    "statement": "[error_handling] app/composition.py:78-86 _prompt_fingerprint 路径拼接依赖 __file__ 位置，打包/安装后可能读不到提示词文件（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/composition.py:78-86",
+    "rationale": "函数已用 try/except OSError 兜底返回 'noprompt'，读不到文件不会阻断启动，只是语义缓存 namespace 退化为固定值。这是设计上接受的降级，不构成缺陷。",
+    "title": "_prompt_fingerprint 路径拼接依赖 __file__ 位置，打包/安装后可能读不到提示词文件",
+    "line_start": 78,
+    "line_end": 86,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "254c9186a2ba",
+        "adapter": "repo",
+        "locator": "app/composition.py:78-86",
+        "quote": "    path = Path(__file__).resolve().parent / \"application\" / \"prompts\" / \"globex.yml\"\n    try:\n        return hashlib.sha256(path.read_bytes()).hexdigest()[:8]\n    except OSError:\n        return \"noprompt\""
+      }
+    ]
+  },
+  {
+    "claim_id": "df8b4140dd5e",
+    "fingerprint": "app/composition.py#error_handling@180",
+    "statement": "[error_handling] app/composition.py:196-198 use_database 判断仅比较字符串 'file'，其他非法 DATABASE_URL 会走 SQL 分支并在 create_engine 处失败（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/composition.py:196-198",
+    "rationale": "create_engine 在 build_container 中同步调用，若 URL 非法会直接抛异常导致启动失败。这是配置错误的显式失败，符合“配置错误应尽早暴露”的预期，不属于静默降级缺陷。",
+    "title": "use_database 判断仅比较字符串 'file'，其他非法 DATABASE_URL 会走 SQL 分支并在 create_engine 处失败",
+    "line_start": 196,
+    "line_end": 198,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "254c9186a2ba",
+        "adapter": "repo",
+        "locator": "app/composition.py:196-198",
+        "quote": "    use_database = settings.database_url != \"file\"\n    db_engine = create_engine(settings.database_url) if use_database else None"
+      }
+    ]
+  },
+  {
+    "claim_id": "8d1514fa3e85",
+    "fingerprint": "app/infrastructure/persistence/in_memory_repositories.py#concurrency@40",
+    "statement": "[concurrency] app/infrastructure/persistence/in_memory_repositories.py:44-45 InMemoryOrderRepository 的 next_order_id 与 save 非原子，并发下单可能产生重复单号（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [
+      "868f79149b21"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_repositories.py:44-45",
+    "rationale": "next_order_id 直接调用 next(self._counter) 生成单号，但生成单号与 save 写入 self._orders 之间没有任何锁或原子性保证。itertools.count 的 next() 在 CPython 下本身是原子的，因此不会出现两个请求拿到同一个号；但真正的问题是：调用方拿到号后若在 save 之前发生 await 切换（例如先做其他 IO），另一个请求可能已经用同一号完成 save，随后前者 save 会覆盖后者的订单（dict 赋值覆盖），造成订单丢失。此外 next_order_id 与 save 是两次独立 await，仓储层没有提供“分配并落库”的原子操作，无法防止覆盖。",
+    "title": "InMemoryOrderRepository 的 next_order_id 与 save 非原子，并发下单可能产生重复单号",
+    "line_start": 44,
+    "line_end": 45,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "52e48d38e8e3",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_repositories.py:44-45",
+        "quote": "    async def save(self, order: Order) -> None:\n        self._orders[order.order_id] = order\n\n    async def find_by_id(self, order_id: str) -> Optional[Order]:\n        return self._orders.get(order_id)\n\n    async def next_order_id(self) -> str:\n        return f\"GBX-{next(self._counter):06d}\""
+      }
+    ]
+  },
+  {
+    "claim_id": "724ce2cfe90a",
+    "fingerprint": "app/infrastructure/persistence/in_memory_repositories.py#concurrency@60",
+    "statement": "[concurrency] app/infrastructure/persistence/in_memory_repositories.py:62-73 InMemoryOrderIdempotencyStore 的 find 与 record 分离，存在检查-写入竞态（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_repositories.py:62-73",
+    "rationale": "find 与 record 各自加锁，但两者之间没有原子性。调用方典型流程是 find(key) 判空 -> 处理下单 -> record(key, order_id)。两个并发请求携带同一幂等键时，都能在 find 阶段看到空，随后都执行下单逻辑，只有一个 record 成功，另一个返回 False 但订单已经创建，导致重复下单。record 返回 False 只能事后发现，无法阻止重复副作用。",
+    "title": "InMemoryOrderIdempotencyStore 的 find 与 record 分离，存在检查-写入竞态",
+    "line_start": 62,
+    "line_end": 73,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "52e48d38e8e3",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_repositories.py:62-73",
+        "quote": "    async def find(self, key: str) -> Optional[str]:\n        async with self._lock:\n            return self._keys.get(key)\n\n    async def record(self, key: str, order_id: str) -> bool:\n        async with self._lock:\n            if key in self._keys:\n                return False\n            self._keys[key] = order_id\n            return True"
+      }
+    ]
+  },
+  {
+    "claim_id": "ee61248eebf0",
+    "fingerprint": "app/infrastructure/persistence/in_memory_repositories.py#logic@20",
+    "statement": "[logic] app/infrastructure/persistence/in_memory_repositories.py:27-33 InMemoryProductRepository 返回内部可变对象引用，外部修改会污染仓储状态（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_repositories.py:27-33",
+    "rationale": "find_by_id、find_by_ids、list_all 都直接返回 self._products 中存储的 Product 对象本身（list_all 只复制了列表，未复制元素）。若 Product 是可变对象（dataclass 非 frozen），调用方对返回对象的任何字段修改都会直接改写仓储内的商品数据，且跨请求可见，造成状态污染。",
+    "title": "InMemoryProductRepository 返回内部可变对象引用，外部修改会污染仓储状态",
+    "line_start": 27,
+    "line_end": 33,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "52e48d38e8e3",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_repositories.py:27-33",
+        "quote": "    async def find_by_id(self, product_id: str) -> Optional[Product]:\n        return self._products.get(product_id)\n\n    async def find_by_ids(self, product_ids: list[str]) -> list[Product]:\n        return [self._products[pid] for pid in product_ids if pid in self._products]\n\n    async def list_all(self) -> list[Product]:\n        return list(self._products.values())"
+      }
+    ]
+  },
+  {
+    "claim_id": "3d8d5cb9a9ee",
+    "fingerprint": "app/infrastructure/persistence/in_memory_repositories.py#resource_leak@60",
+    "statement": "[resource_leak] app/infrastructure/persistence/in_memory_repositories.py:62-73 InMemoryOrderIdempotencyStore 无容量上限，长期运行内存持续增长（确认存在缺陷）",
+    "claim_type": "resource_leak",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_repositories.py:62-73",
+    "rationale": "_keys 字典只增不减，没有任何过期或清理机制。开发态长时间运行或压测时，每个幂等键都会永久驻留内存，最终导致内存持续增长。虽然文档说明仅用于开发态，但作为可运行的实现仍构成资源泄漏。",
+    "title": "InMemoryOrderIdempotencyStore 无容量上限，长期运行内存持续增长",
+    "line_start": 62,
+    "line_end": 73,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "52e48d38e8e3",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_repositories.py:62-73",
+        "quote": "    def __init__(self) -> None:\n        self._keys: dict[str, str] = {}\n        self._lock = asyncio.Lock()"
+      }
+    ]
+  },
+  {
+    "claim_id": "868f79149b21",
+    "fingerprint": "app/infrastructure/persistence/in_memory_repositories.py#concurrency@40",
+    "statement": "[concurrency] app/infrastructure/persistence/in_memory_repositories.py:44-45 InMemoryOrderRepository 的 next_order_id 与 save 分离不构成缺陷（itertools.count 原子）（确认并非缺陷）",
+    "claim_type": "concurrency",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [
+      "7fec94cb42b0",
+      "8d1514fa3e85"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_repositories.py:44-45",
+    "rationale": "itertools.count 的 next() 在 CPython 中由 GIL 保护，单次调用是原子的，不会出现两个协程拿到相同序号。若调用方在单次事件循环内同步完成 next_order_id 与 save（中间无 await），则不会发生覆盖。因此仅就“分配重复单号”这一点而言不是缺陷；真正的风险在于调用方跨 await 使用，属于调用方契约问题。",
+    "title": "InMemoryOrderRepository 的 next_order_id 与 save 分离不构成缺陷（itertools.count 原子）",
+    "line_start": 44,
+    "line_end": 45,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "52e48d38e8e3",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_repositories.py:44-45",
+        "quote": "    async def next_order_id(self) -> str:\n        return f\"GBX-{next(self._counter):06d}\""
+      }
+    ]
+  },
+  {
+    "claim_id": "7fe1f3ceb55a",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#logic@300",
+    "statement": "[logic] app/infrastructure/persistence/sql/repositories.py:300-312 release 在未登记 SKU 分支中先 commit 再写 movement，且 movement 使用新 session 之外的状态（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:300-312",
+    "rationale": "release 的 row is None 分支里，先 db.add(SkuStockRow(...)) 并 await db.commit()，然后调用 self._log_movement(db, ...) 再 await db.commit()。第一次 commit 后 SQLAlchemy 默认 expire_on_commit=False（session_factory 设置了），所以 db 仍可用；但更关键的是：如果第二次 commit 失败，库存已补登记而 movement 丢失，审计不一致。此外该分支的 stock_after 传的是 quantity，与补登记后的库存一致，这点没问题。真正的问题是两次 commit 之间没有事务原子性，movement 记录可能丢失。",
+    "title": "release 在未登记 SKU 分支中先 commit 再写 movement，且 movement 使用新 session 之外的状态",
+    "line_start": 300,
+    "line_end": 312,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:300-312",
+        "quote": "            if row is None:\n                # 未登记的 SKU：补登记而不是丢弃，否则库存会凭空消失\n                db.add(SkuStockRow(sku_id=sku_id, stock=quantity))\n                await db.commit()\n                await self._log_movement(db, sku_id, quantity, quantity, \"release\")\n                return"
+      }
+    ]
+  },
+  {
+    "claim_id": "859b9e1971bb",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#concurrency@160",
+    "statement": "[concurrency] app/infrastructure/persistence/sql/repositories.py:175-190 append_turn 的 turn_index 取 max+1 存在并发撞号，且无唯一约束兜底（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [
+      "13d060078bf5"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:175-190",
+    "rationale": "模块 docstring 自承『同会话并发写有极小概率撞号，撞号只影响展示顺序不影响数据完整性』。但 list_turns 按 turn_index 排序，撞号会导致两条消息顺序不确定，且若表上存在 (session_id, turn_index) 唯一约束则会直接抛 IntegrityError 导致整条消息丢失。代码未捕获该异常。",
+    "title": "append_turn 的 turn_index 取 max+1 存在并发撞号，且无唯一约束兜底",
+    "line_start": 175,
+    "line_end": 190,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:175-190",
+        "quote": "            max_index = await db.scalar(\n                select(func.max(ConversationMessageRow.turn_index)).where(\n                    ConversationMessageRow.session_id == turn.session_id,\n                ),\n            )\n            db.add(\n                ConversationMessageRow(\n                    session_id=turn.session_id,\n                    turn_index=(max_index or 0) + 1,"
+      }
+    ]
+  },
+  {
+    "claim_id": "1d9699b5dc4a",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#logic@220",
+    "statement": "[logic] app/infrastructure/persistence/sql/repositories.py:232-258 save 中 merge 订单后 delete 订单行再 add_all，未 flush 前 merge 可能未插入导致外键顺序问题（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:232-258",
+    "rationale": "SQLAlchemy 的 unit of work 会在 commit 时按依赖顺序 flush：先插入/更新 OrderRow，再执行 delete，再插入 OrderLineRow。delete 通过 db.execute 立即发出，但此时 OrderRow 的 merge 尚未 flush；若订单是新建的，delete 语句在订单行不存在时无影响，随后 add_all 的订单行在 flush 时会先插入 OrderRow 再插入行。因此顺序由 SQLAlchemy 保证，不构成缺陷。",
+    "title": "save 中 merge 订单后 delete 订单行再 add_all，未 flush 前 merge 可能未插入导致外键顺序问题",
+    "line_start": 232,
+    "line_end": 258,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:232-258",
+        "quote": "            await db.merge(\n                OrderRow(\n                    order_id=order.order_id,"
+      }
+    ]
+  },
+  {
+    "claim_id": "bf0b49c2ad9c",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#concurrency@320",
+    "statement": "[concurrency] app/infrastructure/persistence/sql/repositories.py:330-345 seed 逐条查询后插入，非原子，并发 seed 可能重复插入（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:330-345",
+    "rationale": "seed 对每个 sku 先 select 再 add，最后统一 commit。两个进程同时 seed 同一 SKU 时都会查到不存在并各自 add，commit 时若 sku_id 是主键则第二个抛 IntegrityError，整个 seed 事务回滚，导致其余 SKU 也未登记。docstring 声称『INSERT OR IGNORE 语义』但实现并非原子。",
+    "title": "seed 逐条查询后插入，非原子，并发 seed 可能重复插入",
+    "line_start": 330,
+    "line_end": 345,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:330-345",
+        "quote": "            for sku_id, stock in entries:\n                existing = await db.scalar(\n                    select(SkuStockRow.sku_id).where(SkuStockRow.sku_id == sku_id),\n                )\n                if existing is not None:\n                    continue\n                db.add(SkuStockRow(sku_id=sku_id, stock=stock))"
+      }
+    ]
+  },
+  {
+    "claim_id": "e4591dc41ee9",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#api_misuse@260",
+    "statement": "[api_misuse] app/infrastructure/persistence/sql/repositories.py:268-280 next_order_id 使用 inserted_primary_key，在非自增主键或某些驱动下可能为 None（确认存在缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:268-280",
+    "rationale": "result.inserted_primary_key[0] 依赖驱动返回自增主键。SQLite/aiosqlite 通常可用，但若 OrderSequenceRow 主键不是自增整型（例如 UUID 或复合主键），inserted_primary_key 会抛 InvalidRequestError 或返回 None，导致 f\"GBX-{None:06d}\" 抛 TypeError。代码未做防御。",
+    "title": "next_order_id 使用 inserted_primary_key，在非自增主键或某些驱动下可能为 None",
+    "line_start": 268,
+    "line_end": 280,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:268-280",
+        "quote": "        async with self._session_factory() as db:\n            result = await db.execute(insert(OrderSequenceRow).values())\n            await db.commit()\n        return f\"GBX-{result.inserted_primary_key[0]:06d}\""
+      }
+    ]
+  },
+  {
+    "claim_id": "f1c1db5a3fc8",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#boundary@400",
+    "statement": "[boundary] app/infrastructure/persistence/sql/repositories.py:400-410 delete 使用 result.rowcount 判断，某些驱动 rowcount 为 -1 时 bool(-1) 为 True（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:400-410",
+    "rationale": "SQLAlchemy 的 CursorResult.rowcount 在部分驱动/场景下返回 -1（表示未知）。bool(-1) 为 True，会把『未删除任何行』误报为删除成功。虽然 sqlite 通常返回真实行数，但代码注释声称返回是否真的删到了行，跨驱动不可靠。",
+    "title": "delete 使用 result.rowcount 判断，某些驱动 rowcount 为 -1 时 bool(-1) 为 True",
+    "line_start": 400,
+    "line_end": 410,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:400-410",
+        "quote": "            result = await db.execute(\n                delete(BuyerPreferenceRow).where(\n                    BuyerPreferenceRow.buyer_id == buyer_id,\n                    BuyerPreferenceRow.statement == statement,\n                ),\n            )\n            await db.commit()\n        return bool(result.rowcount)"
+      }
+    ]
+  },
+  {
+    "claim_id": "c7a84a3facc8",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#logic@200",
+    "statement": "[logic] app/infrastructure/persistence/sql/repositories.py:205-220 list_turns 的 limit 未与 order_by 配合分页语义，取的是最早 N 条而非最近 N 条（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [
+      "3e7e071201da",
+      "95767705c138"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:205-220",
+    "rationale": "list_turns 按 turn_index 升序取 limit 条，返回的是会话最早的 N 条消息。对于长会话，注入上下文时应取最近 N 条，否则模型看到的是陈旧对话开头而丢失最新上下文。方法名与默认 limit=50 暗示取最近记录，但实现取最早记录。",
+    "title": "list_turns 的 limit 未与 order_by 配合分页语义，取的是最早 N 条而非最近 N 条",
+    "line_start": 205,
+    "line_end": 220,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:205-220",
+        "quote": "                    select(ConversationMessageRow)\n                    .where(ConversationMessageRow.session_id == session_id)\n                    .order_by(ConversationMessageRow.turn_index)\n                    .limit(limit),"
+      }
+    ]
+  },
+  {
+    "claim_id": "0f6c33c6ae4d",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#error_handling@60",
+    "statement": "[error_handling] app/infrastructure/persistence/sql/repositories.py:70-85 create_engine 对 sqlite 未设置 pool_pre_ping 等，但更关键的是 WAL PRAGMA 在连接事件中执行可能失败被吞（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:70-85",
+    "rationale": "connect 事件中执行 PRAGMA 若失败会抛异常导致连接建立失败，不会被静默吞掉；busy_timeout 与 WAL 是合理的。不构成缺陷。",
+    "title": "create_engine 对 sqlite 未设置 pool_pre_ping 等，但更关键的是 WAL PRAGMA 在连接事件中执行可能失败被吞",
+    "line_start": 70,
+    "line_end": 85,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:70-85",
+        "quote": "        @event.listens_for(engine.sync_engine, \"connect\")\n        def _enable_wal(dbapi_conn, _record):  # noqa: ANN001\n            cursor = dbapi_conn.cursor()\n            cursor.execute(\"PRAGMA journal_mode=WAL\")\n            cursor.execute(\"PRAGMA busy_timeout=5000\")  # 锁竞争时等待而不是立即报错\n            cursor.close()"
+      }
+    ]
+  },
+  {
+    "claim_id": "048c2fbc1ffd",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#error_handling@100",
+    "statement": "[error_handling] app/infrastructure/persistence/sql/repositories.py:100-125 bootstrap_schema 在 Alembic 失败时静默降级为 create_all，可能掩盖迁移错误（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:100-125",
+    "rationale": "_upgrade_with_alembic 捕获所有异常仅 warning 后返回 False，bootstrap_schema 随即用 create_all 建表。若迁移脚本本身有 bug（例如部分迁移已应用后失败），create_all 不会修复已存在表结构，系统会以错配的 schema 继续运行，产生难以诊断的运行时错误。注释虽称『明确报出并降级』，但仅 warning 级别，生产环境易被忽略。",
+    "title": "bootstrap_schema 在 Alembic 失败时静默降级为 create_all，可能掩盖迁移错误",
+    "line_start": 100,
+    "line_end": 125,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:100-125",
+        "quote": "    try:\n        await asyncio.to_thread(_run_alembic_upgrade, url)\n    except Exception as err:  # noqa: BLE001 —— 迁移失败不静默：明确报出并降级\n        logger.warning(\"Alembic 迁移失败，退化为 create_all：%s\", err)\n        return False"
+      }
+    ]
+  },
+  {
+    "claim_id": "f58d9051dab6",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#logic@240",
+    "statement": "[logic] app/infrastructure/persistence/sql/repositories.py:240-250 SqlOrderRepository.save 中 merge 与 delete 之间未 flush，若订单行有外键约束且订单为新建，delete 先于 OrderRow 插入执行（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:240-250",
+    "rationale": "delete 针对 OrderLineRow，订单新建时无行可删，不会触发外键问题；OrderRow 的插入在 commit flush 时先于 OrderLineRow 插入。SQLAlchemy 的依赖排序保证正确顺序。",
+    "title": "SqlOrderRepository.save 中 merge 与 delete 之间未 flush，若订单行有外键约束且订单为新建，delete 先于 OrderRow 插入执行",
+    "line_start": 240,
+    "line_end": 250,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:240-250",
+        "quote": "            await db.execute(delete(OrderLineRow).where(OrderLineRow.order_id == order.order_id))"
+      }
+    ]
+  },
+  {
+    "claim_id": "7c0735159c85",
+    "fingerprint": "app/infrastructure/persistence/in_memory_stock_repository.py#logic@20",
+    "statement": "[logic] app/infrastructure/persistence/in_memory_stock_repository.py:38-46 release 对未登记 SKU 直接补登记，可能凭空造出库存（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:38-46",
+    "rationale": "release 在 SKU 未登记时把 quantity 直接写入 _stock，等于凭空创建库存。若调用方对从未 reserve 成功的 SKU 调用 release（例如下单流程在 reserve 返回 False 后仍走补偿路径，或重复补偿），库存会被虚增，后续下单可超卖。注释声称“避免库存凭空消失”，但实际效果是凭空产生库存。",
+    "title": "release 对未登记 SKU 直接补登记，可能凭空造出库存",
+    "line_start": 38,
+    "line_end": 46,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "48f4b9cac1c9",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:38-46",
+        "quote": "        async with self._lock:\n            current = self._stock.get(sku_id)\n            if current is None:\n                # 未登记的 SKU 不该出现；补登记而不是静默丢弃，避免库存凭空消失\n                self._stock[sku_id] = quantity\n                return\n            self._stock[sku_id] = current + quantity"
+      }
+    ]
+  },
+  {
+    "claim_id": "ddf2919a82c2",
+    "fingerprint": "app/infrastructure/persistence/in_memory_stock_repository.py#logic@40",
+    "statement": "[logic] app/infrastructure/persistence/in_memory_stock_repository.py:57-61 seed 使用 setdefault，已存在的 0 库存不会被目录初值覆盖（符合设计）（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:57-61",
+    "rationale": "setdefault 只补缺失项，与 docstring 中“已有值代表真实扣减结果，不能被 seed 重置”一致；重启后库存回到 seed 初值是该模式声明的取舍，不构成缺陷。",
+    "title": "seed 使用 setdefault，已存在的 0 库存不会被目录初值覆盖（符合设计）",
+    "line_start": 57,
+    "line_end": 61,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "48f4b9cac1c9",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:57-61",
+        "quote": "        async with self._lock:\n            for sku_id, stock in entries:\n                # 只登记缺失项：已有值代表真实扣减结果，不能被 seed 重置\n                self._stock.setdefault(sku_id, stock)"
+      }
+    ]
+  },
+  {
+    "claim_id": "a71e2f596a25",
+    "fingerprint": "app/infrastructure/persistence/in_memory_stock_repository.py#error_handling@20",
+    "statement": "[error_handling] app/infrastructure/persistence/in_memory_stock_repository.py:22-30 reserve 对未登记 SKU 返回 False 而非报错，可能掩盖播种失败（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:22-30",
+    "rationale": "current is None 时返回 False 是“库存不足”的合理语义，调用方据此拒绝下单；播种失败在 composition._seed_stock 中已记录告警。行为可预期，不构成缺陷。",
+    "title": "reserve 对未登记 SKU 返回 False 而非报错，可能掩盖播种失败",
+    "line_start": 22,
+    "line_end": 30,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "48f4b9cac1c9",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:22-30",
+        "quote": "        async with self._lock:\n            current = self._stock.get(sku_id)\n            if current is None or current < quantity:\n                return False\n            self._stock[sku_id] = current - quantity\n            return True"
+      }
+    ]
+  },
+  {
+    "claim_id": "fec281f2902e",
+    "fingerprint": "app/infrastructure/persistence/in_memory_stock_repository.py#concurrency@40",
+    "statement": "[concurrency] app/infrastructure/persistence/in_memory_stock_repository.py:50-53 get_many 在锁内对可迭代对象惰性求值，若传入生成器且被外部并发消费可能不一致（确认并非缺陷）",
+    "claim_type": "concurrency",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:50-53",
+    "rationale": "生成器在锁内被完整消费并构造 dict，锁覆盖了整个迭代过程；只要调用方不在迭代过程中修改同一生成器（生成器本身不可重入），结果一致。属于调用方责任，不构成本文件缺陷。",
+    "title": "get_many 在锁内对可迭代对象惰性求值，若传入生成器且被外部并发消费可能不一致",
+    "line_start": 50,
+    "line_end": 53,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "48f4b9cac1c9",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:50-53",
+        "quote": "        async with self._lock:\n            return {sku_id: self._stock[sku_id] for sku_id in sku_ids if sku_id in self._stock}"
+      }
+    ]
+  },
+  {
+    "claim_id": "1b9a874b27bf",
+    "fingerprint": "app/composition.py#logic@80",
+    "statement": "[logic] app/composition.py:88-96 composition 中 _prompt_fingerprint 路径拼接依赖 __file__ 位置（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/composition.py:88-96",
+    "rationale": "Path(__file__).resolve().parent 为 app/，拼接 application/prompts/globex.yml 得到 app/application/prompts/globex.yml，与仓库结构一致；OSError 时返回固定值 'noprompt'，不会阻断启动。路径正确，不构成缺陷。",
+    "title": "composition 中 _prompt_fingerprint 路径拼接依赖 __file__ 位置",
+    "line_start": 88,
+    "line_end": 96,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "254c9186a2ba",
+        "adapter": "repo",
+        "locator": "app/composition.py:88-96",
+        "quote": "    path = Path(__file__).resolve().parent / \"application\" / \"prompts\" / \"globex.yml\"\n    try:\n        return hashlib.sha256(path.read_bytes()).hexdigest()[:8]\n    except OSError:\n        return \"noprompt\""
+      }
+    ]
+  },
+  {
+    "claim_id": "6e7b2d293cdb",
+    "fingerprint": "app/infrastructure/persistence/in_memory_repositories.py#concurrency@60",
+    "statement": "[concurrency] app/infrastructure/persistence/in_memory_repositories.py:60-74 InMemoryOrderIdempotencyStore 的 find/record 分离导致检查-写入非原子，并发重投可重复下单（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_repositories.py:60-74",
+    "rationale": "find() 与 record() 各自加锁，但两者之间没有原子性。调用方典型模式是 `existing = await store.find(key); if existing: return existing; ... await store.record(key, order_id)`。两个协程在同一事件循环中交错执行时，都能在 find 阶段拿到 None，随后一个 record 成功、另一个 record 返回 False，但第二个调用方若忽略 record 的返回值（或先创建订单再 record），就会产生两笔订单。record 返回 bool 的设计暗示调用方需要处理 False，但 find 与 record 之间的窗口无法通过 record 的返回值消除——订单可能已经落库。",
+    "title": "InMemoryOrderIdempotencyStore 的 find/record 分离导致检查-写入非原子，并发重投可重复下单",
+    "line_start": 60,
+    "line_end": 74,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "52e48d38e8e3",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_repositories.py:60-74",
+        "quote": "    async def find(self, key: str) -> Optional[str]:\n        async with self._lock:\n            return self._keys.get(key)\n\n    async def record(self, key: str, order_id: str) -> bool:\n        async with self._lock:\n            if key in self._keys:\n                return False\n            self._keys[key] = order_id\n            return True"
+      }
+    ]
+  },
+  {
+    "claim_id": "7fec94cb42b0",
+    "fingerprint": "app/infrastructure/persistence/in_memory_repositories.py#concurrency@40",
+    "statement": "[concurrency] app/infrastructure/persistence/in_memory_repositories.py:44-52 InMemoryOrderRepository.next_order_id 与 save 非原子，并发下单可能撞单号（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [
+      "868f79149b21"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_repositories.py:44-52",
+    "rationale": "next_order_id 通过 itertools.count 取号，save 单独写入 dict，两者之间没有锁也没有原子性。虽然 itertools.count 的 next() 在 CPython 下是原子的（不会取到重复号），但取号与 save 之间若发生异常或调用方在取号后未保存，号会被浪费；更关键的是 next_order_id 与 save 之间没有事务边界，若调用方在取号后、save 前有 await 点且失败，订单号空洞。此外，若未来把 next_order_id 改成基于 len(self._orders)+1 之类的实现，并发下会直接撞号。当前实现本身取号不重复，但缺少与 save 的原子性保证，属于设计缺陷。",
+    "title": "InMemoryOrderRepository.next_order_id 与 save 非原子，并发下单可能撞单号",
+    "line_start": 44,
+    "line_end": 52,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "52e48d38e8e3",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_repositories.py:44-52",
+        "quote": "    async def next_order_id(self) -> str:\n        return f\"GBX-{next(self._counter):06d}\""
+      }
+    ]
+  },
+  {
+    "claim_id": "0a88102992c5",
+    "fingerprint": "app/infrastructure/persistence/in_memory_repositories.py#boundary@20",
+    "statement": "[boundary] app/infrastructure/persistence/in_memory_repositories.py:30-31 InMemoryProductRepository.find_by_ids 静默丢弃不存在的 id，调用方无法区分缺失（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_repositories.py:30-31",
+    "rationale": "find_by_ids 用 `if pid in self._products` 过滤掉不存在的 id，返回的列表长度可能小于输入。这本身是常见语义（批量查询返回存在的子集），是否缺陷取决于调用方契约。若调用方依赖返回列表与输入一一对应（例如按索引对齐价格），则会错位。但仅从本文件看，没有证据表明调用方这样使用；且 SQL 实现通常也是返回存在的行。因此不判定为缺陷，但记录该语义风险。",
+    "title": "InMemoryProductRepository.find_by_ids 静默丢弃不存在的 id，调用方无法区分缺失",
+    "line_start": 30,
+    "line_end": 31,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "52e48d38e8e3",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_repositories.py:30-31",
+        "quote": "    async def find_by_ids(self, product_ids: list[str]) -> list[Product]:\n        return [self._products[pid] for pid in product_ids if pid in self._products]"
+      }
+    ]
+  },
+  {
+    "claim_id": "54cb2ed69c54",
+    "fingerprint": "app/infrastructure/persistence/in_memory_repositories.py#resource_leak@40",
+    "statement": "[resource_leak] app/infrastructure/persistence/in_memory_repositories.py:56-74 InMemoryOrderIdempotencyStore 无过期/清理机制，进程内字典无限增长（确认存在缺陷）",
+    "claim_type": "resource_leak",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_repositories.py:56-74",
+    "rationale": "幂等键只增不删，没有 TTL 或容量上限。开发态长时间运行或压测时，_keys 会随请求数线性增长，最终内存膨胀。虽然注释说明仅用于开发态，但作为可运行的实现，缺少清理是真实缺陷（SQL 实现通常有 TTL 列或定期清理）。",
+    "title": "InMemoryOrderIdempotencyStore 无过期/清理机制，进程内字典无限增长",
+    "line_start": 56,
+    "line_end": 74,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "52e48d38e8e3",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_repositories.py:56-74",
+        "quote": "    def __init__(self) -> None:\n        self._keys: dict[str, str] = {}\n        self._lock = asyncio.Lock()"
+      }
+    ]
+  },
+  {
+    "claim_id": "ebf7c7180b07",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#logic@300",
+    "statement": "[logic] app/infrastructure/persistence/sql/repositories.py:300-310 release 在未登记 SKU 分支中先 commit 再写 movement，且 movement 使用已关闭会话（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:300-310",
+    "rationale": "在 release 中，当 update 影响 0 行（SKU 未登记）时，代码先 db.add(SkuStockRow(...)) 并 await db.commit()，然后才调用 self._log_movement(db, ...) 并再次 commit。第一次 commit 之后，SQLAlchemy 的 async session 仍可复用（commit 不会关闭 session），所以第二次 commit 能提交 movement——但问题在于：movement 的 stock_after 被硬编码为 quantity，而实际库存就是 quantity，这点没错。真正的问题是：如果第一次 commit 成功、第二次 commit 失败，库存已补登记但 movement 丢失，审计链断裂；更关键的是，正常分支（row 不为 None）是先 _log_movement 再 commit，两个分支的原子性不一致。此外，未登记分支的 movement 与库存补登记不在同一事务，违反审计一致性。",
+    "title": "release 在未登记 SKU 分支中先 commit 再写 movement，且 movement 使用已关闭会话",
+    "line_start": 300,
+    "line_end": 310,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:300-310",
+        "quote": "            if row is None:\n                # 未登记的 SKU：补登记而不是丢弃，否则库存会凭空消失\n                db.add(SkuStockRow(sku_id=sku_id, stock=quantity))\n                await db.commit()\n                await self._log_movement(db, sku_id, quantity, quantity, \"release\")\n                return"
+      }
+    ]
+  },
+  {
+    "claim_id": "3981cebe8820",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#concurrency@320",
+    "statement": "[concurrency] app/infrastructure/persistence/sql/repositories.py:330-345 seed 在循环内逐条查询并 add，未处理并发插入的 IntegrityError（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:330-345",
+    "rationale": "seed 的注释声称是 INSERT OR IGNORE 语义，但实现是「先 select 判断存在，再 add」。两个进程（API 与 worker）同时启动并 seed 同一 SKU 时，双方 select 都返回 None，随后都 add 并 commit，第二个 commit 会抛 IntegrityError（sku_id 主键冲突），导致整个 seed 事务失败、启动报错。注释里明确说 worker 是独立进程，与 API 并发写同一 db，这正是触发条件。",
+    "title": "seed 在循环内逐条查询并 add，未处理并发插入的 IntegrityError",
+    "line_start": 330,
+    "line_end": 345,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:330-345",
+        "quote": "            for sku_id, stock in entries:\n                existing = await db.scalar(\n                    select(SkuStockRow.sku_id).where(SkuStockRow.sku_id == sku_id),\n                )\n                if existing is not None:\n                    continue\n                db.add(SkuStockRow(sku_id=sku_id, stock=stock))"
+      }
+    ]
+  },
+  {
+    "claim_id": "21f65d9b6717",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#concurrency@160",
+    "statement": "[concurrency] app/infrastructure/persistence/sql/repositories.py:175-195 append_turn 的 turn_index 取 max+1 在并发下撞号，且无唯一约束兜底（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [
+      "13d060078bf5"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:175-195",
+    "rationale": "注释自承「同会话并发写有极小概率撞号，撞号只影响展示顺序不影响数据完整性」。但 list_turns 用 order_by(turn_index) 排序，撞号后两条消息顺序不确定，且若表上 (session_id, turn_index) 有唯一约束则会直接抛 IntegrityError 导致消息丢失。注释说「不影响数据完整性」并不成立——撞号本身不丢数据，但若存在唯一约束则丢；即使无约束，展示顺序错乱也是可观察缺陷。",
+    "title": "append_turn 的 turn_index 取 max+1 在并发下撞号，且无唯一约束兜底",
+    "line_start": 175,
+    "line_end": 195,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:175-195",
+        "quote": "            max_index = await db.scalar(\n                select(func.max(ConversationMessageRow.turn_index)).where(\n                    ConversationMessageRow.session_id == turn.session_id,\n                ),\n            )\n            db.add(\n                ConversationMessageRow(\n                    session_id=turn.session_id,\n                    turn_index=(max_index or 0) + 1,"
+      }
+    ]
+  },
+  {
+    "claim_id": "b341ec514940",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#api_misuse@240",
+    "statement": "[api_misuse] app/infrastructure/persistence/sql/repositories.py:245-258 next_order_id 依赖 inserted_primary_key，SQLite 下 insert().values() 空值可能不返回主键（确认存在缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:245-258",
+    "rationale": "insert(OrderSequenceRow).values() 不带任何列值，依赖自增列。SQLAlchemy 对 SQLite 的 lastrowid 通常能拿到 inserted_primary_key，但 result.inserted_primary_key 在部分驱动/方言下可能为 None 或抛 InvalidRequestError（当无法确定主键时）。更稳妥的是显式 returning 或使用 result.lastrowid。此外 result 在 commit 之后才访问 inserted_primary_key，某些驱动在 commit 后结果对象失效。",
+    "title": "next_order_id 依赖 inserted_primary_key，SQLite 下 insert().values() 空值可能不返回主键",
+    "line_start": 245,
+    "line_end": 258,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:245-258",
+        "quote": "        async with self._session_factory() as db:\n            result = await db.execute(insert(OrderSequenceRow).values())\n            await db.commit()\n        return f\"GBX-{result.inserted_primary_key[0]:06d}\""
+      }
+    ]
+  },
+  {
+    "claim_id": "3e7e071201da",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#logic@200",
+    "statement": "[logic] app/infrastructure/persistence/sql/repositories.py:215-240 save 中 merge 订单后 delete 订单行再 add_all，未 flush 前 delete 与 add 顺序可能冲突（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [
+      "c7a84a3facc8"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:215-240",
+    "rationale": "SQLAlchemy 的 unit of work 会按依赖顺序执行：delete 语句通过 db.execute 立即发出，随后 add_all 的 INSERT 在 commit 时 flush。由于 delete 已先执行，新行不会与旧行冲突（除非 OrderLineRow 有 (order_id, sku_id) 唯一约束且同一订单内 sku 重复——但订单行本身允许同 sku 多行吗？若允许则无约束）。此处 delete 是显式 execute，先于 add_all 的 flush，顺序正确。",
+    "title": "save 中 merge 订单后 delete 订单行再 add_all，未 flush 前 delete 与 add 顺序可能冲突",
+    "line_start": 215,
+    "line_end": 240,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:215-240",
+        "quote": "            await db.execute(delete(OrderLineRow).where(OrderLineRow.order_id == order.order_id))\n            db.add_all("
+      }
+    ]
+  },
+  {
+    "claim_id": "7c0b1279681e",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#error_handling@380",
+    "statement": "[error_handling] app/infrastructure/persistence/sql/repositories.py:395-410 append 吞掉 IntegrityError 但未区分唯一约束与其他完整性错误（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:395-410",
+    "rationale": "append 捕获 IntegrityError 后一律 rollback 并静默返回，注释称「唯一约束命中 = 该偏好已存在」。但 IntegrityError 也可能来自 NOT NULL 违反、外键失败、CHECK 约束等，这些是真实数据错误，静默吞掉会让调用方误以为偏好已保存。应检查异常的具体约束名或错误码。",
+    "title": "append 吞掉 IntegrityError 但未区分唯一约束与其他完整性错误",
+    "line_start": 395,
+    "line_end": 410,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:395-410",
+        "quote": "            try:\n                await db.commit()\n            except IntegrityError:\n                # 唯一约束命中 = 该偏好已存在，幂等语义下静默跳过\n                await db.rollback()"
+      }
+    ]
+  },
+  {
+    "claim_id": "30fd4020b091",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#boundary@200",
+    "statement": "[boundary] app/infrastructure/persistence/sql/repositories.py:200-215 list_turns 的 limit 未按时间倒序取最近 N 条，而是取最早 N 条（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:200-215",
+    "rationale": "list_turns 用 order_by(turn_index).limit(limit)，当会话消息超过 limit 时返回的是最早的 limit 条，而不是最近的 limit 条。对于「取最近对话上下文」的典型用途，这会丢掉最新消息，导致模型看不到用户刚说的话。正确做法是先按 turn_index desc 取 limit 再反转，或子查询。",
+    "title": "list_turns 的 limit 未按时间倒序取最近 N 条，而是取最早 N 条",
+    "line_start": 200,
+    "line_end": 215,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:200-215",
+        "quote": "                    select(ConversationMessageRow)\n                    .where(ConversationMessageRow.session_id == session_id)\n                    .order_by(ConversationMessageRow.turn_index)\n                    .limit(limit),"
+      }
+    ]
+  },
+  {
+    "claim_id": "f036ccda5213",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#concurrency@140",
+    "statement": "[concurrency] app/infrastructure/persistence/sql/repositories.py:150-165 touch_session 并发首次插入同一 session 会抛 IntegrityError（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:150-165",
+    "rationale": "touch_session 先 get 判断不存在再 add，两个并发请求对同一新 session_id 都会 get 到 None，随后都 add 并 commit，第二个 commit 抛 IntegrityError（主键冲突），导致请求失败。这是典型的 check-then-act 竞态。",
+    "title": "touch_session 并发首次插入同一 session 会抛 IntegrityError",
+    "line_start": 150,
+    "line_end": 165,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:150-165",
+        "quote": "            existing = await db.get(ConversationSessionRow, session_id)\n            if existing is None:\n                db.add(\n                    ConversationSessionRow(\n                        session_id=session_id, buyer_id=buyer_id, locale=locale, currency=currency,\n                    ),\n                )"
+      }
+    ]
+  },
+  {
+    "claim_id": "c6373bbcc7ac",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#concurrency@120",
+    "statement": "[concurrency] app/infrastructure/persistence/sql/repositories.py:130-140 SqlSessionStore.save 用 merge 覆盖写，并发下后写覆盖前写（确认并非缺陷）",
+    "claim_type": "concurrency",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:130-140",
+    "rationale": "merge 是覆盖写，若同一 session 并发保存状态，后写覆盖前写会丢失更新。但会话状态通常由单请求串行处理，且注释未承诺并发安全。属于设计取舍而非明确缺陷，除非有证据表明同一 session 会被并发写。",
+    "title": "SqlSessionStore.save 用 merge 覆盖写，并发下后写覆盖前写",
+    "line_start": 130,
+    "line_end": 140,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:130-140",
+        "quote": "            await db.merge(AgentSessionStateRow(session_id=session_id, state_json=state_json))"
+      }
+    ]
+  },
+  {
+    "claim_id": "a7d4f3cfa91a",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#api_misuse@60",
+    "statement": "[api_misuse] app/infrastructure/persistence/sql/repositories.py:75-95 create_engine 对 sqlite 未设置 pool_pre_ping，但注释说服务型必需——sqlite 分支正确（确认并非缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:75-95",
+    "rationale": "sqlite 分支不传 pool_size 等参数是正确的，因为 SQLite 默认池不接受这些参数。WAL 与 busy_timeout 通过 connect 事件设置，逻辑正确。",
+    "title": "create_engine 对 sqlite 未设置 pool_pre_ping，但注释说服务型必需——sqlite 分支正确",
+    "line_start": 75,
+    "line_end": 95,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:75-95",
+        "quote": "    if database_url.startswith(\"sqlite\"):\n        engine = create_async_engine(database_url, echo=False)"
+      }
+    ]
+  },
+  {
+    "claim_id": "d0d1741d9d88",
+    "fingerprint": "app/infrastructure/persistence/in_memory_stock_repository.py#logic@40",
+    "statement": "[logic] app/infrastructure/persistence/in_memory_stock_repository.py:40-50 InMemoryStockRepository 未实现 StockRepository 协议（缺少 get_many 之外的接口一致性无法验证，但 release 对未登记 SKU 静默补登记会掩盖超卖/回滚错误）（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:40-50",
+    "rationale": "release 对未登记 SKU 补登记为 quantity 而非报错，注释说明是有意为之（避免库存凭空消失）。在正常流程中 release 只会在 reserve 成功后调用，未登记分支属于异常路径；补登记虽可能掩盖 bug，但不构成可复现的错误行为，且与 SQL 实现语义一致。",
+    "title": "InMemoryStockRepository 未实现 StockRepository 协议（缺少 get_many 之外的接口一致性无法验证，但 release 对未登记 SKU 静默补登记会掩盖超卖/回滚错误）",
+    "line_start": 40,
+    "line_end": 50,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "48f4b9cac1c9",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:40-50",
+        "quote": "            current = self._stock.get(sku_id)\n            if current is None:\n                # 未登记的 SKU 不该出现；补登记而不是静默丢弃，避免库存凭空消失\n                self._stock[sku_id] = quantity\n                return"
+      }
+    ]
+  },
+  {
+    "claim_id": "fdf3f37d5b18",
+    "fingerprint": "app/infrastructure/persistence/in_memory_stock_repository.py#concurrency@40",
+    "statement": "[concurrency] app/infrastructure/persistence/in_memory_stock_repository.py:47-49 get_many 在锁内对可迭代对象惰性求值，若传入生成器且外部并发修改会不一致（实际无问题）（确认并非缺陷）",
+    "claim_type": "concurrency",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:47-49",
+    "rationale": "get_many 在锁内完成字典推导，迭代与读取都在锁保护下，返回的是新字典快照，调用方后续修改不影响内部状态。传入生成器时也在锁内消费完毕，不存在跨 await 的惰性求值问题。",
+    "title": "get_many 在锁内对可迭代对象惰性求值，若传入生成器且外部并发修改会不一致（实际无问题）",
+    "line_start": 47,
+    "line_end": 49,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "48f4b9cac1c9",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:47-49",
+        "quote": "    async def get_many(self, sku_ids: Iterable[str]) -> Mapping[str, int]:\n        async with self._lock:\n            return {sku_id: self._stock[sku_id] for sku_id in sku_ids if sku_id in self._stock}"
+      }
+    ]
+  },
+  {
+    "claim_id": "ce9934c9a9b4",
+    "fingerprint": "app/composition.py#error_handling@80",
+    "statement": "[error_handling] app/composition.py:88-96 composition.py 中 _prompt_fingerprint 路径拼接依赖 __file__ 位置，打包/移动后静默降级为 noprompt（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/composition.py:88-96",
+    "rationale": "注释明确说明读不到文件时返回固定值且不阻断启动，这是有意的降级设计。路径基于 __file__ 的 parent 拼接 application/prompts/globex.yml，在标准源码布局下正确；打包场景下会降级但不会导致错误行为，仅使缓存 namespace 失去 prompt 指纹，属于可接受的取舍。",
+    "title": "composition.py 中 _prompt_fingerprint 路径拼接依赖 __file__ 位置，打包/移动后静默降级为 noprompt",
+    "line_start": 88,
+    "line_end": 96,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "254c9186a2ba",
+        "adapter": "repo",
+        "locator": "app/composition.py:88-96",
+        "quote": "    path = Path(__file__).resolve().parent / \"application\" / \"prompts\" / \"globex.yml\"\n    try:\n        return hashlib.sha256(path.read_bytes()).hexdigest()[:8]\n    except OSError:\n        return \"noprompt\""
+      }
+    ]
+  },
+  {
+    "claim_id": "68c9dc54a1a9",
+    "fingerprint": "app/infrastructure/persistence/in_memory_repositories.py#concurrency@60",
+    "statement": "[concurrency] app/infrastructure/persistence/in_memory_repositories.py:60-74 InMemoryOrderIdempotencyStore 的 find/record 分离导致检查-写入非原子，并发重复下单可被放行（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_repositories.py:60-74",
+    "rationale": "find() 与 record() 各自加锁，但调用方通常先 find 再 record，两步之间锁已释放。两个并发请求携带同一幂等键时都可能 find 返回 None，随后 record 中只有一个返回 True，另一个返回 False——若调用方在 record 返回 False 时正确回读 find 并复用已有 order_id，则不会重复下单；但该 store 的接口设计本身无法保证原子性，且 record 返回 False 时并不返回已存在的 order_id，调用方必须再 find 一次，存在竞态窗口。更关键的是：record 返回 False 时调用方若未处理（例如直接忽略返回值），就会重复创建订单。这是接口契约层面的缺陷，属于真实风险点。",
+    "title": "InMemoryOrderIdempotencyStore 的 find/record 分离导致检查-写入非原子，并发重复下单可被放行",
+    "line_start": 60,
+    "line_end": 74,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "52e48d38e8e3",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_repositories.py:60-74",
+        "quote": "    async def find(self, key: str) -> Optional[str]:\n        async with self._lock:\n            return self._keys.get(key)\n\n    async def record(self, key: str, order_id: str) -> bool:\n        async with self._lock:\n            if key in self._keys:\n                return False\n            self._keys[key] = order_id\n            return True"
+      }
+    ]
+  },
+  {
+    "claim_id": "0b923349c080",
+    "fingerprint": "app/infrastructure/persistence/in_memory_repositories.py#logic@40",
+    "statement": "[logic] app/infrastructure/persistence/in_memory_repositories.py:44-52 InMemoryOrderRepository.next_order_id 使用 itertools.count 但 save 不校验 order_id 唯一性，重启后计数器归零会覆盖已有订单（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_repositories.py:44-52",
+    "rationale": "该仓储是进程内开发态实现，文档明确说明重启即失效，计数器归零后订单字典也一并清空，不存在覆盖已有订单的问题。save 直接以 order_id 为键写入，若调用方传入重复 order_id 会覆盖，但 next_order_id 保证单调递增，正常流程不会重复。属于设计上的已知限制而非缺陷。",
+    "title": "InMemoryOrderRepository.next_order_id 使用 itertools.count 但 save 不校验 order_id 唯一性，重启后计数器归零会覆盖已有订单",
+    "line_start": 44,
+    "line_end": 52,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "52e48d38e8e3",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_repositories.py:44-52",
+        "quote": "    async def save(self, order: Order) -> None:\n        self._orders[order.order_id] = order\n\n    async def find_by_id(self, order_id: str) -> Optional[Order]:\n        return self._orders.get(order_id)\n\n    async def next_order_id(self) -> str:\n        return f\"GBX-{next(self._counter):06d}\""
+      }
+    ]
+  },
+  {
+    "claim_id": "d881b9533ceb",
+    "fingerprint": "app/infrastructure/persistence/in_memory_repositories.py#boundary@20",
+    "statement": "[boundary] app/infrastructure/persistence/in_memory_repositories.py:30-31 InMemoryProductRepository.find_by_ids 静默丢弃不存在的 product_id，调用方无法区分缺失与空结果（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_repositories.py:30-31",
+    "rationale": "find_by_ids 的语义是批量查询存在的商品，过滤掉不存在的 id 是常见且合理的实现（与 SQL 的 WHERE id IN (...) 行为一致）。调用方若需要校验缺失应自行比对输入与输出。不构成缺陷。",
+    "title": "InMemoryProductRepository.find_by_ids 静默丢弃不存在的 product_id，调用方无法区分缺失与空结果",
+    "line_start": 30,
+    "line_end": 31,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "52e48d38e8e3",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_repositories.py:30-31",
+        "quote": "    async def find_by_ids(self, product_ids: list[str]) -> list[Product]:\n        return [self._products[pid] for pid in product_ids if pid in self._products]"
+      }
+    ]
+  }
+]

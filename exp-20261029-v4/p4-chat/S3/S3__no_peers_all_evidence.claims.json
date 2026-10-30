@@ -1,0 +1,855 @@
+[
+  {
+    "claim_id": "360d06f3ee2f",
+    "fingerprint": "app/domain/order/order.py#logic@80",
+    "statement": "[logic] app/domain/order/order.py:84-88 total_amount 把首行小计重复计入一次（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/domain/order/order.py:84-88",
+    "rationale": "total_amount 先用 lines[0].subtotal() 初始化 total，随后 for 循环又遍历了包含 lines[0] 在内的全部订单行并再次 add，导致第一条订单行的小计被计算两次。任何含至少一条订单行的订单（__post_init__ 强制非空）都会得到错误总额；单行订单的总额恰好是正确值的两倍。snapshot() 直接使用 total_amount()，因此回传给 Agent/买家的金额也是错的。",
+    "title": "total_amount 把首行小计重复计入一次",
+    "line_start": 84,
+    "line_end": 88,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "32d2dfd314a0",
+        "adapter": "repo",
+        "locator": "app/domain/order/order.py:84-88",
+        "quote": "    def total_amount(self) -> Money:\n        total = self.lines[0].subtotal()\n        for line in self.lines:\n            total = total.add(line.subtotal())\n        return total"
+      }
+    ]
+  },
+  {
+    "claim_id": "2cc5083d3190",
+    "fingerprint": "app/domain/order/order.py#logic@60",
+    "statement": "[logic] app/domain/order/order.py:70-77 cancel 允许从 DRAFT 态取消，违反文档声明的状态机不变量（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/domain/order/order.py:70-77",
+    "rationale": "模块 docstring 明确不变量为「只有 CONFIRMED 态可以取消」，但 cancel() 只拒绝已 CANCELLED 的订单，对 DRAFT 态直接放行，把 DRAFT 直接改成 CANCELLED。这使状态机允许 DRAFT→CANCELLED 的非法迁移，且 cancelled_at/cancel_reason 被写入一个从未确认的订单。",
+    "title": "cancel 允许从 DRAFT 态取消，违反文档声明的状态机不变量",
+    "line_start": 70,
+    "line_end": 77,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "32d2dfd314a0",
+        "adapter": "repo",
+        "locator": "app/domain/order/order.py:70-77",
+        "quote": "    def cancel(self, reason: str) -> None:\n        if self.status is OrderStatus.CANCELLED:\n            raise ValueError(f\"已取消的订单不能重复取消，当前={self.status.value}：{self.order_id}\")\n        if not reason:\n            raise ValueError(\"Order.cancel 必须提供 reason\")\n        self.status = OrderStatus.CANCELLED"
+      }
+    ]
+  },
+  {
+    "claim_id": "d81abd9805de",
+    "fingerprint": "app/application/harness/loop_detector.py#logic@40",
+    "statement": "[logic] app/application/harness/loop_detector.py:47-55 LoopDetector 的 window 参数在首次访问后无法生效（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [
+      "985721c25172",
+      "9f7e496d4550"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/application/harness/loop_detector.py:47-55",
+    "rationale": "_calls 的 default_factory 用 DEFAULT_WINDOW 固定 maxlen，_bucket 在 maxlen 与 self.window 不一致时重建。但重建后的 deque 仍以 self.window 为 maxlen，看似正确；问题在于 defaultdict 的 default_factory 在每次新 session 首次访问时创建 maxlen=DEFAULT_WINDOW 的桶，若构造时传入 window != DEFAULT_WINDOW，则每个新会话第一次 record 时桶被创建为 DEFAULT_WINDOW，随后 _bucket 检测到不一致并重建——这一步本身能纠正。真正的缺陷是：重建发生在 append 之前，deque(bucket, maxlen=self.window) 会保留旧元素，逻辑上可接受。经核对，该路径实际能正确收敛到 self.window，不构成缺陷。",
+    "title": "LoopDetector 的 window 参数在首次访问后无法生效",
+    "line_start": 47,
+    "line_end": 55,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "0ca665a578e5",
+        "adapter": "repo",
+        "locator": "app/application/harness/loop_detector.py:47-55",
+        "quote": "    _calls: dict[str, Deque[str]] = field(\n        default_factory=lambda: defaultdict(lambda: deque(maxlen=DEFAULT_WINDOW)),\n    )"
+      }
+    ]
+  },
+  {
+    "claim_id": "985721c25172",
+    "fingerprint": "app/application/harness/loop_detector.py#logic@40",
+    "statement": "[logic] app/application/harness/loop_detector.py:57-65 trailing_repeat 只统计尾部连续次数，与窗口内重复语义不一致（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [
+      "d81abd9805de",
+      "e7ebbd2df433"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/application/harness/loop_detector.py:57-65",
+    "rationale": "docstring 说「同一工具在窗口内连续出现达此次数即判定打转」，trailing_repeat 从尾部反向统计连续同名工具，语义与「连续出现」一致；窗口只限制可统计的最大长度。A,B,A,B,A,B 这类交替横跳不会被判定，但这是设计取舍（只检测连续重复），不是实现错误。",
+    "title": "trailing_repeat 只统计尾部连续次数，与窗口内重复语义不一致",
+    "line_start": 57,
+    "line_end": 65,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "0ca665a578e5",
+        "adapter": "repo",
+        "locator": "app/application/harness/loop_detector.py:57-65",
+        "quote": "        count = 0\n        for name in reversed(self._bucket(session_id)):\n            if name != tool_name:\n                break\n            count += 1\n        return count"
+      }
+    ]
+  },
+  {
+    "claim_id": "9354807447d3",
+    "fingerprint": "app/domain/order/order_line.py#boundary@20",
+    "statement": "[boundary] app/domain/order/order_line.py:20-24 OrderLine 未校验 unit_price 币种/非负，币种一致性仅靠注释保证（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/order/order_line.py:20-24",
+    "rationale": "Order.__post_init__ 注释称币种一致性由下单用例保证，OrderLine 只校验 quantity。这属于分层职责划分，Money.multiply 自身应保证金额合法性；在给定文件范围内无法证明存在可触发的错误行为，故不判为缺陷。",
+    "title": "OrderLine 未校验 unit_price 币种/非负，币种一致性仅靠注释保证",
+    "line_start": 20,
+    "line_end": 24,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "2d259bcddd0a",
+        "adapter": "repo",
+        "locator": "app/domain/order/order_line.py:20-24",
+        "quote": "    def __post_init__(self) -> None:\n        if self.quantity <= 0:\n            raise ValueError(f\"OrderLine.quantity 必须为正整数：{self.sku_id}\")"
+      }
+    ]
+  },
+  {
+    "claim_id": "8e18c8e862a0",
+    "fingerprint": "app/infrastructure/security/output_guard.py#logic@40",
+    "statement": "[logic] app/infrastructure/security/output_guard.py:40-40 内部服务地址正则未加词边界，会误伤正常 URL 前缀（如 redis.example.com 之外的 vllm 子串）（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [
+      "71e79546fe78",
+      "71e79546fe78"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:40-40",
+    "rationale": "该模式 r\"https?://(?:vllm|reranker|qdrant|redis|opensearch)(?::\\d+)?(?:/\\S*)?\" 在主机名后没有边界约束，理论上会匹配 https://redis.example.com 这类外部合法域名并脱敏。但结合上下文，输出审核只针对 Agent 最终回复，且脱敏不阻断回复，误伤代价是文本被替换为 [已脱敏]，属于可接受的保守策略；同时该模式确实能覆盖容器内主机名。是否算缺陷取决于是否认为外部域名会出现在回复中，证据不足以确认是真实缺陷，故记为 not_a_defect。",
+    "title": "内部服务地址正则未加词边界，会误伤正常 URL 前缀（如 redis.example.com 之外的 vllm 子串）",
+    "line_start": 40,
+    "line_end": 40,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "5e837c68a39e",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:40-40",
+        "quote": "    r\"https?://(?:vllm|reranker|qdrant|redis|opensearch)(?::\\d+)?(?:/\\S*)?\","
+      }
+    ]
+  },
+  {
+    "claim_id": "066d0bf525bc",
+    "fingerprint": "app/infrastructure/security/output_guard.py#error_handling@40",
+    "statement": "[error_handling] app/infrastructure/security/output_guard.py:55-56 audit_output 对空字符串返回安全，但未处理非 str 输入（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:55-56",
+    "rationale": "函数签名声明 text: str，调用方按契约传入字符串；if not text 已覆盖 None 与空串的短路返回。若传入非字符串（如 None 之外的 int），pattern.subn 会抛 TypeError，但这属于违反类型契约的调用，不是本函数缺陷。",
+    "title": "audit_output 对空字符串返回安全，但未处理非 str 输入",
+    "line_start": 55,
+    "line_end": 56,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "5e837c68a39e",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:55-56",
+        "quote": "    if not text:\n        return True, text"
+      }
+    ]
+  },
+  {
+    "claim_id": "331eb5d302f5",
+    "fingerprint": "app/infrastructure/security/output_guard.py#boundary@40",
+    "statement": "[boundary] app/infrastructure/security/output_guard.py:43-43 SENSITIVE_PATTERNS 中工具名正则使用 \\b 边界，对下划线连接的标识符可能失效（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [
+      "7f5ea164963a"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:43-43",
+    "rationale": "Python 正则中 \\w 包含下划线，因此 \\b 只在下划线与非单词字符之间成立。工具名如 product_search_tool 前后若紧邻下划线（例如被拼接成 my_product_search_tool_x 或 product_search_tool_v2），\\b 不会在 _ 与 p 之间形成边界，导致该内部工具名未被脱敏而泄露。文档声称按真实工具名逐个列出以避免误伤，但边界选择使带后缀/前缀的变体逃逸。",
+    "title": "SENSITIVE_PATTERNS 中工具名正则使用 \\b 边界，对下划线连接的标识符可能失效",
+    "line_start": 43,
+    "line_end": 43,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "5e837c68a39e",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:43-43",
+        "quote": "    r\"\\b(?:\" + \"|\".join(_INTERNAL_TOOLS) + r\")\\b\","
+      }
+    ]
+  },
+  {
+    "claim_id": "e85b7d202ef0",
+    "fingerprint": "app/infrastructure/security/output_guard.py#security@20",
+    "statement": "[security] app/infrastructure/security/output_guard.py:36-36 shopping_session_id 正则要求冒号或等号，纯 ID 值泄露不被捕获（确认并非缺陷）",
+    "claim_type": "security",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:36-36",
+    "rationale": "该模式只匹配 key:value 或 key=value 形态，若回复只输出裸会话 ID 值则不会命中。但裸 ID 无上下文时难以判定为敏感，且文档明确判据是买家侧无需知道且泄露有害；仅凭裸值无法可靠识别，收窄范围是刻意设计，不构成缺陷。",
+    "title": "shopping_session_id 正则要求冒号或等号，纯 ID 值泄露不被捕获",
+    "line_start": 36,
+    "line_end": 36,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "5e837c68a39e",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:36-36",
+        "quote": "    r\"shopping_session_id\\s*[:=]\\s*[\\w-]+\","
+      }
+    ]
+  },
+  {
+    "claim_id": "d810ca3bbae6",
+    "fingerprint": "app/domain/order/order.py#logic@80",
+    "statement": "[logic] app/domain/order/order.py:88-92 total_amount 把首行小计重复计入一次（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/domain/order/order.py:88-92",
+    "rationale": "total_amount 先用 lines[0].subtotal() 初始化 total，随后又遍历整个 lines（包含 lines[0]）累加，导致第一条订单行的小计被计算两次。任何多行订单的总额都会偏高，单行订单则恰好翻倍。snapshot() 直接使用该结果作为 total_amount_major 回传给工具层，买家看到的金额因此错误。",
+    "title": "total_amount 把首行小计重复计入一次",
+    "line_start": 88,
+    "line_end": 92,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "32d2dfd314a0",
+        "adapter": "repo",
+        "locator": "app/domain/order/order.py:88-92",
+        "quote": "    def total_amount(self) -> Money:\n        total = self.lines[0].subtotal()\n        for line in self.lines:\n            total = total.add(line.subtotal())\n        return total"
+      }
+    ]
+  },
+  {
+    "claim_id": "1388660fce0b",
+    "fingerprint": "app/domain/order/order.py#logic@60",
+    "statement": "[logic] app/domain/order/order.py:74-82 cancel 允许从 DRAFT 态取消，违反状态机不变量（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/domain/order/order.py:74-82",
+    "rationale": "文档声明状态机为 DRAFT → CONFIRMED → CANCELLED，且不变量写明「只有 CONFIRMED 态可以取消」。但 cancel() 只拒绝已 CANCELLED 的情况，DRAFT 态订单也能被取消，产生 DRAFT→CANCELLED 的非法迁移，并写入 cancelled_at/cancel_reason。",
+    "title": "cancel 允许从 DRAFT 态取消，违反状态机不变量",
+    "line_start": 74,
+    "line_end": 82,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "32d2dfd314a0",
+        "adapter": "repo",
+        "locator": "app/domain/order/order.py:74-82",
+        "quote": "    def cancel(self, reason: str) -> None:\n        if self.status is OrderStatus.CANCELLED:\n            raise ValueError(f\"已取消的订单不能重复取消，当前={self.status.value}：{self.order_id}\")\n        if not reason:\n            raise ValueError(\"Order.cancel 必须提供 reason\")\n        self.status = OrderStatus.CANCELLED"
+      }
+    ]
+  },
+  {
+    "claim_id": "0120d4d88287",
+    "fingerprint": "app/application/harness/loop_detector.py#boundary@40",
+    "statement": "[boundary] app/application/harness/loop_detector.py:47-55 LoopDetector 的 window 参数在首次分桶时被忽略（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [
+      "d4049e1079d0"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/application/harness/loop_detector.py:47-55",
+    "rationale": "_calls 的 default_factory 固定使用 DEFAULT_WINDOW 作为 maxlen。当构造时传入 window != DEFAULT_WINDOW，_bucket 首次访问会通过 defaultdict 创建 maxlen=6 的 deque，随后 maxlen != self.window 触发重建，逻辑上能纠正；但重建时用 deque(bucket, maxlen=self.window)，若新 window 小于已有元素数，会静默丢弃最旧元素——这在首次访问时 bucket 为空，无影响。真正的问题是：若 window 被设为 0 或负数，deque(maxlen=0) 会丢弃所有记录，trailing_repeat 恒为 0，检测完全失效且无任何报错。",
+    "title": "LoopDetector 的 window 参数在首次分桶时被忽略",
+    "line_start": 47,
+    "line_end": 55,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "0ca665a578e5",
+        "adapter": "repo",
+        "locator": "app/application/harness/loop_detector.py:47-55",
+        "quote": "    _calls: dict[str, Deque[str]] = field(\n        default_factory=lambda: defaultdict(lambda: deque(maxlen=DEFAULT_WINDOW)),\n    )"
+      }
+    ]
+  },
+  {
+    "claim_id": "9f7e496d4550",
+    "fingerprint": "app/application/harness/loop_detector.py#logic@40",
+    "statement": "[logic] app/application/harness/loop_detector.py:57-65 trailing_repeat 只统计窗口内连续次数，与提示文案的“连续 N 次”语义可能不符（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [
+      "d81abd9805de",
+      "e7ebbd2df433"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/application/harness/loop_detector.py:57-65",
+    "rationale": "trailing_repeat 从 deque 尾部反向统计连续同名工具，deque 的 maxlen 限制了可见范围。当连续调用次数超过 window 时，count 会被截断为 window，提示文案中的 count 会小于真实连续次数。但这只是提示文本的计数偏差，不影响是否触发提示（阈值 3 < 默认 window 6），且设计文档明确说明只看最近 window 次，属于预期行为。",
+    "title": "trailing_repeat 只统计窗口内连续次数，与提示文案的“连续 N 次”语义可能不符",
+    "line_start": 57,
+    "line_end": 65,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "0ca665a578e5",
+        "adapter": "repo",
+        "locator": "app/application/harness/loop_detector.py:57-65",
+        "quote": "        count = 0\n        for name in reversed(self._bucket(session_id)):\n            if name != tool_name:\n                break\n            count += 1\n        return count"
+      }
+    ]
+  },
+  {
+    "claim_id": "ffc9d40ed708",
+    "fingerprint": "app/domain/order/order_line.py#boundary@20",
+    "statement": "[boundary] app/domain/order/order_line.py:20-24 OrderLine 未校验 unit_price 币种/非负，subtotal 可能产生异常金额（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/order/order_line.py:20-24",
+    "rationale": "__post_init__ 只校验 quantity 为正。unit_price 的合法性（非负、币种）应由 Money 值对象自身保证，OrderLine 作为快照实体不重复校验是合理的分层。若 Money 允许负价，那是 Money 的缺陷而非本文件。无法从给定代码确认 Money 的行为，故不判定为缺陷。",
+    "title": "OrderLine 未校验 unit_price 币种/非负，subtotal 可能产生异常金额",
+    "line_start": 20,
+    "line_end": 24,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "2d259bcddd0a",
+        "adapter": "repo",
+        "locator": "app/domain/order/order_line.py:20-24",
+        "quote": "    def __post_init__(self) -> None:\n        if self.quantity <= 0:\n            raise ValueError(f\"OrderLine.quantity 必须为正整数：{self.sku_id}\")"
+      }
+    ]
+  },
+  {
+    "claim_id": "e0ed7d5fa389",
+    "fingerprint": "app/infrastructure/security/output_guard.py#logic@20",
+    "statement": "[logic] app/infrastructure/security/output_guard.py:38-38 内部服务地址正则未加词边界，可能误伤正常 URL 或漏匹配带路径的地址（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:38-38",
+    "rationale": "该模式 r\"https?://(?:vllm|reranker|qdrant|redis|opensearch)(?::\\d+)?(?:/\\S*)?\" 没有前置边界，理论上会匹配 https://redis.example.com 这类外部域名中的 'redis' 前缀，从而把合法外部链接脱敏。但结合上下文，这是刻意收窄的内部主机名列表，且外部域名场景在本项目中并不出现；同时 (?:/\\S*)? 已覆盖路径。经确认，该模式对文档声明的内部地址形态（如 http://vllm:8000/v1/chat）能正确匹配，对 https://redis.io 这类会误伤但属于低概率边界，不构成确认缺陷。",
+    "title": "内部服务地址正则未加词边界，可能误伤正常 URL 或漏匹配带路径的地址",
+    "line_start": 38,
+    "line_end": 38,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "5e837c68a39e",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:38-38",
+        "quote": "r\"https?://(?:vllm|reranker|qdrant|redis|opensearch)(?::\\d+)?(?:/\\S*)?\","
+      }
+    ]
+  },
+  {
+    "claim_id": "fb03a331f2db",
+    "fingerprint": "app/infrastructure/security/output_guard.py#error_handling@40",
+    "statement": "[error_handling] app/infrastructure/security/output_guard.py:52-53 audit_output 对非字符串输入（如 None 以外的对象）缺少类型防护（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:52-53",
+    "rationale": "函数签名声明 text: str，且首行 if not text 处理了空串与 None。若调用方传入非字符串对象，pattern.subn 会抛 TypeError。但类型标注已明确契约，且调用方（Agent 最终回复）保证为字符串，属于调用方违约而非本函数缺陷。",
+    "title": "audit_output 对非字符串输入（如 None 以外的对象）缺少类型防护",
+    "line_start": 52,
+    "line_end": 53,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "5e837c68a39e",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:52-53",
+        "quote": "    if not text:\n        return True, text"
+      }
+    ]
+  },
+  {
+    "claim_id": "84b9664bbccd",
+    "fingerprint": "app/infrastructure/security/output_guard.py#logic@40",
+    "statement": "[logic] app/infrastructure/security/output_guard.py:57-62 多模式顺序替换可能导致脱敏结果被后续模式再次匹配（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [
+      "71e79546fe78",
+      "71e79546fe78"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:57-62",
+    "rationale": "循环按顺序对 cleaned 反复 subn。REDACTED = '[已脱敏]' 不含任何敏感模式可匹配的子串（不含 sk-、不含内部工具名、不含 URL 主机名），因此后续模式不会再次命中已脱敏文本，也不会造成重复替换或计数错误。safe 标志一旦置 False 不会被重置。逻辑正确。",
+    "title": "多模式顺序替换可能导致脱敏结果被后续模式再次匹配",
+    "line_start": 57,
+    "line_end": 62,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "5e837c68a39e",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:57-62",
+        "quote": "    safe = True\n    cleaned = text\n    for pattern in _compiled:\n        cleaned, count = pattern.subn(REDACTED, cleaned)\n        if count:\n            safe = False\n    return safe, cleaned"
+      }
+    ]
+  },
+  {
+    "claim_id": "c0aee164d727",
+    "fingerprint": "app/domain/order/order.py#logic@80",
+    "statement": "[logic] app/domain/order/order.py:88-92 total_amount 把首行小计重复计入一次（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/domain/order/order.py:88-92",
+    "rationale": "total_amount 先用 lines[0].subtotal() 初始化 total，随后 for 循环又遍历全部 lines（包含 lines[0]）再累加一次，导致第一条订单行的小计被计算两次。任何多行订单的总额都会偏高，单行订单则恰好翻倍。snapshot() 直接使用 total_amount()，因此回传给 Agent/买家的 total_amount_major 也是错的。",
+    "title": "total_amount 把首行小计重复计入一次",
+    "line_start": 88,
+    "line_end": 92,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "32d2dfd314a0",
+        "adapter": "repo",
+        "locator": "app/domain/order/order.py:88-92",
+        "quote": "    def total_amount(self) -> Money:\n        total = self.lines[0].subtotal()\n        for line in self.lines:\n            total = total.add(line.subtotal())\n        return total"
+      }
+    ]
+  },
+  {
+    "claim_id": "d23cc22c57fd",
+    "fingerprint": "app/domain/order/order.py#logic@60",
+    "statement": "[logic] app/domain/order/order.py:74-81 cancel 允许从 DRAFT 态取消，违反状态机不变量（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "high_confidence",
+    "confidence": 0.5,
+    "locator": "app/domain/order/order.py:74-81",
+    "rationale": "文档声明状态机为 DRAFT → CONFIRMED → CANCELLED，且不变量写明「只有 CONFIRMED 态可以取消」。但 cancel() 只拦截了 CANCELLED 态，DRAFT 态订单也能被取消，产生 DRAFT→CANCELLED 的非法迁移，且 cancelled_at/cancel_reason 被写入一个从未确认的订单。",
+    "title": "cancel 允许从 DRAFT 态取消，违反状态机不变量",
+    "line_start": 74,
+    "line_end": 81,
+    "verification_status": "unverified",
+    "independent_support": 3,
+    "source_refs": [
+      {
+        "evidence_id": "32d2dfd314a0",
+        "adapter": "repo",
+        "locator": "app/domain/order/order.py:74-81",
+        "quote": "    def cancel(self, reason: str) -> None:\n        if self.status is OrderStatus.CANCELLED:\n            raise ValueError(f\"已取消的订单不能重复取消，当前={self.status.value}：{self.order_id}\")\n        if not reason:\n            raise ValueError(\"Order.cancel 必须提供 reason\")\n        self.status = OrderStatus.CANCELLED"
+      }
+    ]
+  },
+  {
+    "claim_id": "e7ebbd2df433",
+    "fingerprint": "app/application/harness/loop_detector.py#logic@40",
+    "statement": "[logic] app/application/harness/loop_detector.py:47-55 LoopDetector 的 window 参数在首次构造后不生效（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [
+      "985721c25172",
+      "9f7e496d4550"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/application/harness/loop_detector.py:47-55",
+    "rationale": "_calls 的 default_factory 用 DEFAULT_WINDOW 固定 maxlen，_bucket 里虽然检测 maxlen != self.window 并重建，但重建时用的是 deque(bucket, maxlen=self.window)——bucket 本身已被截断到 DEFAULT_WINDOW。若构造时 window > DEFAULT_WINDOW（例如 10），首次访问时 bucket 为空、maxlen=6 != 10，重建为空 deque(maxlen=10)，之后正常；但若 window < DEFAULT_WINDOW（例如 2），首次 record 时 bucket 为空 maxlen=6，重建为 maxlen=2，之后正常。真正的问题在于：defaultdict 的 default_factory 在 _bucket 中通过 self._calls[session_id] 触发创建，创建出的 deque 永远 maxlen=DEFAULT_WINDOW，而 _bucket 的重建逻辑只在 maxlen 不匹配时执行一次，逻辑上能自愈。但 reset() 之后再次访问会重新走 default_factory，仍能自愈。因此该处实际不构成缺陷。",
+    "title": "LoopDetector 的 window 参数在首次构造后不生效",
+    "line_start": 47,
+    "line_end": 55,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "0ca665a578e5",
+        "adapter": "repo",
+        "locator": "app/application/harness/loop_detector.py:47-55",
+        "quote": "    _calls: dict[str, Deque[str]] = field(\n        default_factory=lambda: defaultdict(lambda: deque(maxlen=DEFAULT_WINDOW)),\n    )"
+      }
+    ]
+  },
+  {
+    "claim_id": "d4049e1079d0",
+    "fingerprint": "app/application/harness/loop_detector.py#boundary@40",
+    "statement": "[boundary] app/application/harness/loop_detector.py:57-64 trailing_repeat 在窗口被截断时可能低估连续次数（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [
+      "0120d4d88287"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/application/harness/loop_detector.py:57-64",
+    "rationale": "trailing_repeat 只统计窗口内尾部连续次数，窗口长度 DEFAULT_WINDOW=6 大于阈值 3，因此只要连续次数达到阈值就一定能被检出；窗口截断只会让 count 上限为 window，不影响 >= repeat_threshold 的判定。设计上「只看最近 window 次」是明确取舍，不构成缺陷。",
+    "title": "trailing_repeat 在窗口被截断时可能低估连续次数",
+    "line_start": 57,
+    "line_end": 64,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "0ca665a578e5",
+        "adapter": "repo",
+        "locator": "app/application/harness/loop_detector.py:57-64",
+        "quote": "        count = 0\n        for name in reversed(self._bucket(session_id)):\n            if name != tool_name:\n                break\n            count += 1\n        return count"
+      }
+    ]
+  },
+  {
+    "claim_id": "275ba006d396",
+    "fingerprint": "app/domain/order/order.py#logic@40",
+    "statement": "[logic] app/domain/order/order.py:44-49 OrderLine 未校验 unit_price 币种/非负，币种一致性仅靠注释保证（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/order/order.py:44-49",
+    "rationale": "__post_init__ 注释明确说明币种一致性由下单用例保证，属于分层设计取舍；OrderLine 自身只校验 quantity。虽然聚合根不变量「全部订单行币种一致」没有在 Order 内强制，但这是文档化的约定，且 Money.add 在币种不一致时通常会抛错（取决于 Money 实现，未在给定文件中）。无法从给定代码确认存在错误行为，故不报为缺陷。",
+    "title": "OrderLine 未校验 unit_price 币种/非负，币种一致性仅靠注释保证",
+    "line_start": 44,
+    "line_end": 49,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "32d2dfd314a0",
+        "adapter": "repo",
+        "locator": "app/domain/order/order.py:44-49",
+        "quote": "        if not self.lines:\n            raise ValueError(f\"Order 至少要有一条订单行：{self.order_id}\")\n        # 币种一致性由下单用例在组装订单行时保证"
+      }
+    ]
+  },
+  {
+    "claim_id": "71e79546fe78",
+    "fingerprint": "app/infrastructure/security/output_guard.py#logic@40",
+    "statement": "[logic] app/infrastructure/security/output_guard.py:42-42 内部工具名正则使用 \\b 边界，但工具名含下划线，\\b 在 _ 与字母间不成立（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [
+      "84b9664bbccd",
+      "8e18c8e862a0"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:42-42",
+    "rationale": "Python 正则中 `\\b` 是单词边界，单词字符为 [A-Za-z0-9_]。工具名如 `product_search_tool` 以 `_` 结尾，`\\b` 在 `l` 与 `_` 之间不成立（两者都是单词字符），因此 `\\bproduct_search_tool\\b` 实际要求工具名后紧跟非单词字符。若输出为 `product_search_tool` 后跟空格或标点，`\\b` 成立，能匹配；但若输出为 `product_search_tool_v2` 或 `product_search_tool.` 中前者不应匹配而后者应匹配——实际 `product_search_tool.` 中 `l` 与 `.` 之间 `\\b` 成立，能匹配。真正问题在于：若工具名后紧跟另一个单词字符（如 `product_search_toolx`），`\\b` 不成立，不匹配，这是期望行为。因此 `\\b` 在此处行为正确，不构成缺陷。",
+    "title": "内部工具名正则使用 \\b 边界，但工具名含下划线，\\b 在 _ 与字母间不成立",
+    "line_start": 42,
+    "line_end": 42,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "5e837c68a39e",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:42-42",
+        "quote": "    r\"\\b(?:\" + \"|\".join(_INTERNAL_TOOLS) + r\")\\b\","
+      }
+    ]
+  },
+  {
+    "claim_id": "cc62dff4daf0",
+    "fingerprint": "app/infrastructure/security/output_guard.py#security@20",
+    "statement": "[security] app/infrastructure/security/output_guard.py:34-34 shopping_session_id 正则要求冒号或等号，纯 ID 值不会被脱敏（确认并非缺陷）",
+    "claim_type": "security",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:34-34",
+    "rationale": "该模式针对 `shopping_session_id: xxx` 或 `shopping_session_id=xxx` 形式。若 Agent 直接输出裸 ID 值（无字段名），确实不会被脱敏。但裸 ID 通常无上下文，且模块文档声明判据是“买家侧无需知道且泄露有害”，裸 ID 是否敏感取决于 ID 格式。无法从代码确认裸 ID 会泄露，故不判定为缺陷。",
+    "title": "shopping_session_id 正则要求冒号或等号，纯 ID 值不会被脱敏",
+    "line_start": 34,
+    "line_end": 34,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "5e837c68a39e",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:34-34",
+        "quote": "    r\"shopping_session_id\\s*[:=]\\s*[\\w-]+\","
+      }
+    ]
+  },
+  {
+    "claim_id": "7f5ea164963a",
+    "fingerprint": "app/infrastructure/security/output_guard.py#boundary@40",
+    "statement": "[boundary] app/infrastructure/security/output_guard.py:55-56 audit_output 对空字符串返回安全，但 None 输入会抛异常（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [
+      "331eb5d302f5"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:55-56",
+    "rationale": "函数签名标注 text: str，调用方应保证传入字符串。`if not text` 已处理空串。传入 None 会走 `if not text` 返回 (True, None)，不会抛异常，但返回的 cleaned 是 None 而非 str，与类型标注不符。不过这是调用方违约，且不会崩溃。",
+    "title": "audit_output 对空字符串返回安全，但 None 输入会抛异常",
+    "line_start": 55,
+    "line_end": 56,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "5e837c68a39e",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:55-56",
+        "quote": "    if not text:\n        return True, text"
+      }
+    ]
+  }
+]
