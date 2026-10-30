@@ -1,0 +1,128 @@
+{
+  "task_id": "S3",
+  "description": "S3 子采样（约 30 文件，缺陷密度优先整组选取）",
+  "repo": "repo",
+  "planted_defect_count": 10,
+  "defects": [
+    {
+      "id": "d1-error-text-counted-as-schema-violation",
+      "file": "app/application/harness/assertions.py",
+      "line_start": 71,
+      "line_end": 72,
+      "defect_class": "logic",
+      "title": "工具错误返回被当成 JSON 解析失败，Schema 断言误报",
+      "marker": "try:",
+      "rationale": "工具失败时返回的是 `[error] ...` 文本，模块 docstring 明确「不算 schema 违约」。去掉这段特判后，任何一次工具报错都会追加一条「返回结构异常」，模型下一轮会以为是自己参数写错，而不是上游失败——误导方向刚好相反。",
+      "triggers_test": "TestD1ErrorTextNotSchemaViolation::test_error_text_has_no_failures",
+      "reader_owner": "reader-r0-2"
+    },
+    {
+      "id": "d2-hard-reject-without-evidence",
+      "file": "app/application/harness/assertions.py",
+      "line_start": 125,
+      "line_end": 125,
+      "defect_class": "logic",
+      "title": "写路径前置校验不再要求「有观测证据」，恢复态下单被误杀",
+      "marker": "if tool_name in HARD_REJECT_TOOLS:",
+      "rationale": "docstring 说明：会话可能从快照恢复，内存里没有任何调用记录，硬拒会把合法下单误杀，所以规则是「有观测到调用却没检索过才硬拒」。去掉 `and history` 后，刚恢复的会话第一次下单会被直接硬拒，而判断语句本身看起来仍然合理。",
+      "triggers_test": "TestD2HardRejectNeedsEvidence::test_no_history_only_warns",
+      "reader_owner": "reader-r0-2"
+    },
+    {
+      "id": "d3-required-field-dropped",
+      "file": "app/application/harness/assertions.py",
+      "line_start": 33,
+      "line_end": 33,
+      "defect_class": "config",
+      "title": "product_search 的必需字段少了一个，凭 recall_strategy 造假无人发现",
+      "marker": "\"product_search_tool\": (\"hits\",),",
+      "rationale": "`recall_strategy` 是检索降级链的自述字段，模型据此判断这次召回是向量还是关键词。从必需字段表里删掉后，缺这个字段的返回会被判「结构完整」，模型拿不到降级信息却仍以为结果可信。表里其余项都在，很难察觉少了一行。",
+      "triggers_test": "TestD3RecallStrategyRequired::test_missing_recall_strategy_fails",
+      "reader_owner": "reader-r0-2"
+    },
+    {
+      "id": "d4-recent-actions-window-wrong",
+      "file": "app/application/harness/drift_detector.py",
+      "line_start": 124,
+      "line_end": 124,
+      "defect_class": "boundary",
+      "title": "漂移轨迹保留的是最早 3 轮而不是最近 3 轮",
+      "marker": "del trace.recent_actions[:3]  # 只留最近 3 轮",
+      "rationale": "`del trace.recent_actions[:-3]` 的语义是「只留最近 3 轮」。写成 `[:3]` 后，列表长度约束仍然成立（不会无限增长），但留下的是会话开头的动作，于是「目标遗忘」信号永远在看最久远的行为，漂移永远检测不出来。",
+      "triggers_test": "TestD4RecentActionsWindow::test_keeps_last_three_actions",
+      "reader_owner": "reader-r0-2"
+    },
+    {
+      "id": "d5-due-before-any-round",
+      "file": "app/application/harness/drift_detector.py",
+      "line_start": 134,
+      "line_end": 134,
+      "defect_class": "boundary",
+      "title": "还没跑任何一轮就判定该做漂移检测",
+      "marker": "return trace.rounds % self.check_interval == 0",
+      "rationale": "`due()` 的口径是「跑过轮次且到了检测节拍」。去掉 `trace.rounds > 0` 后，0 % 3 == 0 成立，于是会话刚开始就说「你已偏离原始诉求」，把纠正提示塞进第一轮，直接污染模型的初始行为。",
+      "triggers_test": "TestD5DueNeedsRounds::test_fresh_session_is_not_due",
+      "reader_owner": "reader-r0-2"
+    },
+    {
+      "id": "d6-consecutive-empty-never-resets",
+      "file": "app/application/harness/drift_detector.py",
+      "line_start": 125,
+      "line_end": 127,
+      "defect_class": "logic",
+      "title": "检索成功不清零「连续空结果」，发散信号会累积成假阳性",
+      "marker": ")",
+      "rationale": "`consecutive_empty` 的语义是「连续」——一旦有非空结果就必须归零。把 else 分支改成保持原值后，整个会话里累计 3 次空结果就会触发「探索发散」，哪怕中间有大量成功检索。三元表达式依旧成立，很难一眼看出。",
+      "triggers_test": "TestD6EmptyStreakResets::test_success_resets_streak",
+      "reader_owner": "reader-r0-2"
+    },
+    {
+      "id": "d7-order-currency-consistency-dropped",
+      "file": "app/domain/order/order.py",
+      "line_start": 52,
+      "line_end": 52,
+      "defect_class": "validation",
+      "title": "订单行币种一致性校验被删，混币订单可以直接建出来",
+      "marker": "# 币种一致性由下单用例在组装订单行时保证",
+      "rationale": "不变量里写明「全部订单行币种一致」，否则合计金额没有意义。删掉这段校验后，`__post_init__` 里仍有 order_id / buyer_id / lines 三项检查，看起来只是「少了一条不常用的规则」，直到 `total_amount()` 抛币种不一致才暴露。",
+      "triggers_test": "TestD7OrderLinesSingleCurrency::test_mixed_currency_is_rejected",
+      "reader_owner": "reader-r0-1"
+    },
+    {
+      "id": "d8-cancel-blank-reason-accepted",
+      "file": "app/domain/order/order.py",
+      "line_start": 70,
+      "line_end": 70,
+      "defect_class": "validation",
+      "title": "取消理由允许纯空白",
+      "marker": "if not reason:",
+      "rationale": "`cancel(reason)` 要求理由非空且非纯空白——纯空白理由会让运营侧无法判断取消原因。把 `not reason or not reason.strip()` 放宽成 `not reason` 后，`cancel('   ')` 会被接受，而校验语句看上去依然是在拦空值。",
+      "triggers_test": "TestD8CancelReasonNotBlank::test_whitespace_reason_rejected",
+      "reader_owner": "reader-r0-1"
+    },
+    {
+      "id": "d9-cancel-allowed-from-draft",
+      "file": "app/domain/order/order.py",
+      "line_start": 68,
+      "line_end": 69,
+      "defect_class": "state_machine",
+      "title": "状态机放宽成「只有已取消不能取消」，草稿单也能取消",
+      "marker": "raise ValueError(f\"已取消的订单不能重复取消，当前={self.status.value}：{self.order_id}\")",
+      "rationale": "状态机是 DRAFT → CONFIRMED → CANCELLED，只有 CONFIRMED 可以取消。把守卫改成「已取消的不能再取消」后，语义听起来更宽松也更合理，于是未确认的草稿单也能被取消并写入 cancelled_at，库存与事件口径全乱。",
+      "triggers_test": "TestD9CancelRequiresConfirmed::test_draft_cannot_be_cancelled",
+      "reader_owner": "reader-r0-1"
+    },
+    {
+      "id": "d10-total-double-counts-first-line",
+      "file": "app/domain/order/order.py",
+      "line_start": 77,
+      "line_end": 78,
+      "defect_class": "logic",
+      "title": "合计金额把第一条订单行算了两遍",
+      "marker": "for line in self.lines:",
+      "rationale": "`total_amount` 先取首行小计，再从第二行开始累加。把 `self.lines[1:]` 改成 `self.lines` 后，循环体与初值都没动、代码更简短，只有金额虚高——而快照里的总额是模型唯一允许引用的数字，错了会直接报给买家。",
+      "triggers_test": "TestD10TotalCountsEachLineOnce::test_two_lines_sum_exactly",
+      "reader_owner": "reader-r0-1"
+    }
+  ]
+}

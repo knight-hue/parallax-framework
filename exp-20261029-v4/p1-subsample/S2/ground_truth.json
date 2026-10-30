@@ -1,0 +1,128 @@
+{
+  "task_id": "S2",
+  "description": "S2 子采样（约 30 文件，缺陷密度优先整组选取）",
+  "repo": "repo",
+  "planted_defect_count": 10,
+  "defects": [
+    {
+      "id": "d1-tie-break-lost",
+      "file": "app/application/usecases/catalog_search.py",
+      "line_start": 147,
+      "line_end": 147,
+      "defect_class": "ordering",
+      "title": "同分候选不再按 product_id 兜底排序，同一问句两次运行结果不同",
+      "marker": "filtered.sort(key=lambda item: -item[0])",
+      "rationale": "注释写明「分数相同时按 product_id 兜底排序」，否则 Qdrant 版本/分片不同就会让召回指标无法复现。去掉第二个排序键后排序语句依然成立（仍按分数降序），只有并列时的顺序变回后端内部顺序——单看这行几乎无懈可击。",
+      "triggers_test": "TestD1TieBreakByProductId::test_equal_scores_sorted_by_product_id",
+      "reader_owner": "reader-r0-1"
+    },
+    {
+      "id": "d2-price-cap-boundary",
+      "file": "app/application/usecases/catalog_search.py",
+      "line_start": 186,
+      "line_end": 186,
+      "defect_class": "boundary",
+      "title": "价格上限把「刚好等于上限」判成超预算",
+      "marker": "return primary_in_target.to_major_units() < spec.price_max_major",
+      "rationale": "`price_max_major` 是买家的预算上限，等于上限应当通过。把 `<=` 改成 `<` 之后，语句仍是在比较价格与上限，读起来没有任何异常，只有边界值会被悄悄挡掉，而且会被记进 filtered_out 说明「超预算」。",
+      "triggers_test": "TestD2PriceCapInclusive::test_price_equal_to_cap_is_kept",
+      "reader_owner": "reader-r0-1"
+    },
+    {
+      "id": "d3-zero-score-candidates",
+      "file": "app/application/usecases/catalog_search.py",
+      "line_start": 226,
+      "line_end": 227,
+      "defect_class": "filter",
+      "title": "关键词兜底把 0 分商品也带进候选集",
+      "marker": "candidates.append((score, product))",
+      "rationale": "关键词召回只应收录有命中的商品。`score > 0` 改成 `score >= 0` 后，全库商品都会进候选，再被 top_k 截断——表现为「搜索不到时会返回一堆无关商品」，而不是空结果。两行差异只有半个符号。",
+      "triggers_test": "TestD3NoZeroScoreHits::test_unrelated_query_returns_nothing",
+      "reader_owner": "reader-r0-1"
+    },
+    {
+      "id": "d4-context-ratios-swapped",
+      "file": "app/application/agents/context_policy.py",
+      "line_start": 63,
+      "line_end": 64,
+      "defect_class": "config",
+      "title": "上下文压缩的触发比例与保留比例互换",
+      "marker": "reserve_ratio=0.75,",
+      "rationale": "口径是「占用达 75% 触发压缩、保留末段 15% 原文」。把两个值对调后，上下文刚到 15% 就压缩、且要保留 75% 原文，压缩几乎不做任何事。两个字段名都还在、类型也对，只有对照 docstring 才知道数值反了。",
+      "triggers_test": "TestD4ContextRatios::test_trigger_and_reserve_ratios",
+      "reader_owner": "reader-r0-1"
+    },
+    {
+      "id": "d5-primary-sku-is-last",
+      "file": "app/domain/catalog/product.py",
+      "line_start": 39,
+      "line_end": 40,
+      "defect_class": "logic",
+      "title": "primary_sku 取到了最后一个 Sku",
+      "marker": "return self.skus[-1]",
+      "rationale": "`primary_sku()` 的语义是「首个 Sku」，商品卡的展示价、运费与关税都按它算。改成 `skus[-1]` 后，多规格商品（同一 SPU 下价格不同）会展示最贵那档的价格，而单规格商品完全看不出来——所以测试与日常都很难发现。",
+      "triggers_test": "TestD5PrimarySkuIsFirst::test_primary_sku_is_the_first_one",
+      "reader_owner": "reader-r0-2"
+    },
+    {
+      "id": "d6-top-k-validation-dropped",
+      "file": "app/domain/catalog/product_search_spec.py",
+      "line_start": 28,
+      "line_end": 28,
+      "defect_class": "validation",
+      "title": "检索规格不再校验 top_k，top_k=0 静默返回空结果",
+      "marker": "# top_k 由调用方保证为正",
+      "rationale": "`top_k` 必须为正整数，否则 `filtered[:0]` 会返回空列表——上层拿到的是「搜索成功但没有商品」，而不是一个能定位的参数错误。去掉这条校验后`__post_init__` 仍在，看起来只是「少检查了一个字段」。",
+      "triggers_test": "TestD6TopKValidated::test_zero_top_k_is_rejected",
+      "reader_owner": "reader-r0-1"
+    },
+    {
+      "id": "d7-budget-tier-boundary",
+      "file": "app/infrastructure/budget.py",
+      "line_start": 77,
+      "line_end": 78,
+      "defect_class": "boundary",
+      "title": "剩余恰好 50% 被判成 main 档而不是 lite 档",
+      "marker": "if ratio >= lower_bound:",
+      "rationale": "档位表的下界是闭区间语义：剩余 50% 属于 lite（20%–50%）。把 `ratio > lower_bound` 改成 `>=` 后，恰好落在 50% / 20% / 5% 的点会升一档，于是「预算刚好用掉一半」时仍走最贵的主模型。循环与阈值表都没动，只有比较符差一个字符。",
+      "triggers_test": "TestD7BudgetTierBoundary::test_half_remaining_is_lite",
+      "reader_owner": "reader-r0-0"
+    },
+    {
+      "id": "d8-budget-remaining-negative",
+      "file": "app/infrastructure/budget.py",
+      "line_start": 65,
+      "line_end": 65,
+      "defect_class": "boundary",
+      "title": "已超支时剩余额度变成负数",
+      "marker": "return self.total_limit - self.used",
+      "rationale": "`remaining` 的口径是「剩余不小于 0」。去掉 `max(0, ...)` 后超支会得到负数，而 `remaining_ratio` 仍会把它除成负数——`ratio > 0.50` 之类判断全部落空，表现是「超支后档位一直停在 fallback」，看起来像是设计如此。",
+      "triggers_test": "TestD8RemainingNeverNegative::test_overdraft_clamps_to_zero",
+      "reader_owner": "reader-r0-0"
+    },
+    {
+      "id": "d9-budget-zero-not-disabled",
+      "file": "app/infrastructure/budget.py",
+      "line_start": 92,
+      "line_end": 94,
+      "defect_class": "boundary",
+      "title": "TOKEN_BUDGET_TOTAL=0 不再表示「不启用」，建出一个永远 fallback 的死账本",
+      "marker": "return None",
+      "rationale": "约定是「total_limit <= 0 表示不启用」，默认配置就是 0。改成 `< 0` 后，默认配置会建出一个 total=0 的账本，`remaining_ratio` 恒为 1.0 但 `charge` 立刻超支，于是所有请求都被降级。语句仍然是「小于等于/小于」的边界判断，很难一眼看出。",
+      "triggers_test": "TestD9ZeroBudgetMeansDisabled::test_zero_total_returns_none",
+      "reader_owner": "reader-r0-0"
+    },
+    {
+      "id": "d10-negative-charge-accepted",
+      "file": "app/infrastructure/budget.py",
+      "line_start": 57,
+      "line_end": 59,
+      "defect_class": "validation",
+      "title": "负数 Token 消耗也记账，可以把预算「刷」回去",
+      "marker": "return",
+      "rationale": "`charge` 只接受正数消耗，`tokens <= 0` 直接忽略。改成 `tokens == 0` 后，任何算出负数用量的调用方都会把 `used` 减下去——预算永不耗尽，四档降级形同虚设。函数签名与累加逻辑都没变。",
+      "triggers_test": "TestD10NegativeChargeIgnored::test_negative_tokens_do_not_credit",
+      "reader_owner": "reader-r0-0"
+    }
+  ]
+}

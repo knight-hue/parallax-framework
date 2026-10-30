@@ -1,0 +1,11 @@
+{
+  "source": "S1-order-chain",
+  "target_files": 30,
+  "original_files": 43,
+  "sampled_files": 32,
+  "original_defects": 9,
+  "sampled_defects": 9,
+  "original_density": 0.2093,
+  "sampled_density": 0.2812,
+  "note": "缺陷密度被抬高，绝对召回率不可与历史全量运行比较；仅用于臂间对照。"
+}

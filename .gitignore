@@ -76,5 +76,9 @@ eval/acceptance/20261020/repair/verification.json
 exp-20261029-v4/p0-slices/*/repo/
 exp-20261029-v4/p0-slices/*/tests_verify/
 
+# 子采样语料里的源码同样是上游第三方代码，不进公开仓库；
+# ground_truth.json 与 subsample.json（采样清单）要进库，保证可复算。
+exp-20261029-v4/p1-subsample/*/repo/
+
 # 实验运行的终端日志：体积大、含大量重试刷屏，结论已提炼进 PROGRESS/LEDGER。
 exp-20261029-v4/*.log

@@ -1,0 +1,11 @@
+{
+  "source": "S4-session-cache-injected",
+  "target_files": 30,
+  "original_files": 26,
+  "sampled_files": 26,
+  "original_defects": 12,
+  "sampled_defects": 12,
+  "original_density": 0.4615,
+  "sampled_density": 0.4615,
+  "note": "缺陷密度被抬高，绝对召回率不可与历史全量运行比较；仅用于臂间对照。"
+}

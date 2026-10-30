@@ -1,0 +1,11 @@
+{
+  "source": "S2-discovery-injected",
+  "target_files": 30,
+  "original_files": 63,
+  "sampled_files": 30,
+  "original_defects": 10,
+  "sampled_defects": 10,
+  "original_density": 0.1587,
+  "sampled_density": 0.3333,
+  "note": "缺陷密度被抬高，绝对召回率不可与历史全量运行比较；仅用于臂间对照。"
+}
