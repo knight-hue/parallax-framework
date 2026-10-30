@@ -1,0 +1,155 @@
+{
+  "generated_at": "2026-10-30T15:17:12+00:00",
+  "arms": [
+    {
+      "arm": "blind_no_coverage",
+      "task_id": "S2",
+      "reader_count": 1,
+      "recall": 0.8,
+      "precision": 0.2037,
+      "redundancy": 0.0185,
+      "effective_channels": 1.0,
+      "agent_count": 1,
+      "assigned_reader_count": 1,
+      "coverage_fill_rate": 0.3958,
+      "rounds": 1,
+      "total_claims": 54,
+      "distinct_fingerprints": 53,
+      "hits": 8,
+      "planted": 10,
+      "duplicates": 3,
+      "unmatched": 43,
+      "llm_calls": 6,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "split_retries": 0,
+      "dropped_chunks": 0,
+      "readers_failed": 0,
+      "reader_units": {
+        "reader-r0-0": 30
+      },
+      "reader_union": 30,
+      "prompt_tokens": 33628,
+      "completion_tokens": 18279,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "d1-tie-break-lost",
+          "title": "同分候选不再按 product_id 兜底排序，同一问句两次运行结果不同",
+          "defect_class": "ordering",
+          "file": "app/application/usecases/catalog_search.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d2-price-cap-boundary",
+          "title": "价格上限把「刚好等于上限」判成超预算",
+          "defect_class": "boundary",
+          "file": "app/application/usecases/catalog_search.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d3-zero-score-candidates",
+          "title": "关键词兜底把 0 分商品也带进候选集",
+          "defect_class": "filter",
+          "file": "app/application/usecases/catalog_search.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d4-context-ratios-swapped",
+          "title": "上下文压缩的触发比例与保留比例互换",
+          "defect_class": "config",
+          "file": "app/application/agents/context_policy.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d5-primary-sku-is-last",
+          "title": "primary_sku 取到了最后一个 Sku",
+          "defect_class": "logic",
+          "file": "app/domain/catalog/product.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d6-top-k-validation-dropped",
+          "title": "检索规格不再校验 top_k，top_k=0 静默返回空结果",
+          "defect_class": "validation",
+          "file": "app/domain/catalog/product_search_spec.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d7-budget-tier-boundary",
+          "title": "剩余恰好 50% 被判成 main 档而不是 lite 档",
+          "defect_class": "boundary",
+          "file": "app/infrastructure/budget.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "d8-budget-remaining-negative",
+          "title": "已超支时剩余额度变成负数",
+          "defect_class": "boundary",
+          "file": "app/infrastructure/budget.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "d9-budget-zero-not-disabled",
+          "title": "TOKEN_BUDGET_TOTAL=0 不再表示「不启用」，建出一个永远 fallback 的死账本",
+          "defect_class": "boundary",
+          "file": "app/infrastructure/budget.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d10-negative-charge-accepted",
+          "title": "负数 Token 消耗也记账，可以把预算「刷」回去",
+          "defect_class": "validation",
+          "file": "app/infrastructure/budget.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        }
+      ],
+      "elapsed_s": 88.12,
+      "errors": [],
+      "config": {
+        "model": "deepseek-chat",
+        "reasoning_effort": null,
+        "readers": 1,
+        "redundancy": 1,
+        "support_threshold": 2,
+        "max_rounds": 1,
+        "visibility": "blind",
+        "seed": 0,
+        "max_evidence_per_call": 6,
+        "max_units_per_reader": 0,
+        "equal_exposure": true,
+        "max_batch_chars": 24000,
+        "max_output_tokens": 16000,
+        "max_llm_calls": 0,
+        "max_tokens": 0,
+        "min_independent_support": 2,
+        "max_evidence_overlap_rate": 1.0,
+        "adaptive_scheduling": false,
+        "llm_falsifier": false,
+        "semantic_partitioning": false,
+        "partition_assignment": "greedy",
+        "git_revision": "f1c19978972c71b1a6cb3e1026046d9a3c6015cc",
+        "implementation_sha256": "38a1314e62352306801b261d124d5a104d526ffd2cee6904a877fbd9a44d688d",
+        "task": "S2",
+        "group_depth": 3
+      },
+      "valid": true
+    }
+  ]
+}

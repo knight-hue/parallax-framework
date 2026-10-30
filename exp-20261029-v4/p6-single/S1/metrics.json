@@ -1,0 +1,148 @@
+{
+  "generated_at": "2026-10-30T15:15:40+00:00",
+  "arms": [
+    {
+      "arm": "blind_no_coverage",
+      "task_id": "S1",
+      "reader_count": 1,
+      "recall": 0.8889,
+      "precision": 0.2708,
+      "redundancy": 0.0417,
+      "effective_channels": 1.0,
+      "agent_count": 1,
+      "assigned_reader_count": 1,
+      "coverage_fill_rate": 0.45,
+      "rounds": 1,
+      "total_claims": 48,
+      "distinct_fingerprints": 46,
+      "hits": 8,
+      "planted": 9,
+      "duplicates": 5,
+      "unmatched": 35,
+      "llm_calls": 7,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "split_retries": 0,
+      "dropped_chunks": 0,
+      "readers_failed": 0,
+      "reader_units": {
+        "reader-r0-0": 32
+      },
+      "reader_union": 32,
+      "prompt_tokens": 38938,
+      "completion_tokens": 15699,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "d1-stock-seed-overwrite",
+          "title": "库存播种覆盖已有值，重启即抹掉真实扣减",
+          "defect_class": "logic",
+          "file": "app/infrastructure/persistence/in_memory_stock_repository.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "d2-get-many-missing-zero",
+          "title": "批量查库存把未登记 SKU 补成 0，与「卖光」无法区分",
+          "defect_class": "api_misuse",
+          "file": "app/infrastructure/persistence/in_memory_stock_repository.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d3-list-turns-earliest",
+          "title": "对话流水取最早 N 轮而非最近 N 轮",
+          "defect_class": "boundary",
+          "file": "app/infrastructure/persistence/json_file_stores.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d4-idempotency-key-scope",
+          "title": "幂等回放给键加了买家前缀，与登记时用的裸键不一致",
+          "defect_class": "logic",
+          "file": "app/application/usecases/order_usecases.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d5-empty-lines-allowed",
+          "title": "「至少一条订单行」的不变量退化成「不是 None」",
+          "defect_class": "logic",
+          "file": "app/domain/order/order.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d6-subtotal-off-by-one",
+          "title": "订单行小计按 quantity - 1 计价",
+          "defect_class": "off_by_one",
+          "file": "app/domain/order/order_line.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d7-freight-renewal-40",
+          "title": "续件运费系数从 60% 改成 40%（注释同步改写）",
+          "defect_class": "logic",
+          "file": "app/domain/shipping/tariff_schedule.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d8-exchange-rate-inverse",
+          "title": "汇率换算方向取反（除与被除颠倒）",
+          "defect_class": "logic",
+          "file": "app/domain/catalog/exchange_rate.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d9-from-major-truncates",
+          "title": "元转分把四舍五入改成截断，隐藏的分位被抹掉",
+          "defect_class": "boundary",
+          "file": "app/domain/catalog/money.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        }
+      ],
+      "elapsed_s": 76.28,
+      "errors": [],
+      "config": {
+        "model": "deepseek-chat",
+        "reasoning_effort": null,
+        "readers": 1,
+        "redundancy": 1,
+        "support_threshold": 2,
+        "max_rounds": 1,
+        "visibility": "blind",
+        "seed": 0,
+        "max_evidence_per_call": 6,
+        "max_units_per_reader": 0,
+        "equal_exposure": true,
+        "max_batch_chars": 24000,
+        "max_output_tokens": 16000,
+        "max_llm_calls": 0,
+        "max_tokens": 0,
+        "min_independent_support": 2,
+        "max_evidence_overlap_rate": 1.0,
+        "adaptive_scheduling": false,
+        "llm_falsifier": false,
+        "semantic_partitioning": false,
+        "partition_assignment": "greedy",
+        "git_revision": "f1c19978972c71b1a6cb3e1026046d9a3c6015cc",
+        "implementation_sha256": "38a1314e62352306801b261d124d5a104d526ffd2cee6904a877fbd9a44d688d",
+        "task": "S1",
+        "group_depth": 3
+      },
+      "valid": true
+    }
+  ]
+}

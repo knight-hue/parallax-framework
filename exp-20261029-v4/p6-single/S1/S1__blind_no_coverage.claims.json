@@ -1,0 +1,1546 @@
+[
+  {
+    "claim_id": "1c01d1814ac9",
+    "fingerprint": "app/domain/order/order_line.py#logic@20",
+    "statement": "[logic] app/domain/order/order_line.py:27-28 OrderLine.subtotal 使用 quantity-1 计算，少算一件（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "critical",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/order/order_line.py:27-28",
+    "rationale": "subtotal 应为 unit_price * quantity，但代码写成 multiply(self.quantity - 1)。quantity=1 时小计为 0，quantity=2 时只算 1 件，导致订单金额系统性少算一件商品。该值会经 Order.total_amount() 写入 OrderRow.total_amount_minor，直接影响下单金额与支付金额。",
+    "title": "OrderLine.subtotal 使用 quantity-1 计算，少算一件",
+    "line_start": 27,
+    "line_end": 28,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "1bd894600f10",
+        "adapter": "repo",
+        "locator": "app/domain/order/order_line.py:27-28",
+        "quote": "    def subtotal(self) -> Money:\n        return self.unit_price.multiply(self.quantity - 1)"
+      }
+    ]
+  },
+  {
+    "claim_id": "adab45bc1437",
+    "fingerprint": "app/domain/shipping/tariff_schedule.py#logic@100",
+    "statement": "[logic] app/domain/shipping/tariff_schedule.py:118-124 关税按 CNY 小计计算但免税额度与费率口径混用，且免税判定忽略运费（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "medium",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/shipping/tariff_schedule.py:118-124",
+    "rationale": "文档明确说明关税 = 商品小计超出免税额度部分 × 费率，代码实现与文档一致：taxable = max(0, subtotal_cny - de_minimis)，de_minimis_applied = taxable == 0。虽然真实海关口径可能含运费，但这是文档声明的简化规则，不构成实现缺陷。",
+    "title": "关税按 CNY 小计计算但免税额度与费率口径混用，且免税判定忽略运费",
+    "line_start": 118,
+    "line_end": 124,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "3f29e8d0f73c",
+        "adapter": "repo",
+        "locator": "app/domain/shipping/tariff_schedule.py:118-124",
+        "quote": "        taxable_minor_cny = max(0, subtotal_cny.amount_in_minor_units - de_minimis_minor)\n        de_minimis_applied = taxable_minor_cny == 0\n        tariff_cny = Money.of(round(taxable_minor_cny * tariff_rate), \"CNY\")"
+      }
+    ]
+  },
+  {
+    "claim_id": "bb5c7fed163e",
+    "fingerprint": "app/domain/shipping/tariff_schedule.py#boundary@100",
+    "statement": "[boundary] app/domain/shipping/tariff_schedule.py:112-114 运费按 CNY 计算后折算，但 base_freight 使用 round 可能引入分币误差（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/shipping/tariff_schedule.py:112-114",
+    "rationale": "freight_minor_cny = round(base * (1 + 0.4*(q-1)))，base 为整数分，0.4 倍可能产生小数分，round 到整数分是合理的最小货币单位处理，误差不超过 1 分，属于可接受的舍入。",
+    "title": "运费按 CNY 计算后折算，但 base_freight 使用 round 可能引入分币误差",
+    "line_start": 112,
+    "line_end": 114,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "3f29e8d0f73c",
+        "adapter": "repo",
+        "locator": "app/domain/shipping/tariff_schedule.py:112-114",
+        "quote": "        freight_minor_cny = round(base_freight_cny.amount_in_minor_units * (1 + 0.4 * (quantity - 1)))"
+      }
+    ]
+  },
+  {
+    "claim_id": "33c96fa45e82",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#concurrency@180",
+    "statement": "[concurrency] app/infrastructure/persistence/sql/repositories.py:196-210 append_turn 的 turn_index 读-算-写存在并发撞号（确认并非缺陷）",
+    "claim_type": "concurrency",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:196-210",
+    "rationale": "模块 docstring 已明确说明同会话并发写有极小概率撞号，且撞号只影响展示顺序不影响数据完整性，属于已知并接受的权衡。若表上 (session_id, turn_index) 有唯一约束则会抛 IntegrityError，但代码未捕获——需确认 tables.py 是否有唯一约束；在无唯一约束下不构成数据损坏。",
+    "title": "append_turn 的 turn_index 读-算-写存在并发撞号",
+    "line_start": 196,
+    "line_end": 210,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:196-210",
+        "quote": "            max_index = await db.scalar(\n                select(func.max(ConversationMessageRow.turn_index)).where(\n                    ConversationMessageRow.session_id == turn.session_id,\n                ),\n            )"
+      }
+    ]
+  },
+  {
+    "claim_id": "406c5411b08d",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#api_misuse@300",
+    "statement": "[api_misuse] app/infrastructure/persistence/sql/repositories.py:300-305 next_order_id 依赖 inserted_primary_key，部分驱动可能返回 None（确认存在缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:300-305",
+    "rationale": "result.inserted_primary_key[0] 在 SQLAlchemy 中对某些后端（如未启用 RETURNING 的驱动、或 executemany 场景）可能为 None，此时 f\"GBX-{None:06d}\" 会抛 TypeError。虽然 sqlite+aiosqlite 通常可用，但模块 docstring 声称可换 MySQL/PostgreSQL 而仓储代码不需改，此处对 inserted_primary_key 的假设在换驱动时可能失效。",
+    "title": "next_order_id 依赖 inserted_primary_key，部分驱动可能返回 None",
+    "line_start": 300,
+    "line_end": 305,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:300-305",
+        "quote": "        async with self._session_factory() as db:\n            result = await db.execute(insert(OrderSequenceRow).values())\n            await db.commit()\n        return f\"GBX-{result.inserted_primary_key[0]:06d}\""
+      }
+    ]
+  },
+  {
+    "claim_id": "714759d82390",
+    "fingerprint": "app/infrastructure/persistence/sql/repositories.py#logic@240",
+    "statement": "[logic] app/infrastructure/persistence/sql/repositories.py:258-280 save 中 merge 后 delete 订单行再 add_all，同一事务内可能因 autoflush 顺序问题（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/repositories.py:258-280",
+    "rationale": "delete 通过 db.execute 立即执行，随后 add_all 加入新行，commit 时 flush 插入。delete 已先于插入执行，不会与旧行主键冲突（假设 OrderLineRow 主键为自增或 (order_id, sku_id) 且旧行已删）。顺序正确。",
+    "title": "save 中 merge 后 delete 订单行再 add_all，同一事务内可能因 autoflush 顺序问题",
+    "line_start": 258,
+    "line_end": 280,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "001a0c61fa51",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/repositories.py:258-280",
+        "quote": "            await db.execute(delete(OrderLineRow).where(OrderLineRow.order_id == order.order_id))\n            db.add_all("
+      }
+    ]
+  },
+  {
+    "claim_id": "5542e6d2d1d7",
+    "fingerprint": "app/domain/catalog/sku.py#logic@20",
+    "statement": "[logic] app/domain/catalog/sku.py:22-33 Sku.stock 为初始库存只读，但 dataclass 非 frozen 可被外部改写（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/sku.py:22-33",
+    "rationale": "docstring 声明 stock 是只读参考数据，但 dataclass 未设 frozen=True，外部仍可 sku.stock = -1 绕过 __post_init__ 校验。不过这只是防御性问题，实际扣减走 StockRepository，不构成运行时缺陷。",
+    "title": "Sku.stock 为初始库存只读，但 dataclass 非 frozen 可被外部改写",
+    "line_start": 22,
+    "line_end": 33,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "00e2b01edb94",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/sku.py:22-33",
+        "quote": "@dataclass\nclass Sku:\n    sku_id: str\n    spec: str  # 规格描述，如 \"黑色 / 20寸\"\n    price: Money\n    stock: int  # 初始库存（只读；可变库存在 StockRepository）"
+      }
+    ]
+  },
+  {
+    "claim_id": "1eefc637d141",
+    "fingerprint": "app/domain/catalog/product.py#error_handling@40",
+    "statement": "[error_handling] app/domain/catalog/product.py:47-52 Product.searchable_text 未包含 SKU 信息，且对 None 字段做 join 会抛 TypeError（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product.py:47-52",
+    "rationale": "searchable_text 用 \" \".join([...]) 拼接 title/brand/category/origin_country/description/highlight_text。这些字段在 dataclass 中声明为 str 且无默认值，但 __post_init__ 只校验 product_id 和 skus，不校验这些字段非空/非 None。若调用方传入 None（例如从 JSON/DB 反序列化时缺失字段），join 会抛 TypeError: sequence item N: expected str instance, NoneType found，导致召回链路崩溃。此外 highlight_text 在 highlights 为空时是空字符串，join 会产生多余空格，但这只是格式问题。",
+    "title": "Product.searchable_text 未包含 SKU 信息，且对 None 字段做 join 会抛 TypeError",
+    "line_start": 47,
+    "line_end": 52,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "570f58fa92ef",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product.py:47-52",
+        "quote": "        highlight_text = \" \".join(f\"{h.label} {h.detail}\" for h in self.highlights)\n        return \" \".join(\n            [self.title, self.brand, self.category, self.origin_country, self.description, highlight_text],\n        )"
+      }
+    ]
+  },
+  {
+    "claim_id": "05c25c233f35",
+    "fingerprint": "app/infrastructure/persistence/in_memory_repositories.py#logic@20",
+    "statement": "[logic] app/infrastructure/persistence/in_memory_repositories.py:31-32 InMemoryProductRepository.find_by_ids 静默丢弃不存在的 id，调用方无法区分缺失（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_repositories.py:31-32",
+    "rationale": "find_by_ids 用列表推导过滤掉不存在的 pid，返回顺序与输入一致但长度可能小于输入。这是仓储接口常见的“批量查询返回存在的实体”语义，调用方若需要检测缺失应自行比对。没有证据表明接口契约要求返回等长列表或抛错，因此不认定为缺陷。",
+    "title": "InMemoryProductRepository.find_by_ids 静默丢弃不存在的 id，调用方无法区分缺失",
+    "line_start": 31,
+    "line_end": 32,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "52e48d38e8e3",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_repositories.py:31-32",
+        "quote": "    async def find_by_ids(self, product_ids: list[str]) -> list[Product]:\n        return [self._products[pid] for pid in product_ids if pid in self._products]"
+      }
+    ]
+  },
+  {
+    "claim_id": "724ce2cfe90a",
+    "fingerprint": "app/infrastructure/persistence/in_memory_repositories.py#concurrency@60",
+    "statement": "[concurrency] app/infrastructure/persistence/in_memory_repositories.py:66-76 InMemoryOrderIdempotencyStore 的 find/record 非原子，存在检查-写入竞态（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_repositories.py:66-76",
+    "rationale": "find 和 record 各自加锁，但调用方典型模式是 `existing = await store.find(key); if existing: return existing; ... await store.record(key, order_id)`。两个协程可以同时 find 到 None，然后都调用 record；record 内部虽然用锁保证只有一个返回 True，但另一个返回 False 后调用方若未处理 False（例如直接继续创建订单），就会产生重复下单。锁只保护单次操作，不保护“检查后写入”这一复合操作。",
+    "title": "InMemoryOrderIdempotencyStore 的 find/record 非原子，存在检查-写入竞态",
+    "line_start": 66,
+    "line_end": 76,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "52e48d38e8e3",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_repositories.py:66-76",
+        "quote": "    async def find(self, key: str) -> Optional[str]:\n        async with self._lock:\n            return self._keys.get(key)\n\n    async def record(self, key: str, order_id: str) -> bool:\n        async with self._lock:\n            if key in self._keys:\n                return False\n            self._keys[key] = order_id\n            return True"
+      }
+    ]
+  },
+  {
+    "claim_id": "bff881b5078a",
+    "fingerprint": "app/infrastructure/persistence/sql/migrations/versions/0001_baseline.py#logic@20",
+    "statement": "[logic] app/infrastructure/persistence/sql/migrations/versions/0001_baseline.py:30-31 基线迁移 downgrade 使用 drop_all，会删除所有表包括 alembic_version 之外的表（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/migrations/versions/0001_baseline.py:30-31",
+    "rationale": "downgrade 调用 Base.metadata.drop_all(bind=op.get_bind())，会按 metadata 中登记的所有表执行 DROP。若数据库中存在不属于 Base.metadata 的表（例如 alembic_version 本身、或同库其他应用的表），drop_all 只删 metadata 内的表，通常不会误删外部表；但问题在于 drop_all 不处理外键依赖顺序之外的视图/序列，且与 upgrade 的 create_all 对称。更关键的是：基线迁移的 downgrade 语义应是“回到空库”，drop_all 确实做到了，但若后续迁移已添加列/表，回滚到 0001 时 alembic 会先执行后续迁移的 downgrade，再执行本 downgrade，此时 metadata 是当前代码的 metadata（可能已包含后续迁移新增的表），drop_all 会把这些表也删掉——这本身是期望行为。真正的问题是 create_all/drop_all 依赖运行时 models 而非迁移时快照，导致历史迁移不可重现：在代码演进后重放 0001 会建出未来版本的表结构。",
+    "title": "基线迁移 downgrade 使用 drop_all，会删除所有表包括 alembic_version 之外的表",
+    "line_start": 30,
+    "line_end": 31,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "48cc2d0a9307",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/migrations/versions/0001_baseline.py:30-31",
+        "quote": "def upgrade() -> None:\n    Base.metadata.create_all(bind=op.get_bind())\n\n\ndef downgrade() -> None:\n    Base.metadata.drop_all(bind=op.get_bind())"
+      }
+    ]
+  },
+  {
+    "claim_id": "0ecfd8c25412",
+    "fingerprint": "app/domain/catalog/product_search_spec.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/product_search_spec.py:27-31 ProductSearchSpec 未校验 price_max_major 非负/有限（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product_search_spec.py:27-31",
+    "rationale": "__post_init__ 只校验 normalized_query 和 top_k，未校验 price_max_major。若传入负数或 NaN/inf，下游结构化过滤会得到空结果或异常行为（NaN 比较恒为 False，导致所有商品被过滤）。作为值对象，应在构造时拒绝非法价格约束。",
+    "title": "ProductSearchSpec 未校验 price_max_major 非负/有限",
+    "line_start": 27,
+    "line_end": 31,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "4662743c2106",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product_search_spec.py:27-31",
+        "quote": "    def __post_init__(self) -> None:\n        if not self.normalized_query or not self.normalized_query.strip():\n            raise ValueError(\"ProductSearchSpec.normalized_query required\")\n        if self.top_k <= 0:\n            raise ValueError(\"ProductSearchSpec.top_k 必须为正整数\")"
+      }
+    ]
+  },
+  {
+    "claim_id": "e46acf943f70",
+    "fingerprint": "app/infrastructure/persistence/json_file_stores.py#logic@180",
+    "statement": "[logic] app/infrastructure/persistence/json_file_stores.py:196-197 list_turns 用 turns[:limit] 截断，返回最早的 N 条而非最近的 N 条（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/json_file_stores.py:196-197",
+    "rationale": "JSONL 按追加顺序写入，文件头部是最早的对话。list_turns 顺序读取全部行后执行 turns[:limit]，得到的是最早的 limit 条，而不是最近的 limit 条。当会话轮数超过 limit（默认 50）时，返回给调用方的上下文会停留在会话开头，最新的对话被丢弃，多轮对话上下文错乱。正确做法应是 turns[-limit:]（或先反转）。",
+    "title": "list_turns 用 turns[:limit] 截断，返回最早的 N 条而非最近的 N 条",
+    "line_start": 196,
+    "line_end": 197,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "8bcd4993ad83",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/json_file_stores.py:196-197",
+        "quote": "        return turns[:limit]"
+      }
+    ]
+  },
+  {
+    "claim_id": "2e0ab77413f4",
+    "fingerprint": "app/infrastructure/persistence/json_file_stores.py#error_handling@200",
+    "statement": "[error_handling] app/infrastructure/persistence/json_file_stores.py:213-221 find_session 对损坏行未捕获 TypeError，且返回的 dict 混入 kind 字段（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/json_file_stores.py:213-221",
+    "rationale": "list_turns 中同样解析 JSONL 时只捕获 ValueError，但 json.loads 对合法 JSON 的非 dict 值（如数字、字符串、null）会返回非 dict，随后 record.get(...) 抛 AttributeError；find_session 中 record.get(\"kind\") 同理。此外 find_session 返回 {\"session_id\": session_id, **record}，把内部字段 kind 也暴露给调用方，与端口返回结构不一致。",
+    "title": "find_session 对损坏行未捕获 TypeError，且返回的 dict 混入 kind 字段",
+    "line_start": 213,
+    "line_end": 221,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "8bcd4993ad83",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/json_file_stores.py:213-221",
+        "quote": "            try:\n                record = json.loads(line)\n            except ValueError:\n                continue\n            if record.get(\"kind\") == \"session\":\n                return {\"session_id\": session_id, **record}"
+      }
+    ]
+  },
+  {
+    "claim_id": "2c3039656ab7",
+    "fingerprint": "app/infrastructure/persistence/json_file_stores.py#logic@200",
+    "statement": "[logic] app/infrastructure/persistence/json_file_stores.py:203-210 touch_session 以文件存在性判断会话是否已登记，首条 turn 先写入会导致 session 元信息永久缺失（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/json_file_stores.py:203-210",
+    "rationale": "touch_session 仅当 path 不存在时才写 session 记录。但 append_turn/append_events 也会创建同一文件。若调用顺序是先 append_turn 再 touch_session（或并发下 append 先落盘），文件已存在，session 元信息永远不会写入，find_session 只能返回仅含 session_id 的兜底 dict，buyer_id/locale/currency 丢失。",
+    "title": "touch_session 以文件存在性判断会话是否已登记，首条 turn 先写入会导致 session 元信息永久缺失",
+    "line_start": 203,
+    "line_end": 210,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "8bcd4993ad83",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/json_file_stores.py:203-210",
+        "quote": "        path = self._path(session_id)\n        if path.exists():\n            return\n        self._append_line(\n            session_id,\n            {\"kind\": \"session\", \"buyer_id\": buyer_id, \"locale\": locale, \"currency\": currency},\n        )"
+      }
+    ]
+  },
+  {
+    "claim_id": "291dc4a00f46",
+    "fingerprint": "app/infrastructure/persistence/json_file_stores.py#error_handling@80",
+    "statement": "[error_handling] app/infrastructure/persistence/json_file_stores.py:88-94 偏好写入非原子，进程崩溃可能留下截断的 JSON 文件（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/json_file_stores.py:88-94",
+    "rationale": "_write 直接对目标文件 write_text，非原子。写入过程中进程崩溃/断电会留下半截 JSON，下次 list_by_buyer 解析失败后按空处理，用户全部偏好被静默清空（且随后 append 会以空列表覆盖写回，数据永久丢失）。应写临时文件再 os.replace。",
+    "title": "偏好写入非原子，进程崩溃可能留下截断的 JSON 文件",
+    "line_start": 88,
+    "line_end": 94,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "8bcd4993ad83",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/json_file_stores.py:88-94",
+        "quote": "        self._path(buyer_id).write_text(\n            json.dumps(payload, ensure_ascii=False, indent=2),\n            encoding=\"utf-8\",\n        )"
+      }
+    ]
+  },
+  {
+    "claim_id": "efaeb2602c0c",
+    "fingerprint": "app/infrastructure/persistence/json_file_stores.py#concurrency@40",
+    "statement": "[concurrency] app/infrastructure/persistence/json_file_stores.py:55-61 append 的读-改-写非原子，并发追加会丢失偏好（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/json_file_stores.py:55-61",
+    "rationale": "append 先 await list_by_buyer 读取，再在内存中追加并整体覆盖写回。两个协程并发 append 同一 buyer 时，后写者基于旧快照覆盖，先写者的条目丢失；去重判断也基于旧快照，可能写入重复条目。",
+    "title": "append 的读-改-写非原子，并发追加会丢失偏好",
+    "line_start": 55,
+    "line_end": 61,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "8bcd4993ad83",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/json_file_stores.py:55-61",
+        "quote": "        existing = await self.list_by_buyer(preference.buyer_id)\n        if any(p.statement == preference.statement and p.kind == preference.kind for p in existing):\n            return  # 幂等去重\n        existing.append(preference)\n        self._write(preference.buyer_id, existing)"
+      }
+    ]
+  },
+  {
+    "claim_id": "8b5288be02a4",
+    "fingerprint": "app/infrastructure/persistence/json_file_stores.py#boundary@20",
+    "statement": "[boundary] app/infrastructure/persistence/json_file_stores.py:27-30 _safe_name 清洗后不同 ID 可能映射到同一文件名，造成数据串号（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/json_file_stores.py:27-30",
+    "rationale": "_safe_name 丢弃所有非字母数字/-_ 字符，因此 \"a/b\"、\"a.b\"、\"a b\" 都映射为 \"ab\"，\"user@x\" 与 \"userx\" 也相同。不同 buyer_id/session_id 会共享同一文件，偏好与对话互相污染。",
+    "title": "_safe_name 清洗后不同 ID 可能映射到同一文件名，造成数据串号",
+    "line_start": 27,
+    "line_end": 30,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "8bcd4993ad83",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/json_file_stores.py:27-30",
+        "quote": "    safe = \"\".join(ch for ch in raw if ch.isalnum() or ch in \"-_\")\n    return safe or \"anonymous\""
+      }
+    ]
+  },
+  {
+    "claim_id": "f391320c8a89",
+    "fingerprint": "app/infrastructure/persistence/json_file_stores.py#error_handling@180",
+    "statement": "[error_handling] app/infrastructure/persistence/json_file_stores.py:186-195 list_turns 中 record[\"role\"] 对缺失字段抛 KeyError（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/json_file_stores.py:186-195",
+    "rationale": "其余字段都用 record.get 带默认值，唯独 role 用下标访问。若某行 turn 记录缺少 role（旧版本写入、手工编辑或部分写入），list_turns 直接抛 KeyError，整个会话历史读取失败，而不是跳过该行。",
+    "title": "list_turns 中 record[\"role\"] 对缺失字段抛 KeyError",
+    "line_start": 186,
+    "line_end": 195,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "8bcd4993ad83",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/json_file_stores.py:186-195",
+        "quote": "                ConversationTurn(\n                    session_id=session_id,\n                    buyer_id=record.get(\"buyer_id\", \"\"),\n                    role=record[\"role\"],"
+      }
+    ]
+  },
+  {
+    "claim_id": "95056f6f45d1",
+    "fingerprint": "app/infrastructure/persistence/sql/migrations/env.py#api_misuse@100",
+    "statement": "[api_misuse] app/infrastructure/persistence/sql/migrations/env.py:108-111 env.py 在模块导入时执行迁移，且 asyncio.run 在已有事件循环中会失败（确认并非缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/migrations/env.py:108-111",
+    "rationale": "这是 Alembic env.py 的标准写法：模块顶层根据 offline/online 分派执行，由 alembic CLI 以脚本方式运行，不存在已有事件循环。asyncio.run 在此上下文中安全。",
+    "title": "env.py 在模块导入时执行迁移，且 asyncio.run 在已有事件循环中会失败",
+    "line_start": 108,
+    "line_end": 111,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "8bd6a46280ac",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/migrations/env.py:108-111",
+        "quote": "if context.is_offline_mode():\n    run_migrations_offline()\nelse:\n    run_migrations_online()"
+      }
+    ]
+  },
+  {
+    "claim_id": "013e3c57e3fc",
+    "fingerprint": "app/infrastructure/persistence/sql/migrations/env.py#error_handling@40",
+    "statement": "[error_handling] app/infrastructure/persistence/sql/migrations/env.py:47-57 _database_url 捕获所有异常后静默回退到本地 SQLite，可能对错误库执行迁移（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/migrations/env.py:47-57",
+    "rationale": "except Exception 吞掉了 load_settings 的所有错误（不仅是缺 LLM_API_KEY，还包括配置语法错误、DATABASE_URL 格式错误等）。此时会静默回退到本地 SQLite 并对其执行迁移，运维以为迁移了生产库，实际改的是本地文件，造成静默错配——这正是文件头注释想避免的问题。",
+    "title": "_database_url 捕获所有异常后静默回退到本地 SQLite，可能对错误库执行迁移",
+    "line_start": 47,
+    "line_end": 57,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "8bd6a46280ac",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/migrations/env.py:47-57",
+        "quote": "    try:\n        from app.infrastructure.settings import load_settings\n\n        return load_settings().database_url\n    except Exception:  # noqa: BLE001\n        import os\n\n        from app.infrastructure.settings import PROJECT_ROOT"
+      }
+    ]
+  },
+  {
+    "claim_id": "0c5fe0882f00",
+    "fingerprint": "app/domain/catalog/ports/retrieval_ports.py#logic@20",
+    "statement": "[logic] app/domain/catalog/ports/retrieval_ports.py:26-29 VectorHit 与端口定义本身无缺陷（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/ports/retrieval_ports.py:26-29",
+    "rationale": "VectorHit 为 frozen dataclass，字段完整；抽象方法签名与文档一致，未发现可复现缺陷。",
+    "title": "VectorHit 与端口定义本身无缺陷",
+    "line_start": 26,
+    "line_end": 29,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "73fcc31c85be",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/ports/retrieval_ports.py:26-29",
+        "quote": "@dataclass(frozen=True)\nclass VectorHit:\n    product_id: str\n    score: float"
+      }
+    ]
+  },
+  {
+    "claim_id": "71aa97e571c6",
+    "fingerprint": "app/domain/order/order.py#logic@40",
+    "statement": "[logic] app/domain/order/order.py:47-53 Order.__post_init__ 允许空订单行列表，违反“至少一条订单行”不变量（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/order/order.py:47-53",
+    "rationale": "文档声明不变量为“至少一条订单行”，但校验只判断 self.lines is None，空列表 [] 能通过。随后 total_amount() 访问 self.lines[0] 会抛 IndexError，snapshot() 也会调用 total_amount()，导致空订单在创建时不被拒绝、在读取金额时崩溃。",
+    "title": "Order.__post_init__ 允许空订单行列表，违反“至少一条订单行”不变量",
+    "line_start": 47,
+    "line_end": 53,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "bc5e5d287d57",
+        "adapter": "repo",
+        "locator": "app/domain/order/order.py:47-53",
+        "quote": "        if self.lines is None:\n            raise ValueError(f\"Order 至少要有一条订单行：{self.order_id}\")\n        currencies = {line.unit_price.currency for line in self.lines}\n        if len(currencies) > 1:\n            raise ValueError(f\"Order 订单行币种不一致：{currencies}\")"
+      }
+    ]
+  },
+  {
+    "claim_id": "12cf0f8c0af4",
+    "fingerprint": "app/domain/catalog/exchange_rate.py#boundary@40",
+    "statement": "[boundary] app/domain/catalog/exchange_rate.py:41-47 ExchangeRateTable.convert 未校验源币种是否在 SUPPORTED_CURRENCIES，且 rate 对未知币种抛错口径不一致（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [
+      "34bb98bdb9bd"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/exchange_rate.py:41-47",
+    "rationale": "convert 只校验目标币种，源币种由 rate() 校验是否在 rates_to_cny 中，未知源币种会抛 ValueError，行为是安全的；rates_to_cny 默认覆盖 SUPPORTED_CURRENCIES 全部币种。仅当自定义 rates_to_cny 缺少某支持币种时才会抛错，属于显式失败而非静默错误，不构成缺陷。",
+    "title": "ExchangeRateTable.convert 未校验源币种是否在 SUPPORTED_CURRENCIES，且 rate 对未知币种抛错口径不一致",
+    "line_start": 41,
+    "line_end": 47,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "ba5691d9e6a9",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/exchange_rate.py:41-47",
+        "quote": "        if to_currency not in SUPPORTED_CURRENCIES:\n            raise ValueError(f\"Money.currency 不受支持：{to_currency}\")\n        converted_minor = round(money.amount_in_minor_units * self.rate(money.currency, to_currency))"
+      }
+    ]
+  },
+  {
+    "claim_id": "34bb98bdb9bd",
+    "fingerprint": "app/domain/catalog/exchange_rate.py#boundary@40",
+    "statement": "[boundary] app/domain/catalog/exchange_rate.py:44-46 ExchangeRateTable 使用 float 汇率做金额换算，存在精度/舍入偏差（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [
+      "12cf0f8c0af4"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/exchange_rate.py:44-46",
+    "rationale": "金额以最小单位整数表示，但换算经过 float 乘除再 round，二进制浮点误差在边界（如 .5 分）可能产生 1 分偏差；且 round 使用银行家舍入，与业务常见的四舍五入不一致。对金额计算属于可复现的精度缺陷。",
+    "title": "ExchangeRateTable 使用 float 汇率做金额换算，存在精度/舍入偏差",
+    "line_start": 44,
+    "line_end": 46,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "ba5691d9e6a9",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/exchange_rate.py:44-46",
+        "quote": "        converted_minor = round(money.amount_in_minor_units * self.rate(money.currency, to_currency))\n        return Money.of(converted_minor, to_currency)"
+      }
+    ]
+  },
+  {
+    "claim_id": "f2078f9a189f",
+    "fingerprint": "app/domain/order/order.py#performance@80",
+    "statement": "[performance] app/domain/order/order.py:88-90 Order.snapshot 重复调用 total_amount 两次，且未包含 confirmed_at/cancelled_at（确认并非缺陷）",
+    "claim_type": "performance",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/order/order.py:88-90",
+    "rationale": "total_amount 被调用两次只是常数级重复计算，不构成真实缺陷；缺少时间字段属于快照内容设计选择，未违反文档声明的不变量。",
+    "title": "Order.snapshot 重复调用 total_amount 两次，且未包含 confirmed_at/cancelled_at",
+    "line_start": 88,
+    "line_end": 90,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "bc5e5d287d57",
+        "adapter": "repo",
+        "locator": "app/domain/order/order.py:88-90",
+        "quote": "            \"total_amount_major\": self.total_amount().to_major_units(),\n            \"currency\": self.total_amount().currency,"
+      }
+    ]
+  },
+  {
+    "claim_id": "7c979cb58cc4",
+    "fingerprint": "app/application/usecases/catalog_search.py#logic@100",
+    "statement": "[logic] app/application/usecases/catalog_search.py:118-130 向量召回成功但结果为空时，仍会走关键词召回，且 recall_strategy 被错误标注为 keyword_2gram（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:118-130",
+    "rationale": "当 embedder 与 vector_index 均可用、_vector_recall 正常返回空列表时，recall_strategy 被置为 'embedding_only'，但 scored 为空。随后 `if recall_strategy == 'embedding_only' and scored:` 为假，进入 `elif not scored:` 分支执行关键词召回并把 recall_strategy 覆盖为 'keyword_2gram'。这本身是合理的兜底，但问题在于：向量召回成功返回空（即向量库确实没有匹配）与向量召回异常降级，被混为一谈，recall_strategy 无法区分。更关键的是，若向量召回返回空但关键词召回也返回空，最终 recall_strategy 仍标为 keyword_2gram，掩盖了向量链路实际可用的事实，影响可观测性与评测归因。",
+    "title": "向量召回成功但结果为空时，仍会走关键词召回，且 recall_strategy 被错误标注为 keyword_2gram",
+    "line_start": 118,
+    "line_end": 130,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "d195f6086208",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:118-130",
+        "quote": "        if recall_strategy == \"embedding_only\" and scored:\n            # 二阶段精排；失败降级按向量分排序\n            try:\n                scored = await self._rerank(spec, scored)\n                recall_strategy = \"embedding_rerank\"\n                rerank_applied = True\n            except Exception as err:  # noqa: BLE001\n                logger.warning(\"rerank 不可用，按向量分排序：%s\", err)\n        elif not scored:\n            scored = await self._keyword_recall(spec)\n            recall_strategy = \"keyword_2gram\""
+      }
+    ]
+  },
+  {
+    "claim_id": "31f8e7610731",
+    "fingerprint": "app/application/usecases/catalog_search.py#boundary@180",
+    "statement": "[boundary] app/application/usecases/catalog_search.py:196-205 _rerank 未校验 rerank_scores 长度，索引越界会抛 IndexError 并被静默降级（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/catalog_search.py:196-205",
+    "rationale": "_rerank 用 `rerank_scores[i]` 按 scored 的下标取值，但未校验 rerank_scores 的长度是否等于 scored 的长度。若 Reranker 实现返回的分数数量少于文档数（例如截断、过滤或实现 bug），会抛 IndexError；该异常被上层 `except Exception` 捕获后静默降级为按向量分排序，rerank_applied 保持 False。这掩盖了 Reranker 的真实缺陷，且部分商品被丢弃/错配分数时不会报错。",
+    "title": "_rerank 未校验 rerank_scores 长度，索引越界会抛 IndexError 并被静默降级",
+    "line_start": 196,
+    "line_end": 205,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "d195f6086208",
+        "adapter": "repo",
+        "locator": "app/application/usecases/catalog_search.py:196-205",
+        "quote": "        documents = [product.searchable_text() for _, product in scored]\n        rerank_scores = await self._reranker.rerank(spec.normalized_query, documents)\n        reranked = [\n            (rerank_scores[i], product)\n            for i, (_, product) in enumerate(scored)\n        ]"
+      }
+    ]
+  },
+  {
+    "claim_id": "7b8dfaecfb14",
+    "fingerprint": "app/domain/catalog/money.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/money.py:30-33 Money.from_major_units 用 int(major*100) 截断，浮点误差导致金额少 1 分（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [
+      "624e06f60ba7"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/money.py:30-33",
+    "rationale": "`int(major * 100)` 对浮点乘法结果直接截断而非四舍五入。经典例子：from_major_units(1.15, 'USD') 中 1.15*100 = 114.99999999999999，int 截断得 114，即 1.14 而非 1.15，少 1 分。金额类值对象出现系统性向下偏差，且该函数被用于把外部输入（如价格上限、SKU 价格）转成 Money。",
+    "title": "Money.from_major_units 用 int(major*100) 截断，浮点误差导致金额少 1 分",
+    "line_start": 30,
+    "line_end": 33,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "c90b00fedcdd",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/money.py:30-33",
+        "quote": "    @staticmethod\n    def from_major_units(major: float, currency: str) -> \"Money\":\n        # 简化处理：所有支持币种均按 100 倍换算（JPY 实际为 1，demo 暂统一）\n        return Money.of(int(major * 100), currency)"
+      }
+    ]
+  },
+  {
+    "claim_id": "624e06f60ba7",
+    "fingerprint": "app/domain/catalog/money.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/money.py:30-33 Money.from_major_units 对负数/NaN 的校验依赖 int 截断，NaN 会抛 ValueError 但负数截断后可能绕过（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [
+      "7b8dfaecfb14"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/money.py:30-33",
+    "rationale": "int(-0.5*100) = -50，Money.of 会因 amount<0 抛 ValueError；int(float('nan')) 抛 ValueError；int(float('inf')) 抛 OverflowError。虽然异常类型不统一，但负金额确实被拒绝，不构成静默错误。",
+    "title": "Money.from_major_units 对负数/NaN 的校验依赖 int 截断，NaN 会抛 ValueError 但负数截断后可能绕过",
+    "line_start": 30,
+    "line_end": 33,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "c90b00fedcdd",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/money.py:30-33",
+        "quote": "        return Money.of(int(major * 100), currency)"
+      }
+    ]
+  },
+  {
+    "claim_id": "2ee6571b78b4",
+    "fingerprint": "app/infrastructure/persistence/in_memory_stock_repository.py#logic@40",
+    "statement": "[logic] app/infrastructure/persistence/in_memory_stock_repository.py:40-47 InMemoryStockRepository.release 对未登记 SKU 补登记，可能凭空创造库存（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:40-47",
+    "rationale": "release 在 SKU 未登记时直接把库存设为 quantity，注释称“补登记而不是静默丢弃”。但 release 的语义是回补已扣减的库存；若对从未 reserve 过的 SKU 调用 release（例如重复取消、错误 SKU、或 reserve 失败后仍执行 release），会凭空创造库存。正确做法应是拒绝或记录告警，而非无条件补登记。",
+    "title": "InMemoryStockRepository.release 对未登记 SKU 补登记，可能凭空创造库存",
+    "line_start": 40,
+    "line_end": 47,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "c643c7759486",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/in_memory_stock_repository.py:40-47",
+        "quote": "        async with self._lock:\n            current = self._stock.get(sku_id)\n            if current is None:\n                # 未登记的 SKU 不该出现；补登记而不是静默丢弃，避免库存凭空消失\n                self._stock[sku_id] = quantity\n                return\n            self._stock[sku_id] = current + quantity"
+      }
+    ]
+  },
+  {
+    "claim_id": "9c766617eded",
+    "fingerprint": "app/infrastructure/persistence/sql/tables.py#logic@160",
+    "statement": "[logic] app/infrastructure/persistence/sql/tables.py:175-178 SkuStockRow.version 使用 default=0 而非 server_default，且未声明非空，批量插入可能为 NULL（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/tables.py:175-178",
+    "rationale": "SQLAlchemy 的 `default=0` 是客户端默认值，在 ORM insert 时会填充；`Mapped[int]` 注解使列默认 nullable=False。只有在绕过 ORM 用 Core insert 且不提供该列时才会为 NULL，属于非常规用法。不构成明确缺陷。",
+    "title": "SkuStockRow.version 使用 default=0 而非 server_default，且未声明非空，批量插入可能为 NULL",
+    "line_start": 175,
+    "line_end": 178,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "bd19ebfdb204",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/tables.py:175-178",
+        "quote": "    stock: Mapped[int] = mapped_column(Integer)\n    version: Mapped[int] = mapped_column(Integer, default=0)"
+      }
+    ]
+  },
+  {
+    "claim_id": "5af6b9bbeeba",
+    "fingerprint": "app/infrastructure/persistence/sql/tables.py#error_handling@120",
+    "statement": "[error_handling] app/infrastructure/persistence/sql/tables.py:137-137 OrderLineRow 外键未声明 ondelete，删除订单会因外键约束失败或留下孤儿行（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/sql/tables.py:137-137",
+    "rationale": "订单通常不物理删除（有 cancelled_at 软取消），且 SQLite 默认不强制外键。缺少 ondelete 是设计取舍而非明确缺陷，无法从代码确认存在删除路径。",
+    "title": "OrderLineRow 外键未声明 ondelete，删除订单会因外键约束失败或留下孤儿行",
+    "line_start": 137,
+    "line_end": 137,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "bd19ebfdb204",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/sql/tables.py:137-137",
+        "quote": "    order_id: Mapped[str] = mapped_column(String(32), ForeignKey(\"orders.order_id\"), index=True)"
+      }
+    ]
+  },
+  {
+    "claim_id": "3ee18b56729d",
+    "fingerprint": "app/domain/order/address.py#boundary@20",
+    "statement": "[boundary] app/domain/order/address.py:22-27 Address.__post_init__ 未校验 state/postal_code/phone，one_line 可能输出 None（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/order/address.py:22-27",
+    "rationale": "只校验 recipient_name/country/city/address_line 是有意为之（state/postal_code 在某些国家可空）。one_line 对 None 会输出 'None' 字符串，属于展示瑕疵而非数据错误，且 dataclass 类型标注为 str，正常调用方不会传 None。",
+    "title": "Address.__post_init__ 未校验 state/postal_code/phone，one_line 可能输出 None",
+    "line_start": 22,
+    "line_end": 27,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "c2972f6fadce",
+        "adapter": "repo",
+        "locator": "app/domain/order/address.py:22-27",
+        "quote": "        for field_name in (\"recipient_name\", \"country\", \"city\", \"address_line\"):\n            if not getattr(self, field_name):\n                raise ValueError(f\"Address.{field_name} required\")"
+      }
+    ]
+  },
+  {
+    "claim_id": "bd72b9cc2ea3",
+    "fingerprint": "app/domain/catalog/ports/product_repository.py#api_misuse@0",
+    "statement": "[api_misuse] app/domain/catalog/ports/product_repository.py:18-20 ProductRepository.find_by_ids 未约定返回顺序，_vector_recall 依赖 by_id 映射而非顺序，安全（确认并非缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/ports/product_repository.py:18-20",
+    "rationale": "_vector_recall 用 `by_id = {product.product_id: product ...}` 再按 vector_hits 顺序重建，不依赖 find_by_ids 的返回顺序，因此端口未约定顺序不会导致错误。",
+    "title": "ProductRepository.find_by_ids 未约定返回顺序，_vector_recall 依赖 by_id 映射而非顺序，安全",
+    "line_start": 18,
+    "line_end": 20,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "cd820f3991be",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/ports/product_repository.py:18-20",
+        "quote": "    @abstractmethod\n    async def find_by_ids(self, product_ids: list[str]) -> list[Product]:\n        ..."
+      }
+    ]
+  },
+  {
+    "claim_id": "44fcf367d81c",
+    "fingerprint": "app/application/usecases/order_usecases.py#concurrency@100",
+    "statement": "[concurrency] app/application/usecases/order_usecases.py:118-130 幂等键登记与订单保存顺序导致并发下重复扣减/订单丢失（确认存在缺陷）",
+    "claim_type": "concurrency",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/order_usecases.py:118-130",
+    "rationale": "execute 先 save(order) 再 record(idempotency_key)。若 record 返回 False（另一路并发先登记了同一键），代码回滚本次库存并返回赢家订单，但本次已 save 的订单并未删除，仓库中残留一张孤儿订单（库存已回补但订单存在）。此外 _replay 使用 f\"{buyer_id}:{idempotency_key}\" 作为键，而 record 直接使用 idempotency_key，两处键格式不一致：若 OrderIdempotencyStore 实现按原样存储，record 写入的是裸 key，_replay 查询的是 buyer:key，永远查不到，导致幂等完全失效（每次重投都新建订单并重复扣库存）。",
+    "title": "幂等键登记与订单保存顺序导致并发下重复扣减/订单丢失",
+    "line_start": 118,
+    "line_end": 130,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "f289d56a1a52",
+        "adapter": "repo",
+        "locator": "app/application/usecases/order_usecases.py:118-130",
+        "quote": "        await self._order_repo.save(order)\n\n        if idempotency_key and self._idempotency is not None:\n            claimed = await self._idempotency.record(idempotency_key, order.order_id)\n            if not claimed:\n                # 并发下另一路先登记了同一个键：本次的扣减与订单都要撤销，返回赢家的结果\n                await self._rollback(reserved)\n                replay = await self._replay(buyer_id, idempotency_key)"
+      }
+    ]
+  },
+  {
+    "claim_id": "bf29ab6ba4c2",
+    "fingerprint": "app/application/usecases/order_usecases.py#logic@100",
+    "statement": "[logic] app/application/usecases/order_usecases.py:118-130 幂等键冲突回滚后未删除已保存订单，产生孤儿订单（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/order_usecases.py:118-130",
+    "rationale": "在 record 返回 False 的分支里只回滚了库存（_rollback），没有删除第 118 行已 save 的 order。结果是库存被回补但订单仍留在 OrderRepository 中，形成一张库存未扣减的幽灵订单，后续可被查询/取消，取消时还会再次 release 库存，造成库存虚增。",
+    "title": "幂等键冲突回滚后未删除已保存订单，产生孤儿订单",
+    "line_start": 118,
+    "line_end": 130,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "f289d56a1a52",
+        "adapter": "repo",
+        "locator": "app/application/usecases/order_usecases.py:118-130",
+        "quote": "        await self._order_repo.save(order)\n\n        if idempotency_key and self._idempotency is not None:\n            claimed = await self._idempotency.record(idempotency_key, order.order_id)\n            if not claimed:\n                # 并发下另一路先登记了同一个键：本次的扣减与订单都要撤销，返回赢家的结果\n                await self._rollback(reserved)"
+      }
+    ]
+  },
+  {
+    "claim_id": "dc9d3be250b6",
+    "fingerprint": "app/application/usecases/order_usecases.py#error_handling@180",
+    "statement": "[error_handling] app/application/usecases/order_usecases.py:196-201 取消订单先回补库存再保存，保存失败导致库存重复回补（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/order_usecases.py:196-201",
+    "rationale": "CancelOrderUseCase.execute 先对每行 release 库存，再 save(order)。若 save 抛异常（DB 故障等），订单状态仍是未取消，但库存已被回补；调用方重试取消会再次 release，库存被重复回补。注释声称“重复取消会被状态机挡在上一步”，但状态机只在内存对象上生效，未持久化的取消不会阻止重试。",
+    "title": "取消订单先回补库存再保存，保存失败导致库存重复回补",
+    "line_start": 196,
+    "line_end": 201,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "f289d56a1a52",
+        "adapter": "repo",
+        "locator": "app/application/usecases/order_usecases.py:196-201",
+        "quote": "        order.cancel(reason)\n        # 取消后回补库存。重复取消会被状态机挡在上一步，因此不会重复回补。\n        for line in order.lines:\n            await self._stock_repo.release(line.sku_id, line.quantity)\n        await self._order_repo.save(order)"
+      }
+    ]
+  },
+  {
+    "claim_id": "46ca7696fd7d",
+    "fingerprint": "app/application/usecases/order_usecases.py#error_handling@100",
+    "statement": "[error_handling] app/application/usecases/order_usecases.py:108-116 库存回滚 _rollback 自身异常会掩盖原始错误（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/usecases/order_usecases.py:108-116",
+    "rationale": "except 块中 await self._rollback(reserved) 若 release 抛异常，会替换掉原始异常（库存不足等），调用方看到的是回滚错误而非根因，且部分已扣减库存无法回补。",
+    "title": "库存回滚 _rollback 自身异常会掩盖原始错误",
+    "line_start": 108,
+    "line_end": 116,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "f289d56a1a52",
+        "adapter": "repo",
+        "locator": "app/application/usecases/order_usecases.py:108-116",
+        "quote": "        except Exception:\n            await self._rollback(reserved)\n            raise"
+      }
+    ]
+  },
+  {
+    "claim_id": "a431c7f12015",
+    "fingerprint": "app/domain/catalog/ports/stock_repository.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/ports/stock_repository.py:30-38 StockRepository 端口未约束 quantity 正负，release 可被负值滥用（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/ports/stock_repository.py:30-38",
+    "rationale": "端口只声明契约，quantity 的正负由调用方（PlaceOrderUseCase 已校验 quantity>0，CancelOrder 使用订单行数量）保证。端口层不校验属于设计选择，不构成可复现缺陷。",
+    "title": "StockRepository 端口未约束 quantity 正负，release 可被负值滥用",
+    "line_start": 30,
+    "line_end": 38,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "ec90a212b976",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/ports/stock_repository.py:30-38",
+        "quote": "    @abstractmethod\n    async def reserve(self, sku_id: str, quantity: int) -> bool:\n        \"\"\"原子扣减。成功返回 True；库存不足返回 False（不改变状态）。\"\"\"\n\n    @abstractmethod\n    async def release(self, sku_id: str, quantity: int) -> None:\n        \"\"\"回补库存（取消订单或下单失败回滚）。\"\"\""
+      }
+    ]
+  },
+  {
+    "claim_id": "de64ff1b0708",
+    "fingerprint": "app/infrastructure/persistence/seed_products.py#logic@20",
+    "statement": "[logic] app/infrastructure/persistence/seed_products.py:36-38 P1011 竞品描述含“轻便”但注释声称避开与 P1001 的 query 相撞，实际 P1011 与 P1001 在“旅行三件套”上仍高度重叠（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/seed_products.py:36-38",
+    "rationale": "注释说明新增语料刻意避开与 P1001 在“旅行三件套 抗造”query 上正面相撞，P1011 确实不含“抗造”，因此不会推翻 top-1 断言。虽然 P1011 与 P1001 在“旅行三件套”上重叠，但这是有意为之的区分度设计，不构成缺陷。",
+    "title": "P1011 竞品描述含“轻便”但注释声称避开与 P1001 的 query 相撞，实际 P1011 与 P1001 在“旅行三件套”上仍高度重叠",
+    "line_start": 36,
+    "line_end": 38,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "fab0210f0f81",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/seed_products.py:36-38",
+        "quote": "    (\"P1011\", \"Voyager 旅行三件套 记忆棉款\", \"Voyager\", \"旅行装备\", \"CN\",\n     \"记忆棉颈枕 遮光眼罩 收纳袋 三件套 轻便 长途飞行 出差 旅行必备\",\n     [\"CN\", \"US\", \"SG\"], [(\"S1\", \"深灰\", 139.0, \"CNY\", 60)], [(\"材质\", \"记忆棉 + 涤纶外套\")]),"
+      }
+    ]
+  },
+  {
+    "claim_id": "43efade31c0a",
+    "fingerprint": "app/infrastructure/persistence/seed_products.py#boundary@80",
+    "statement": "[boundary] app/infrastructure/persistence/seed_products.py:88-90 P1023 SilentBuds 价格币种为 USD 但数值 189 与同类 CNY 商品混排，可能造成价格排序/筛选异常（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/seed_products.py:88-90",
+    "rationale": "种子数据中 P1004、P1010 也使用 USD，属于既有设计（跨境商品多币种）。Money 类型携带币种，价格比较应由上层换算处理，种子数据本身不构成缺陷。",
+    "title": "P1023 SilentBuds 价格币种为 USD 但数值 189 与同类 CNY 商品混排，可能造成价格排序/筛选异常",
+    "line_start": 88,
+    "line_end": 90,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "fab0210f0f81",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/seed_products.py:88-90",
+        "quote": "    (\"P1023\", \"SilentBuds 主动降噪耳塞式耳机\", \"SilentBuds\", \"数码配件\", \"US\",\n     \"主动降噪 ANC 深降噪 42dB 耳塞式 通勤 飞机 降噪耳机\",\n     [\"CN\", \"US\", \"EU\"], [(\"S1\", \"子夜蓝\", 189.0, \"USD\", 30)], [(\"降噪\", \"深度 42dB\")]),"
+      }
+    ]
+  },
+  {
+    "claim_id": "2e75ad000802",
+    "fingerprint": "app/infrastructure/persistence/seed_products.py#logic@100",
+    "statement": "[logic] app/infrastructure/persistence/seed_products.py:100-102 P1026 描述含“锂电池空运限制”但 ships_to 仅 CN，与描述一致，非缺陷（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/seed_products.py:100-102",
+    "rationale": "描述中“锂电池空运限制”与 ships_to 仅 CN 一致，属于有意的数据设计，不构成缺陷。",
+    "title": "P1026 描述含“锂电池空运限制”但 ships_to 仅 CN，与描述一致，非缺陷",
+    "line_start": 100,
+    "line_end": 102,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "fab0210f0f81",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/seed_products.py:100-102",
+        "quote": "    (\"P1026\", \"PowerCore 10000mAh 移动电源\", \"PowerCore\", \"数码配件\", \"CN\",\n     \"10000mAh 移动电源 锂电池 可登机 轻薄 自带线 锂电池空运限制\",\n     [\"CN\"], [(\"S1\", \"黑色\", 129.0, \"CNY\", 90)], [(\"空运\", \"含锂电池，仅国内配送\")]),"
+      }
+    ]
+  },
+  {
+    "claim_id": "04c7f40fa75e",
+    "fingerprint": "app/infrastructure/persistence/seed_products.py#logic@120",
+    "statement": "[logic] app/infrastructure/persistence/seed_products.py:128-130 P1033 亮点值“天然楱竹”疑似错别字（应为“楠竹”），影响关键词召回（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/seed_products.py:128-130",
+    "rationale": "亮点值写成“天然楱竹”，而描述写“竹制餐具”。若用户 query 含“楠竹”或“天然竹”，亮点字段无法命中；同时“楱”是错字，会污染 searchable_text 的召回语料。这是数据内容错误，会直接影响关键词召回评测结果。",
+    "title": "P1033 亮点值“天然楱竹”疑似错别字（应为“楠竹”），影响关键词召回",
+    "line_start": 128,
+    "line_end": 130,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "fab0210f0f81",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/seed_products.py:128-130",
+        "quote": "    (\"P1033\", \"BambooLine 竹制餐具旅行套装\", \"BambooLine\", \"家居生活\", \"CN\",\n     \"竹制餐具 筷勺叉 旅行套装 天然材质 无塑料 环保 便携袋\",\n     [\"CN\", \"US\", \"EU\"], [(\"S1\", \"原色\", 69.0, \"CNY\", 160)], [(\"材质\", \"天然楱竹，无塑料\")]),"
+      }
+    ]
+  },
+  {
+    "claim_id": "d100ccd90b84",
+    "fingerprint": "app/infrastructure/persistence/seed_products.py#logic@140",
+    "statement": "[logic] app/infrastructure/persistence/seed_products.py:148-150 P1041 描述含“结实抗造”，与注释声称新增语料避开“抗造”相矛盾（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/seed_products.py:148-150",
+    "rationale": "注释只承诺避开与 P1001 在“旅行三件套 抗造”这条 query 上正面相撞，P1041 是露营凳，不含“旅行三件套”，因此不违反承诺。",
+    "title": "P1041 描述含“结实抗造”，与注释声称新增语料避开“抗造”相矛盾",
+    "line_start": 148,
+    "line_end": 150,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "fab0210f0f81",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/seed_products.py:148-150",
+        "quote": "    (\"P1041\", \"TrailSeat 超轻折叠露营凳\", \"TrailSeat\", \"户外运动\", \"CN\",\n     \"折叠凳 超轻 680g 铝合金 露营 徒步 承重120kg 结实抗造\",\n     [\"CN\", \"US\"], [(\"S1\", \"墨绿\", 169.0, \"CNY\", 65)], [(\"承重\", \"最大 120kg\")]),"
+      }
+    ]
+  },
+  {
+    "claim_id": "bd9429cc9e8b",
+    "fingerprint": "app/infrastructure/persistence/seed_products.py#logic@40",
+    "statement": "[logic] app/infrastructure/persistence/seed_products.py:52-54 P1016 描述含“塑料箱体”，与“不要塑料”类 query 的负向意图冲突，但属于有意设计的易混淆项（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/seed_products.py:52-54",
+    "rationale": "注释明确说明要造出“含易混淆项”，P1016 含“塑料”正是负向样本，用于测试召回区分度，不构成缺陷。",
+    "title": "P1016 描述含“塑料箱体”，与“不要塑料”类 query 的负向意图冲突，但属于有意设计的易混淆项",
+    "line_start": 52,
+    "line_end": 54,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "fab0210f0f81",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/seed_products.py:52-54",
+        "quote": "    (\"P1016\", \"GlideCase 20寸登机箱 PC硬壳\", \"GlideCase\", \"旅行装备\", \"CN\",\n     \"PC聚碳酸酯硬壳 塑料箱体 登机尺寸 20寸 轻量 万向轮 平价\",\n     [\"CN\"], [(\"S1\", \"碳黑 / 20寸\", 399.0, \"CNY\", 45)], [(\"箱体\", \"PC 塑料硬壳\")]),"
+      }
+    ]
+  },
+  {
+    "claim_id": "91561ccb71b9",
+    "fingerprint": "app/infrastructure/persistence/seed_products.py#boundary@180",
+    "statement": "[boundary] app/infrastructure/persistence/seed_products.py:196-214 _build_extra 未校验 SKU 后缀唯一性，重复后缀会生成重复 sku_id（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/seed_products.py:196-214",
+    "rationale": "当前 _EXTRA_SPECS 中每个 SPU 的 SKU 后缀均唯一（多为 S1），且 sku_id 由 pid 前缀保证全局唯一，不存在重复。属于潜在风险但当前数据安全。",
+    "title": "_build_extra 未校验 SKU 后缀唯一性，重复后缀会生成重复 sku_id",
+    "line_start": 196,
+    "line_end": 214,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "fab0210f0f81",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/seed_products.py:196-214",
+        "quote": "                skus=[\n                    _sku(f\"{pid}-{suffix}\", spec, major, currency, stock)\n                    for suffix, spec, major, currency, stock in skus\n                ],"
+      }
+    ]
+  },
+  {
+    "claim_id": "ca22933313b2",
+    "fingerprint": "app/infrastructure/persistence/seed_products.py#logic@60",
+    "statement": "[logic] app/infrastructure/persistence/seed_products.py:78-80 P1050 与 P1015 同为铝镁合金箱，价格 2999 vs 1199，可能影响“结实抗摔”query 排序（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/persistence/seed_products.py:78-80",
+    "rationale": "P1050 是 26 寸全铝、P1015 是 24 寸铝框，属于有意的价位梯度设计，用于制造排序区分度，不构成缺陷。",
+    "title": "P1050 与 P1015 同为铝镁合金箱，价格 2999 vs 1199，可能影响“结实抗摔”query 排序",
+    "line_start": 78,
+    "line_end": 80,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "fab0210f0f81",
+        "adapter": "repo",
+        "locator": "app/infrastructure/persistence/seed_products.py:78-80",
+        "quote": "    (\"P1050\", \"LuxeTrunk 铝镁合金旅行箱 全铝款\", \"LuxeTrunk\", \"旅行装备\", \"DE\",\n     \"全铝镁合金箱体 高级 结实抗摔 终身保修 商务 高价位\",\n     [\"CN\", \"EU\"], [(\"S1\", \"原色 / 26寸\", 2999.0, \"CNY\", 5)], [(\"箱体\", \"全铝镁合金\")]),"
+      }
+    ]
+  }
+]
