@@ -70,6 +70,13 @@ def main() -> int:
     )
     parser.add_argument("--arms", default=ARMS, help="逗号分隔的实验臂")
     parser.add_argument(
+        "--readers",
+        type=int,
+        default=3,
+        help="Reader 数。传 1 即为**单 Agent 基线**：与 3 Agent 分散臂总读取量相同、覆盖相同，"
+        "只差在「是否切成三个独立视角」。这是判定多智能体是否值得的唯一必跑基线。",
+    )
+    parser.add_argument(
         "--full-read",
         action="store_true",
         help="不加 --equal-exposure（每臂按各自 redundancy 读满），用于 E3 五臂消融",
@@ -86,7 +93,7 @@ def main() -> int:
         "--corpus", str(corpus),
         "--tasks", args.task,
         "--arms", args.arms,
-        "--readers", "3",
+        "--readers", str(args.readers),
     ]
     if not args.full_read:
         cmd.append("--equal-exposure")
