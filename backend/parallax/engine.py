@@ -126,6 +126,7 @@ class ParallaxEngine:
             max_units_per_reader=settings.max_units_per_reader,
             equal_exposure=settings.equal_exposure,
             n_readers=settings.n_readers,
+            max_split_depth=settings.max_split_depth,
         )
         store = reputation_store or InMemoryReputationStore()
 

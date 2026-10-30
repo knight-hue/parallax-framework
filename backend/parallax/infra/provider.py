@@ -105,6 +105,10 @@ def resolve_profile(settings: Any) -> ProviderProfile:
         model = DEFAULT_MODELS.get(provider, OPENAI_DEFAULT_MODEL)
 
     reasoning = is_reasoning_model(provider, model)
+    # 显式声明优先于按名字猜：名字盖不住所有命名，而分类会改变请求体形状。
+    override = getattr(settings, "llm_reasoning", None)
+    if override is not None:
+        reasoning = bool(override)
     return ProviderProfile(
         name=provider,
         base_url=base_url,

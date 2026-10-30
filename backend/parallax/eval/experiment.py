@@ -336,6 +336,8 @@ async def run_arm(
         reader_count=settings.n_readers,
         readers_failed=len(engine.runtime.pool.failed_readers),
         reader_evidence=dict(engine.runtime.pool.reader_evidence),
+        split_retries=engine.runtime.pool.split_retries,
+        dropped_chunks=engine.runtime.pool.dropped_chunks,
     )
 
     from parallax.reporting import render_markdown
@@ -398,7 +400,7 @@ def _render_precision(m: ArmMetrics) -> str:
 
 
 def _render_reader_units(m: ArmMetrics) -> str:
-    """每 Reader 实读单元数 —— **判断曝光量操纵是否生效的唯一落点**。
+    """每 Reader 实读单元数 —— **判断曝光量操纵是否生效的落点**。
 
     集中臂：几个 Reader 的数字相同且远小于语料规模；
     分散臂：数字之和覆盖全集。只印总调用数会把两者混成同一个数字，
@@ -408,6 +410,23 @@ def _render_reader_units(m: ArmMetrics) -> str:
         return "—"
     per = "/".join(str(v) for v in m.reader_units.values())
     return f"{per} → 合并 {m.reader_union}"
+
+
+def _render_integrity(m: ArmMetrics) -> str:
+    """测量通道完整性。**丢批不为 0 的臂，召回不能与另一臂比较。**
+
+    这一列存在的唯一目的：让「两臂失败数不等」在汇总表上就看得见。
+    2026-10-29 的 S2 集中臂 12 次调用丢了 7 次，召回 4/10 是残值，
+    而这个事实当时只躺在日志里，于是被读成了「分散更差」。
+    """
+    if m.dropped_chunks is None:
+        # 旧产物没有这个字段。**不能当成健康**——那会把事故痕迹抹掉。
+        return "—（旧产物未记录）"
+    if m.dropped_chunks:
+        return f"⚠ 丢批 {m.dropped_chunks}"
+    if m.split_retries:
+        return f"拆批 {m.split_retries}"
+    return "OK"
 
 
 # ---- 真实仓库（无 ground truth）----
@@ -503,6 +522,8 @@ async def run_repo_arm(
         reader_count=settings.n_readers,
         readers_failed=len(engine.runtime.pool.failed_readers),
         reader_evidence=dict(engine.runtime.pool.reader_evidence),
+        split_retries=engine.runtime.pool.split_retries,
+        dropped_chunks=engine.runtime.pool.dropped_chunks,
     )
 
     from parallax.reporting import render_markdown
@@ -563,18 +584,29 @@ def render_summary(results: list[ArmResult], arms: list[Arm] | None = None) -> s
     lines.append("## 主指标对照")
     lines.append("")
     lines.append(
-        "| 实验臂 | 召回率 | 精确率 | 冗余率 | 输出 K* / 产出者数 | 产出者归一化占比 | 矩阵填充 | 轮次 | 调用 | Reader 失败 | 实读单元（每人 → 合并） |"
+        "| 实验臂 | 召回率 | 精确率 | 冗余率 | 输出 K* / 产出者数 | 产出者归一化占比 | 矩阵填充 | 轮次 | 调用 | Reader 失败 | 实读单元（每人 → 合并） | 完整性 |"
     )
-    lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+    lines.append(
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |"
+    )
     for result in results:
         m = result.metrics
         lines.append(
             f"| `{m.arm}` | {_render_recall(m)} | {_render_precision(m)} | "
             f"{m.redundancy:.0%} | {m.effective_channels} / {m.agent_count} | "
             f"{m.channels_ratio:.0%} | {m.coverage_fill_rate:.0%} | "
-            f"{m.rounds} | {m.llm_calls} | {m.readers_failed} | {_render_reader_units(m)} |"
+            f"{m.rounds} | {m.llm_calls} | {m.readers_failed} | {_render_reader_units(m)} | "
+            f"{_render_integrity(m)} |"
         )
     lines.append("")
+    broken = [m.metrics.arm for m in results if m.metrics.dropped_chunks]
+    if broken:
+        lines.append(
+            "> ⚠️ **以下实验臂丢弃了批次，其召回是残值，不得与另一臂比较**："
+            + "、".join(f"`{name}`" for name in broken)
+            + "。丢批来自模型把单次输出预算烧在推理上、正文为空；拆到单文件仍失败才会丢。"
+        )
+        lines.append("")
     lines.append(
         "> **「实读单元（每人 → 合并）」是曝光量操纵的验证点。** "
         "若各臂在这一列上看不出差别，就说明「集中臂每人只读 N 条」根本没生效，"

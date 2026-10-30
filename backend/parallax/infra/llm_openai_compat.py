@@ -29,7 +29,12 @@ import httpx
 from pydantic import BaseModel, ValidationError
 
 from parallax.config import Settings
-from parallax.domain.errors import ConfigurationError, LLMError, SchemaValidationError
+from parallax.domain.errors import (
+    ConfigurationError,
+    LLMError,
+    OutputBudgetExceeded,
+    SchemaValidationError,
+)
 from parallax.infra.provider import build_body, resolve_profile
 from parallax.ports.llm import ChatMessage, UsageStats
 
@@ -216,12 +221,14 @@ class OpenAICompatClient:
             # 推理型模型（如 DeepSeek flash 系列）会把输出预算先花在 reasoning_content 上，
             # max_tokens 太小时 content 会是空字符串。这种情况必须显式报错，
             # 否则空串会一路走到 JSON 解析，变成一次没有信息量的 schema 重试。
+            #
+            # 用专用异常而非普通 LLMError：调用方据此**拆批重发**而不是丢掉整批。
             reasoning = message.get("reasoning_content") or ""
             finish = choices[0].get("finish_reason")
-            raise LLMError(
+            raise OutputBudgetExceeded(
                 "模型返回了空 content"
                 f"（finish_reason={finish!r}，reasoning_content 长度={len(reasoning)}）。"
-                "推理型模型需要更大的 max_tokens。"
+                "推理型模型需要更大的 max_tokens，或需要把批次拆小。"
             )
         return content
 

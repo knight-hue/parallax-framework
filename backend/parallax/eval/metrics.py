@@ -343,6 +343,22 @@ class ArmMetrics(BaseModel):
     llm_calls: int = 0
     llm_failures: int = 0
     schema_retries: int = 0
+    split_retries: int | None = None
+    """因单次输出预算烧在推理上、正文为空而**拆批重发**的次数。
+
+    `None` 表示旧产物未记录该字段，**不是**「没发生」——区分这两者是必须的：
+    2026-10-29 的 S2 确实丢了 7 个批次，但那时还没有这两个字段；
+    若用 0 做默认值，旧产物会渲染成「OK」，等于把事故痕迹抹掉。
+    """
+    dropped_chunks: int | None = None
+    """拆到单文件仍拿不到正文、最终丢弃的批次数。
+
+    ⚠️ **不为 0 就说明该臂召回残缺，不能与另一臂直接比较。**
+    这是实验闸门的唯一数据质量门槛：不能用 `llm_failures` 代替，
+    因为拆批救回来的批次也会计入失败，但并没有丢数据。
+    2026-10-29 的 S2 就是这种情况：集中臂 12 次调用丢 7 次，召回 4/10 是残值，
+    而两臂丢弃数不等，使得「分散更差」这个结论完全站不住。
+    """
     readers_failed: int = 0
     """执行失败的 Reader 数。
 
@@ -410,6 +426,8 @@ def compute_metrics(
     reader_count: int,
     readers_failed: int = 0,
     reader_evidence: dict[str, list[str]] | None = None,
+    split_retries: int | None = None,
+    dropped_chunks: int | None = None,
 ) -> ArmMetrics:
     match = match_claims(claims, defects)
 
@@ -452,6 +470,8 @@ def compute_metrics(
         llm_failures=usage.get("failures", 0),
         schema_retries=usage.get("schema_retries", 0),
         readers_failed=readers_failed,
+        split_retries=split_retries,
+        dropped_chunks=dropped_chunks,
         reader_units={rid: len(ids) for rid, ids in (reader_evidence or {}).items()},
         reader_union=len({eid for ids in (reader_evidence or {}).values() for eid in ids}),
         prompt_tokens=usage.get("prompt_tokens", 0),

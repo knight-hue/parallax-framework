@@ -26,7 +26,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from pydantic import BaseModel, Field
 
 from parallax.core.partitioning import Partition
-from parallax.domain.errors import LLMError, SchemaValidationError
+from parallax.domain.errors import LLMError, OutputBudgetExceeded, SchemaValidationError
 from parallax.domain.models import Claim, EvidenceUnit
 from parallax.ports.llm import ChatMessage, LLMClient
 from parallax.ports.reader_plugin import ReaderPlugin
@@ -50,6 +50,15 @@ class ReaderOutcome(BaseModel):
     claims: list[Claim] = Field(default_factory=list)
     error: str | None = None
     schema_retries: int = 0
+    split_retries: int = 0
+    """因「输出预算烧在推理上、正文为空」而拆批重发的次数。"""
+    dropped_chunks: int = 0
+    """拆到单文件仍拿不到正文、最终丢弃的批次数。
+
+    **这一项不为 0，该 Reader 的发现就是残缺的**，召回不能直接拿来比较。
+    单独记一个字段而不是只写进 `error` 字符串：字符串没法聚合，
+    而实验闸门需要的恰恰是能跨臂相加的数字。
+    """
     saw_prior_claims: int = 0
     """本 Reader 在共享模式下看到了几条他人结论（盲读模式下恒为 0）。"""
 
@@ -86,6 +95,7 @@ class ReaderPool:
         max_units_per_reader: int = 0,
         equal_exposure: bool = False,
         n_readers: int = 3,
+        max_split_depth: int = 3,
     ) -> None:
         if visibility not in {"blind", "shared"}:
             raise ValueError("visibility 只能是 'blind' 或 'shared'")
@@ -110,6 +120,14 @@ class ReaderPool:
         self.n_readers = max(1, n_readers)
         """用于 `equal_exposure` 的分母。必须来自配置而不是 `len(partitions)`：
         有 Reader 分到空分区时它不会进入本轮，用它做分母会把上限算大。"""
+        self.max_split_depth = max(0, max_split_depth)
+        """因「输出预算耗尽」而拆批的最大深度。
+
+        为什么必须有上限：拆批是**乘法**。6 个文件一批若每次都写不完，
+        会拆成 3+3 → 2+1+2+1…… 总调用数最高能到原批次的十几倍，
+        而且这些调用全部照付。没有上限的话，一个系统性的模型问题会把账单
+        静默放大一个数量级——正是 2026-10-29 那次事故的形态。
+        深度 3 意味着 6 → 3 → 1，到单文件仍不行就如实记成丢批。"""
         self.reader_evidence: dict[str, list[str]] = {}
         """每个 Reader **实际读到**的证据 id，按 reader_id 索引。
 
@@ -117,6 +135,10 @@ class ReaderPool:
         读的是同一批、分散臂读的是不同批。只记条数不够——条数相同但内容不同的
         两种情况会被混为一谈。
         """
+        self.split_retries = 0
+        """拆批重发次数（跨全部 Reader 累计）。"""
+        self.dropped_chunks = 0
+        """拆到单文件仍失败而丢掉的批次数（跨全部 Reader 累计）。不为 0 则本臂召回残缺。"""
         self.failed_readers: list[str] = []
         """执行失败的 Reader。必须被实验报告出来——失败者会拉低召回，
         若不计入统计就会把「Reader 挂了」误读成「漏检」。"""
@@ -225,11 +247,34 @@ class ReaderPool:
         shared_claims = list(shared_context)
         failed_chunks = 0
 
-        for chunk in self._chunks(shard):
-            claims, retries = await self._read_chunk(
+        # 用队列而不是 for：一批若因「输出预算耗尽」失败，就地对半拆开重发。
+        # 这不是重试——重发同一批只会再把预算烧光一次；必须**减量**。
+        # 同时带拆批深度，到上限就不再拆：拆批是乘法，不封顶会把成本放大一个数量级。
+        pending: list[tuple[list[EvidenceUnit], int]] = [
+            (chunk, 0) for chunk in self._chunks(shard)
+        ]
+        while pending:
+            chunk, depth = pending.pop(0)
+            if not chunk:
+                continue
+            claims, retries, needs_split = await self._read_chunk(
                 part, chunk, question, reputation, usage_hook, shared_claims
             )
             outcome.schema_retries += retries
+            if needs_split:
+                if len(chunk) > 1 and depth < self.max_split_depth:
+                    mid = len(chunk) // 2
+                    # 右半先入队、左半后入队，使处理顺序保持原有证据顺序
+                    pending.insert(0, (chunk[mid:], depth + 1))
+                    pending.insert(0, (chunk[:mid], depth + 1))
+                    outcome.split_retries += 1
+                    self.split_retries += 1
+                else:
+                    # 拆到上限（或只剩单个文件）仍写不出来：如实记账，不假装成功。
+                    outcome.dropped_chunks += 1
+                    self.dropped_chunks += 1
+                    failed_chunks += 1
+                continue
             if claims is None:
                 failed_chunks += 1
                 continue
@@ -237,7 +282,12 @@ class ReaderPool:
             shared_claims.extend(claims)
 
         if failed_chunks:
-            outcome.error = f"{failed_chunks} chunk(s) failed"
+            detail = (
+                f"（其中 {outcome.dropped_chunks} 个拆到单文件仍失败）"
+                if outcome.dropped_chunks
+                else ""
+            )
+            outcome.error = f"{failed_chunks} chunk(s) failed{detail}"
             if not outcome.claims:
                 self._mark_failed(part.reader_id)
         return outcome
@@ -314,11 +364,12 @@ class ReaderPool:
         reputation: float,
         usage_hook: Callable[[bool, int], None] | None,
         shared_claims: Sequence[Claim],
-    ) -> tuple[list[Claim] | None, int]:
+    ) -> tuple[list[Claim] | None, int, bool]:
         """读一批证据。
 
         Returns:
-            (claim 列表或 None 表示全部重试失败, 本次消耗的 schema 重试次数)
+            (claim 列表或 None 表示本批无产出, 本次消耗的 schema 重试次数,
+             是否应拆批重发)
         """
         schema = self.plugin.output_schema()
         retries = 0
@@ -344,7 +395,7 @@ class ReaderPool:
                 )
                 if usage_hook:
                     usage_hook(True, retries)
-                return claims, retries
+                return claims, retries, False
             except SchemaValidationError as exc:
                 retries += 1
                 logger.warning(
@@ -356,22 +407,34 @@ class ReaderPool:
                     exc,
                 )
                 continue
+            except OutputBudgetExceeded as exc:
+                # 输出预算烧在推理上、正文为空。**必须减量重发**，不能原样重试：
+                # 重发同一批只会再把预算烧光一次，白花一遍钱。
+                logger.warning(
+                    "reader %s 批次输出预算耗尽（%d 个文件），拆批重发：%s",
+                    part.reader_id,
+                    len(chunk),
+                    exc,
+                )
+                if usage_hook:
+                    usage_hook(False, retries)
+                return None, retries, True
             except LLMError as exc:
                 logger.warning("reader %s 批次调用失败：%s", part.reader_id, exc)
                 if usage_hook:
                     usage_hook(False, retries)
-                return None, retries
+                return None, retries, False
             except Exception as exc:  # noqa: BLE001 - 单批次失败不应拖垮整个 Reader
                 logger.warning(
                     "reader %s 批次异常：%s: %s", part.reader_id, type(exc).__name__, exc
                 )
                 if usage_hook:
                     usage_hook(False, retries)
-                return None, retries
+                return None, retries, False
 
         if usage_hook:
             usage_hook(False, retries)
-        return None, retries
+        return None, retries, False
 
     def _mark_failed(self, reader_id: str) -> None:
         if reader_id not in self.failed_readers:

@@ -60,6 +60,19 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.0
     llm_reasoning_effort: Literal["low", "medium", "high"] | None = None
     """只在显式配置时发送；需由兼容端点实际验收支持程度。"""
+    llm_reasoning: bool | None = None
+    """显式声明该模型是否为推理模型；`None` = 按模型名自动判断。
+
+    **为什么必须有这个开关**：自动判断靠模型名里的关键字
+    （`reasoner` / `reasoning` / `-r1` / `think`），盖不住所有命名。
+    2026-10-29 实测 `deepseek-flash` 会返回 `reasoning_content`（它就是推理模型），
+    但名字里一个关键字都没有，于是被判成普通模型，继续向它发 `temperature`
+    与 `response_format`，并且对它用 `max_tokens`。
+
+    **为什么不直接改自动判断**：分类会改变请求体形状（是否发 temperature、
+    是否发 response_format、用哪个 token 字段），猜错会直接 400 或改变输出的
+    JSON 可靠性。开关先做出来，待真实端点逐项验收后再定自动规则。
+    """
 
     llm_timeout_s: float = 90.0
     llm_max_retries: int = 3
@@ -155,6 +168,16 @@ class Settings(BaseSettings):
 
     配套使用 `partition_assignment=greedy`：如果分散臂的分区本身就不均匀
     （实测出现过 `1 / 25 / 0`），再怎么设上限也无法让「每人预算相同」成立。
+    """
+    max_split_depth: int = 3
+    """因「单次输出预算耗尽、正文为空」而拆批重发的最大深度。
+
+    拆批是**乘法**：6 个文件一批若每次都写不完，会拆成 3+3 → 2+1+2+1……，
+    总调用数最高可到原批次的十几倍，且这些调用全部照付。不封顶的话，
+    一个系统性的模型问题会把账单静默放大一个数量级——正是 2026-10-29 事故的形态。
+
+    深度 3 意味着 6 → 3 → 1；到上限仍写不出来就如实记成丢批（`dropped_chunks`），
+    让实验闸门拦住，而不是继续烧钱。
     """
     report_max_items: int = 40
     """报告每个结论档位最多列出多少条。

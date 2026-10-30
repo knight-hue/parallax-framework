@@ -60,12 +60,19 @@ def verify(out_dir: Path) -> int:
             f"  {entry['arm']:24s} 实读 {per} 合并 {union:3d}"
             f"｜召回 {entry.get('hits')}/{entry.get('planted')}（漏 {missed}）"
             f"｜调用 {entry.get('llm_calls')}"
-            f"｜失败 {entry.get('llm_failures')}｜schema 重试 {entry.get('schema_retries')}"
+            f"｜失败 {entry.get('llm_failures')}｜拆批 {entry.get('split_retries')}"
+            f"｜**丢批 {entry.get('dropped_chunks')}**"
+            f"｜schema 重试 {entry.get('schema_retries')}"
             f"｜Reader 失败 {entry.get('readers_failed')}"
             f"｜stop={entry.get('stop_reason')}"
         )
         if not per:
             print("    ✗ 没有 reader_units，分配未生效")
+            problems += 1
+        if entry.get("dropped_chunks"):
+            # 丢批才是真正的门槛：数据残缺则该臂召回不可比。
+            # `llm_failures` 不能用做门槛——拆批救回来的批次也会计失败，但没丢数据。
+            print(f"    ✗ 丢批 {entry.get('dropped_chunks')} 个，该臂召回残缺，不可与另一臂比较")
             problems += 1
         if entry.get("readers_failed"):
             print("    ✗ 有 Reader 整体失败，该臂召回被低估")
