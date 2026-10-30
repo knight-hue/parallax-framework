@@ -68,6 +68,12 @@ def main() -> int:
     parser.add_argument(
         "--corpus", default="p1-subsample", help="相对 exp-20261029-v4 的语料目录"
     )
+    parser.add_argument("--arms", default=ARMS, help="逗号分隔的实验臂")
+    parser.add_argument(
+        "--full-read",
+        action="store_true",
+        help="不加 --equal-exposure（每臂按各自 redundancy 读满），用于 E3 五臂消融",
+    )
     args = parser.parse_args()
 
     corpus = EXP / args.corpus
@@ -79,9 +85,12 @@ def main() -> int:
         str(PYTHON), "-m", "parallax.cli", "experiment",
         "--corpus", str(corpus),
         "--tasks", args.task,
-        "--arms", ARMS,
+        "--arms", args.arms,
         "--readers", "3",
-        "--equal-exposure",
+    ]
+    if not args.full_read:
+        cmd.append("--equal-exposure")
+    cmd += [
         "--partition-assignment", "greedy",
         "--group-depth", "3",
         "--out", str(out_dir),

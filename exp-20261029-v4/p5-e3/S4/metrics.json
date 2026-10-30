@@ -1,0 +1,958 @@
+{
+  "generated_at": "2026-10-30T05:36:03+00:00",
+  "arms": [
+    {
+      "arm": "baseline_shared",
+      "task_id": "S4",
+      "reader_count": 3,
+      "recall": 0.8333,
+      "precision": 0.5333,
+      "redundancy": 0.5889,
+      "effective_channels": 1.2398,
+      "agent_count": 3,
+      "assigned_reader_count": 3,
+      "coverage_fill_rate": 0.2,
+      "rounds": 1,
+      "total_claims": 90,
+      "distinct_fingerprints": 37,
+      "hits": 10,
+      "planted": 12,
+      "duplicates": 38,
+      "unmatched": 42,
+      "llm_calls": 15,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "split_retries": 0,
+      "dropped_chunks": 0,
+      "readers_failed": 0,
+      "reader_units": {
+        "reader-r0-0": 26,
+        "reader-r0-1": 26,
+        "reader-r0-2": 26
+      },
+      "reader_union": 26,
+      "prompt_tokens": 62174,
+      "completion_tokens": 28353,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "d1-dislikes-truncated-by-total-budget",
+          "title": "总预算截断把 dislike 一起吃掉，黑名单被降级成普通偏好",
+          "defect_class": "logic",
+          "file": "app/application/memory/preference_selector.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d2-zero-budget-drops-dislikes",
+          "title": "预算为 0 时把 dislike 也一起丢掉",
+          "defect_class": "boundary",
+          "file": "app/application/memory/preference_selector.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "d3-relevance-ranking-keeps-sorted-order",
+          "title": "相关性排序后直接返回排序结果，注入块行序每轮抖动",
+          "defect_class": "ordering",
+          "file": "app/application/memory/preference_selector.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d4-money-accepts-bool",
+          "title": "Money.of 把 bool 当整数收下，金额静默变成 1 分",
+          "defect_class": "type",
+          "file": "app/domain/catalog/money.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d5-conversation-role-unchecked",
+          "title": "对话轮次的 role 不再校验，脏角色进流水",
+          "defect_class": "validation",
+          "file": "app/domain/session/ports/conversation_store.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d6-embedding-key-drops-model",
+          "title": "embedding 缓存 key 丢掉模型名，换模型后拿到旧模型的向量",
+          "defect_class": "cache_key",
+          "file": "app/infrastructure/cache/cached_embedding_client.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d7-embedding-missing-silently-emptied",
+          "title": "上游少返回向量时静默补空列表，不报错",
+          "defect_class": "error_handling",
+          "file": "app/infrastructure/cache/cached_embedding_client.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d8-history-not-blocked",
+          "title": "会话内多轮时仍走语义缓存，上下文依赖问句被跨轮复用",
+          "defect_class": "logic",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d9-error-reply-cached",
+          "title": "失败回复进语义缓存，错误被复用 24 小时",
+          "defect_class": "error_handling",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d10-bucket-key-ignores-scope",
+          "title": "桶 key 不再带偏好指纹，撤回偏好后仍命中旧回复",
+          "defect_class": "cache_key",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "d11-bucket-keeps-oldest",
+          "title": "桶内保留的是最旧 30 条而不是最近 30 条",
+          "defect_class": "boundary",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d12-output-guard-misses-api-key",
+          "title": "输出审核的敏感模式表少了 API Key 形态",
+          "defect_class": "security",
+          "file": "app/infrastructure/security/output_guard.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        }
+      ],
+      "elapsed_s": 145.65,
+      "errors": [],
+      "config": {
+        "model": "deepseek-chat",
+        "reasoning_effort": null,
+        "readers": 3,
+        "redundancy": 3,
+        "support_threshold": 2,
+        "max_rounds": 1,
+        "visibility": "shared",
+        "seed": 0,
+        "max_evidence_per_call": 6,
+        "max_units_per_reader": 0,
+        "equal_exposure": false,
+        "max_batch_chars": 24000,
+        "max_output_tokens": 16000,
+        "max_llm_calls": 0,
+        "max_tokens": 0,
+        "min_independent_support": 2,
+        "max_evidence_overlap_rate": 1.0,
+        "adaptive_scheduling": false,
+        "llm_falsifier": false,
+        "semantic_partitioning": false,
+        "partition_assignment": "greedy",
+        "git_revision": "56184c334911da5e80bb14053ef544c49df96724",
+        "implementation_sha256": "38a1314e62352306801b261d124d5a104d526ffd2cee6904a877fbd9a44d688d",
+        "task": "S4",
+        "group_depth": 3
+      },
+      "valid": true
+    },
+    {
+      "arm": "sharded_blind",
+      "task_id": "S4",
+      "reader_count": 3,
+      "recall": 0.9167,
+      "precision": 0.5667,
+      "redundancy": 0.2167,
+      "effective_channels": 2.6118,
+      "agent_count": 3,
+      "assigned_reader_count": 3,
+      "coverage_fill_rate": 0.25,
+      "rounds": 1,
+      "total_claims": 60,
+      "distinct_fingerprints": 47,
+      "hits": 11,
+      "planted": 12,
+      "duplicates": 23,
+      "unmatched": 26,
+      "llm_calls": 9,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "split_retries": 0,
+      "dropped_chunks": 0,
+      "readers_failed": 0,
+      "reader_units": {
+        "reader-r0-0": 18,
+        "reader-r0-1": 17,
+        "reader-r0-2": 17
+      },
+      "reader_union": 26,
+      "prompt_tokens": 31184,
+      "completion_tokens": 19224,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "d1-dislikes-truncated-by-total-budget",
+          "title": "总预算截断把 dislike 一起吃掉，黑名单被降级成普通偏好",
+          "defect_class": "logic",
+          "file": "app/application/memory/preference_selector.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d2-zero-budget-drops-dislikes",
+          "title": "预算为 0 时把 dislike 也一起丢掉",
+          "defect_class": "boundary",
+          "file": "app/application/memory/preference_selector.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "d3-relevance-ranking-keeps-sorted-order",
+          "title": "相关性排序后直接返回排序结果，注入块行序每轮抖动",
+          "defect_class": "ordering",
+          "file": "app/application/memory/preference_selector.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d4-money-accepts-bool",
+          "title": "Money.of 把 bool 当整数收下，金额静默变成 1 分",
+          "defect_class": "type",
+          "file": "app/domain/catalog/money.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d5-conversation-role-unchecked",
+          "title": "对话轮次的 role 不再校验，脏角色进流水",
+          "defect_class": "validation",
+          "file": "app/domain/session/ports/conversation_store.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d6-embedding-key-drops-model",
+          "title": "embedding 缓存 key 丢掉模型名，换模型后拿到旧模型的向量",
+          "defect_class": "cache_key",
+          "file": "app/infrastructure/cache/cached_embedding_client.py",
+          "found_by": [
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d7-embedding-missing-silently-emptied",
+          "title": "上游少返回向量时静默补空列表，不报错",
+          "defect_class": "error_handling",
+          "file": "app/infrastructure/cache/cached_embedding_client.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d8-history-not-blocked",
+          "title": "会话内多轮时仍走语义缓存，上下文依赖问句被跨轮复用",
+          "defect_class": "logic",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d9-error-reply-cached",
+          "title": "失败回复进语义缓存，错误被复用 24 小时",
+          "defect_class": "error_handling",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d10-bucket-key-ignores-scope",
+          "title": "桶 key 不再带偏好指纹，撤回偏好后仍命中旧回复",
+          "defect_class": "cache_key",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d11-bucket-keeps-oldest",
+          "title": "桶内保留的是最旧 30 条而不是最近 30 条",
+          "defect_class": "boundary",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d12-output-guard-misses-api-key",
+          "title": "输出审核的敏感模式表少了 API Key 形态",
+          "defect_class": "security",
+          "file": "app/infrastructure/security/output_guard.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        }
+      ],
+      "elapsed_s": 40.42,
+      "errors": [],
+      "config": {
+        "model": "deepseek-chat",
+        "reasoning_effort": null,
+        "readers": 3,
+        "redundancy": 2,
+        "support_threshold": 2,
+        "max_rounds": 1,
+        "visibility": "blind",
+        "seed": 0,
+        "max_evidence_per_call": 6,
+        "max_units_per_reader": 0,
+        "equal_exposure": false,
+        "max_batch_chars": 24000,
+        "max_output_tokens": 16000,
+        "max_llm_calls": 0,
+        "max_tokens": 0,
+        "min_independent_support": 2,
+        "max_evidence_overlap_rate": 1.0,
+        "adaptive_scheduling": false,
+        "llm_falsifier": false,
+        "semantic_partitioning": false,
+        "partition_assignment": "greedy",
+        "git_revision": "56184c334911da5e80bb14053ef544c49df96724",
+        "implementation_sha256": "38a1314e62352306801b261d124d5a104d526ffd2cee6904a877fbd9a44d688d",
+        "task": "S4",
+        "group_depth": 3
+      },
+      "valid": true
+    },
+    {
+      "arm": "no_peers_all_evidence",
+      "task_id": "S4",
+      "reader_count": 3,
+      "recall": 0.8333,
+      "precision": 0.5625,
+      "redundancy": 0.4625,
+      "effective_channels": 1.7225,
+      "agent_count": 3,
+      "assigned_reader_count": 3,
+      "coverage_fill_rate": 0.25,
+      "rounds": 1,
+      "total_claims": 80,
+      "distinct_fingerprints": 43,
+      "hits": 10,
+      "planted": 12,
+      "duplicates": 35,
+      "unmatched": 35,
+      "llm_calls": 15,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "split_retries": 0,
+      "dropped_chunks": 0,
+      "readers_failed": 0,
+      "reader_units": {
+        "reader-r0-0": 26,
+        "reader-r0-1": 26,
+        "reader-r0-2": 26
+      },
+      "reader_union": 26,
+      "prompt_tokens": 50206,
+      "completion_tokens": 28051,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "d1-dislikes-truncated-by-total-budget",
+          "title": "总预算截断把 dislike 一起吃掉，黑名单被降级成普通偏好",
+          "defect_class": "logic",
+          "file": "app/application/memory/preference_selector.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d2-zero-budget-drops-dislikes",
+          "title": "预算为 0 时把 dislike 也一起丢掉",
+          "defect_class": "boundary",
+          "file": "app/application/memory/preference_selector.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "d3-relevance-ranking-keeps-sorted-order",
+          "title": "相关性排序后直接返回排序结果，注入块行序每轮抖动",
+          "defect_class": "ordering",
+          "file": "app/application/memory/preference_selector.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d4-money-accepts-bool",
+          "title": "Money.of 把 bool 当整数收下，金额静默变成 1 分",
+          "defect_class": "type",
+          "file": "app/domain/catalog/money.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d5-conversation-role-unchecked",
+          "title": "对话轮次的 role 不再校验，脏角色进流水",
+          "defect_class": "validation",
+          "file": "app/domain/session/ports/conversation_store.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d6-embedding-key-drops-model",
+          "title": "embedding 缓存 key 丢掉模型名，换模型后拿到旧模型的向量",
+          "defect_class": "cache_key",
+          "file": "app/infrastructure/cache/cached_embedding_client.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d7-embedding-missing-silently-emptied",
+          "title": "上游少返回向量时静默补空列表，不报错",
+          "defect_class": "error_handling",
+          "file": "app/infrastructure/cache/cached_embedding_client.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d8-history-not-blocked",
+          "title": "会话内多轮时仍走语义缓存，上下文依赖问句被跨轮复用",
+          "defect_class": "logic",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d9-error-reply-cached",
+          "title": "失败回复进语义缓存，错误被复用 24 小时",
+          "defect_class": "error_handling",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d10-bucket-key-ignores-scope",
+          "title": "桶 key 不再带偏好指纹，撤回偏好后仍命中旧回复",
+          "defect_class": "cache_key",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "d11-bucket-keeps-oldest",
+          "title": "桶内保留的是最旧 30 条而不是最近 30 条",
+          "defect_class": "boundary",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d12-output-guard-misses-api-key",
+          "title": "输出审核的敏感模式表少了 API Key 形态",
+          "defect_class": "security",
+          "file": "app/infrastructure/security/output_guard.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        }
+      ],
+      "elapsed_s": 55.87,
+      "errors": [],
+      "config": {
+        "model": "deepseek-chat",
+        "reasoning_effort": null,
+        "readers": 3,
+        "redundancy": 3,
+        "support_threshold": 2,
+        "max_rounds": 1,
+        "visibility": "blind",
+        "seed": 0,
+        "max_evidence_per_call": 6,
+        "max_units_per_reader": 0,
+        "equal_exposure": false,
+        "max_batch_chars": 24000,
+        "max_output_tokens": 16000,
+        "max_llm_calls": 0,
+        "max_tokens": 0,
+        "min_independent_support": 2,
+        "max_evidence_overlap_rate": 1.0,
+        "adaptive_scheduling": false,
+        "llm_falsifier": false,
+        "semantic_partitioning": false,
+        "partition_assignment": "greedy",
+        "git_revision": "56184c334911da5e80bb14053ef544c49df96724",
+        "implementation_sha256": "38a1314e62352306801b261d124d5a104d526ffd2cee6904a877fbd9a44d688d",
+        "task": "S4",
+        "group_depth": 3
+      },
+      "valid": true
+    },
+    {
+      "arm": "blind_no_coverage",
+      "task_id": "S4",
+      "reader_count": 3,
+      "recall": 0.75,
+      "precision": 0.56,
+      "redundancy": 0.04,
+      "effective_channels": 2.6422,
+      "agent_count": 3,
+      "assigned_reader_count": 3,
+      "coverage_fill_rate": 0.1625,
+      "rounds": 1,
+      "total_claims": 25,
+      "distinct_fingerprints": 24,
+      "hits": 9,
+      "planted": 12,
+      "duplicates": 5,
+      "unmatched": 11,
+      "llm_calls": 6,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "split_retries": 0,
+      "dropped_chunks": 0,
+      "readers_failed": 0,
+      "reader_units": {
+        "reader-r0-0": 9,
+        "reader-r0-1": 9,
+        "reader-r0-2": 8
+      },
+      "reader_union": 26,
+      "prompt_tokens": 16698,
+      "completion_tokens": 9015,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "d1-dislikes-truncated-by-total-budget",
+          "title": "总预算截断把 dislike 一起吃掉，黑名单被降级成普通偏好",
+          "defect_class": "logic",
+          "file": "app/application/memory/preference_selector.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d2-zero-budget-drops-dislikes",
+          "title": "预算为 0 时把 dislike 也一起丢掉",
+          "defect_class": "boundary",
+          "file": "app/application/memory/preference_selector.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d3-relevance-ranking-keeps-sorted-order",
+          "title": "相关性排序后直接返回排序结果，注入块行序每轮抖动",
+          "defect_class": "ordering",
+          "file": "app/application/memory/preference_selector.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d4-money-accepts-bool",
+          "title": "Money.of 把 bool 当整数收下，金额静默变成 1 分",
+          "defect_class": "type",
+          "file": "app/domain/catalog/money.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "d5-conversation-role-unchecked",
+          "title": "对话轮次的 role 不再校验，脏角色进流水",
+          "defect_class": "validation",
+          "file": "app/domain/session/ports/conversation_store.py",
+          "found_by": [
+            "reader-r0-1"
+          ]
+        },
+        {
+          "defect_id": "d6-embedding-key-drops-model",
+          "title": "embedding 缓存 key 丢掉模型名，换模型后拿到旧模型的向量",
+          "defect_class": "cache_key",
+          "file": "app/infrastructure/cache/cached_embedding_client.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "d7-embedding-missing-silently-emptied",
+          "title": "上游少返回向量时静默补空列表，不报错",
+          "defect_class": "error_handling",
+          "file": "app/infrastructure/cache/cached_embedding_client.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d8-history-not-blocked",
+          "title": "会话内多轮时仍走语义缓存，上下文依赖问句被跨轮复用",
+          "defect_class": "logic",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d9-error-reply-cached",
+          "title": "失败回复进语义缓存，错误被复用 24 小时",
+          "defect_class": "error_handling",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "d10-bucket-key-ignores-scope",
+          "title": "桶 key 不再带偏好指纹，撤回偏好后仍命中旧回复",
+          "defect_class": "cache_key",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "d11-bucket-keeps-oldest",
+          "title": "桶内保留的是最旧 30 条而不是最近 30 条",
+          "defect_class": "boundary",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "d12-output-guard-misses-api-key",
+          "title": "输出审核的敏感模式表少了 API Key 形态",
+          "defect_class": "security",
+          "file": "app/infrastructure/security/output_guard.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        }
+      ],
+      "elapsed_s": 22.29,
+      "errors": [],
+      "config": {
+        "model": "deepseek-chat",
+        "reasoning_effort": null,
+        "readers": 3,
+        "redundancy": 1,
+        "support_threshold": 2,
+        "max_rounds": 1,
+        "visibility": "blind",
+        "seed": 0,
+        "max_evidence_per_call": 6,
+        "max_units_per_reader": 0,
+        "equal_exposure": false,
+        "max_batch_chars": 24000,
+        "max_output_tokens": 16000,
+        "max_llm_calls": 0,
+        "max_tokens": 0,
+        "min_independent_support": 2,
+        "max_evidence_overlap_rate": 1.0,
+        "adaptive_scheduling": false,
+        "llm_falsifier": false,
+        "semantic_partitioning": false,
+        "partition_assignment": "greedy",
+        "git_revision": "56184c334911da5e80bb14053ef544c49df96724",
+        "implementation_sha256": "38a1314e62352306801b261d124d5a104d526ffd2cee6904a877fbd9a44d688d",
+        "task": "S4",
+        "group_depth": 3
+      },
+      "valid": true
+    },
+    {
+      "arm": "blind_full",
+      "task_id": "S4",
+      "reader_count": 3,
+      "recall": 1.0,
+      "precision": 0.5739,
+      "redundancy": 0.5739,
+      "effective_channels": 4.5768,
+      "agent_count": 9,
+      "assigned_reader_count": 9,
+      "coverage_fill_rate": 0.325,
+      "rounds": 3,
+      "total_claims": 176,
+      "distinct_fingerprints": 75,
+      "hits": 12,
+      "planted": 12,
+      "duplicates": 89,
+      "unmatched": 75,
+      "llm_calls": 27,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "split_retries": 0,
+      "dropped_chunks": 0,
+      "readers_failed": 0,
+      "reader_units": {
+        "reader-r0-0": 18,
+        "reader-r0-1": 17,
+        "reader-r0-2": 17,
+        "reader-r1-0": 15,
+        "reader-r1-1": 15,
+        "reader-r1-2": 14,
+        "reader-r2-0": 13,
+        "reader-r2-1": 13,
+        "reader-r2-2": 14
+      },
+      "reader_union": 26,
+      "prompt_tokens": 89871,
+      "completion_tokens": 59882,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "d1-dislikes-truncated-by-total-budget",
+          "title": "总预算截断把 dislike 一起吃掉，黑名单被降级成普通偏好",
+          "defect_class": "logic",
+          "file": "app/application/memory/preference_selector.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r1-0",
+            "reader-r1-1"
+          ]
+        },
+        {
+          "defect_id": "d2-zero-budget-drops-dislikes",
+          "title": "预算为 0 时把 dislike 也一起丢掉",
+          "defect_class": "boundary",
+          "file": "app/application/memory/preference_selector.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r1-0"
+          ]
+        },
+        {
+          "defect_id": "d3-relevance-ranking-keeps-sorted-order",
+          "title": "相关性排序后直接返回排序结果，注入块行序每轮抖动",
+          "defect_class": "ordering",
+          "file": "app/application/memory/preference_selector.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r1-0",
+            "reader-r1-1"
+          ]
+        },
+        {
+          "defect_id": "d4-money-accepts-bool",
+          "title": "Money.of 把 bool 当整数收下，金额静默变成 1 分",
+          "defect_class": "type",
+          "file": "app/domain/catalog/money.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r1-0",
+            "reader-r1-1",
+            "reader-r2-0",
+            "reader-r2-1"
+          ]
+        },
+        {
+          "defect_id": "d5-conversation-role-unchecked",
+          "title": "对话轮次的 role 不再校验，脏角色进流水",
+          "defect_class": "validation",
+          "file": "app/domain/session/ports/conversation_store.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r1-0",
+            "reader-r1-2",
+            "reader-r2-0",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "d6-embedding-key-drops-model",
+          "title": "embedding 缓存 key 丢掉模型名，换模型后拿到旧模型的向量",
+          "defect_class": "cache_key",
+          "file": "app/infrastructure/cache/cached_embedding_client.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r1-1",
+            "reader-r2-1",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "d7-embedding-missing-silently-emptied",
+          "title": "上游少返回向量时静默补空列表，不报错",
+          "defect_class": "error_handling",
+          "file": "app/infrastructure/cache/cached_embedding_client.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2",
+            "reader-r1-1",
+            "reader-r1-2",
+            "reader-r2-1",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "d8-history-not-blocked",
+          "title": "会话内多轮时仍走语义缓存，上下文依赖问句被跨轮复用",
+          "defect_class": "logic",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2",
+            "reader-r1-1",
+            "reader-r1-2",
+            "reader-r2-1",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "d9-error-reply-cached",
+          "title": "失败回复进语义缓存，错误被复用 24 小时",
+          "defect_class": "error_handling",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r1-1",
+            "reader-r1-2",
+            "reader-r2-1",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "d10-bucket-key-ignores-scope",
+          "title": "桶 key 不再带偏好指纹，撤回偏好后仍命中旧回复",
+          "defect_class": "cache_key",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-2",
+            "reader-r1-2",
+            "reader-r2-1",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "d11-bucket-keeps-oldest",
+          "title": "桶内保留的是最旧 30 条而不是最近 30 条",
+          "defect_class": "boundary",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2",
+            "reader-r1-1",
+            "reader-r1-2",
+            "reader-r2-2"
+          ]
+        },
+        {
+          "defect_id": "d12-output-guard-misses-api-key",
+          "title": "输出审核的敏感模式表少了 API Key 形态",
+          "defect_class": "security",
+          "file": "app/infrastructure/security/output_guard.py",
+          "found_by": [
+            "reader-r0-1",
+            "reader-r0-2",
+            "reader-r1-1",
+            "reader-r1-2",
+            "reader-r2-1",
+            "reader-r2-2"
+          ]
+        }
+      ],
+      "elapsed_s": 116.03,
+      "errors": [],
+      "config": {
+        "model": "deepseek-chat",
+        "reasoning_effort": null,
+        "readers": 3,
+        "redundancy": 2,
+        "support_threshold": 2,
+        "max_rounds": 3,
+        "visibility": "blind",
+        "seed": 0,
+        "max_evidence_per_call": 6,
+        "max_units_per_reader": 0,
+        "equal_exposure": false,
+        "max_batch_chars": 24000,
+        "max_output_tokens": 16000,
+        "max_llm_calls": 0,
+        "max_tokens": 0,
+        "min_independent_support": 2,
+        "max_evidence_overlap_rate": 1.0,
+        "adaptive_scheduling": false,
+        "llm_falsifier": false,
+        "semantic_partitioning": false,
+        "partition_assignment": "greedy",
+        "git_revision": "56184c334911da5e80bb14053ef544c49df96724",
+        "implementation_sha256": "38a1314e62352306801b261d124d5a104d526ffd2cee6904a877fbd9a44d688d",
+        "task": "S4",
+        "group_depth": 3
+      },
+      "valid": true
+    }
+  ]
+}
