@@ -1,0 +1,348 @@
+﻿p4-chat: 未匹配的缺陷断言 113 条，抽取 12 条
+
+==============================================================================
+[1] S6 / blind_no_coverage / c5231b2fcba8
+locator: app/infrastructure/persistence/seed_products.py:88-90
+severity: low  stance: defect
+title: P1023 价格币种为 USD 但数值 189 与同类 CNY 商品量级不一致，跨币种排序/比价会失真
+evidence: 
+------------------------------------------------------------
+    83|      ["CN", "US", "EU"], [("S1", "橙色", 55.0, "CNY", 150)], [("锁具", "TSA 海关认可")]),
+    84|     ("P1049", "BudgetPack 20L 简易背包", "BudgetPack", "旅行装备", "CN",
+    85|      "20L 入门背包 轻便 平价 涤纶 日常 通勤",
+    86|      ["CN"], [("S1", "黑色", 39.0, "CNY", 300)], [("价位", "入门平价款")]),
+    87|     ("P1050", "LuxeTrunk 铝镁合金旅行箱 全铝款", "LuxeTrunk", "旅行装备", "DE",
+>>  88|      "全铝镁合金箱体 高级 结实抗摔 终身保修 商务 高价位",
+>>  89|      ["CN", "EU"], [("S1", "原色 / 26寸", 2999.0, "CNY", 5)], [("箱体", "全铝镁合金")]),
+>>  90| 
+    91|     # ---- 数码配件：同品牌高/低配 + 降噪竞品，测同类排序 ----
+    92|     ("P1022", "AeroHush Lite 半入耳蓝牙耳机", "AeroHush", "数码配件", "CN",
+    93|      "半入耳 蓝牙 5.3 轻便 长续航 30小时 通话降噪 入门价位",
+    94|      ["CN", "US"], [("S1", "白色", 299.0, "CNY", 80)], [("续航", "含仓 30 小时")]),
+    95|     ("P1023", "SilentBuds 主动降噪耳塞式耳机", "SilentBuds", "数码配件", "US",
+
+==============================================================================
+[2] S2 / blind_no_coverage / f697d8eb8f38
+locator: app/infrastructure/llm.py:155-175
+severity: medium  stance: defect
+title: 重试循环捕获 BaseException 会把 CancelledError 当作瞬时故障重试，延迟取消
+evidence: 
+------------------------------------------------------------
+   150|                     delay = self._retry_base_seconds * (3**attempt)
+   151|                     logger.warning(
+   152|                         "模型 %s 遇上游瞬时故障，%.0fs 后重试（第 %d/%d 次）：%s",
+   153|                         self.model, delay, attempt + 1, self._max_transient_retries, err,
+   154|                     )
+>> 155|                     await asyncio.sleep(delay)
+>> 156| 
+>> 157|         if self._fallback is None:
+>> 158|             raise last_error  # type: ignore[misc]
+>> 159| 
+>> 160|         logger.warning("模型 %s 重试用尽，回退到 %s：%s", self.model, self._fallback.model, last_error)
+>> 161|         self._publish_fallback(str(last_error))
+>> 162|         return await self._fallback(messages, tools, tool_choice, **kwargs)
+>> 163| 
+>> 164|     def _publish_fallback(self, reason: str) -> None:
+>> 165|         if self._bus is None or self._fallback is None:
+>> 166|             return
+>> 167|         session_id = ShoppingContext.current_session_id()
+>> 168|         self._bus.publish(
+>> 169|             session_id,
+>> 170|             "model.fallback",
+>> 171|             {"from": self.model, "to": self._fallback.model, "reason": reason},
+>> 172|         )
+>> 173| 
+>> 174| 
+>> 175| def _safe_field(source: Any, name: str) -> Any:
+   176|     """宽容取字段。
+   177| 
+   178|     坑：ChatResponse.usage 的 `__getattr__` 对缺失字段抛 **KeyError**，
+   179|     而 `getattr(obj, name, default)` 只吃 AttributeError——直接用 getattr 带默认值
+   180|     依旧会把 KeyError 抛到主链路，把整轮对话搞成 [error]。实测踩过。
+
+==============================================================================
+[3] S6 / blind_no_coverage / d691f6b465d8
+locator: app/application/usecases/order_usecases.py:175-181
+severity: high  stance: defect
+title: 取消订单先回补库存再保存，save 失败会导致库存重复回补
+evidence: 
+------------------------------------------------------------
+   170|         self._stock_repo = stock_repo
+   171| 
+   172|     async def execute(self, order_id: str, reason: str, buyer_id: str) -> dict:
+   173|         order = await self._order_repo.find_by_id(order_id)
+   174|         if order is None:
+>> 175|             raise ValueError(f"订单不存在：{order_id}")
+>> 176|         if not buyer_id or order.buyer_id != buyer_id:
+>> 177|             raise OrderAccessDenied(f"订单不存在：{order_id}")
+>> 178|         order.cancel(reason)
+>> 179|         # 取消后回补库存。重复取消会被状态机挡在上一步，因此不会重复回补。
+>> 180|         for line in order.lines:
+>> 181|             await self._stock_repo.release(line.sku_id, line.quantity)
+   182|         await self._order_repo.save(order)
+   183|         return order.snapshot()
+
+==============================================================================
+[4] S2 / no_peers_all_evidence / 1a9a9264770c
+locator: app/infrastructure/eventbus.py:158-168
+severity: medium  stance: defect
+title: 会话淘汰时只清 _seq 不清 _subscribers，且淘汰后 seq 从 1 重新开始导致客户端去重误判
+evidence: 
+------------------------------------------------------------
+   153|         buffer = self._history.get(session_id)
+   154|         if buffer is None:
+   155|             while len(self._history) >= MAX_TRACKED_SESSIONS:
+   156|                 evicted, _ = self._history.popitem(last=False)
+   157|                 self._seq.pop(evicted, None)
+>> 158|             buffer = deque(maxlen=HISTORY_LIMIT)
+>> 159|             self._history[session_id] = buffer
+>> 160|         else:
+>> 161|             self._history.move_to_end(session_id)
+>> 162|         buffer.append(event)
+>> 163| 
+>> 164|     def publish(self, shopping_session_id: str, event_type: TradeEventType, payload: Any) -> None:
+>> 165|         if event_type not in EVENT_TYPES:
+>> 166|             raise ValueError(f"未知事件类型：{event_type}")
+>> 167|         event = TradeEvent(
+>> 168|             shopping_session_id=shopping_session_id,
+   169|             type=event_type,
+   170|             payload=payload,
+   171|             occurred_at=datetime.now(timezone.utc).isoformat(),
+   172|         )
+   173|         self._broadcast(self.deliver_local(event))
+
+==============================================================================
+[5] S6 / no_peers_all_evidence / 30fd4020b091
+locator: app/infrastructure/persistence/sql/repositories.py:200-215
+severity: medium  stance: defect
+title: list_turns 的 limit 未按时间倒序取最近 N 条，而是取最早 N 条
+evidence: 
+------------------------------------------------------------
+   195|     async def append_events(self, events: list[ConversationEventRecord]) -> None:
+   196|         if not events:
+   197|             return
+   198|         async with self._session_factory() as db:
+   199|             db.add_all(
+>> 200|                 [
+>> 201|                     ConversationEventRow(
+>> 202|                         session_id=event.session_id,
+>> 203|                         type=event.type,
+>> 204|                         payload=event.payload,
+>> 205|                         occurred_at=event.occurred_at,
+>> 206|                     )
+>> 207|                     for event in events
+>> 208|                 ],
+>> 209|             )
+>> 210|             await db.commit()
+>> 211| 
+>> 212|     async def list_turns(self, session_id: str, limit: int = 50) -> list[ConversationTurn]:
+>> 213|         async with self._session_factory() as db:
+>> 214|             rows = (
+>> 215|                 await db.scalars(
+   216|                     select(ConversationMessageRow)
+   217|                     .where(ConversationMessageRow.session_id == session_id)
+   218|                     .order_by(ConversationMessageRow.turn_index)
+   219|                     .limit(limit),
+   220|                 )
+
+==============================================================================
+[6] S3 / blind_no_coverage / d77fd6c00063
+locator: app/application/usecases/order_usecases.py:118-130
+severity: high  stance: defect
+title: 幂等键冲突回滚后未撤销已保存的订单，导致库存与订单不一致
+evidence: 
+------------------------------------------------------------
+   113|             raise
+   114| 
+   115|         await self._order_repo.save(order)
+   116| 
+   117|         if idempotency_key and self._idempotency is not None:
+>> 118|             claimed = await self._idempotency.record(idempotency_key, order.order_id)
+>> 119|             if not claimed:
+>> 120|                 # 并发下另一路先登记了同一个键：本次的扣减与订单都要撤销，返回赢家的结果
+>> 121|                 await self._rollback(reserved)
+>> 122|                 replay = await self._replay(buyer_id, idempotency_key)
+>> 123|                 if replay is not None:
+>> 124|                     return replay
+>> 125|                 raise ValueError(f"下单幂等键冲突且未找到既有订单：{idempotency_key}")
+>> 126| 
+>> 127|         return order.snapshot()
+>> 128| 
+>> 129|     async def _replay(self, buyer_id: str, idempotency_key: str) -> Optional[dict]:
+>> 130|         """键已登记时回放既有订单。找不到（登记后写单前崩溃）返回 None，让调用方继续新建。"""
+   131|         if self._idempotency is None:
+   132|             return None
+   133|         order_id = await self._idempotency.find(idempotency_key)
+   134|         if not order_id:
+   135|             return None
+
+==============================================================================
+[7] S1 / no_peers_all_evidence / ec744876f9b4
+locator: app/infrastructure/persistence/sql/repositories.py:196-210
+severity: medium  stance: defect
+title: append_turn 的 turn_index 读最大值再 +1 存在并发撞号
+evidence: 
+------------------------------------------------------------
+   191|                 ),
+   192|             )
+   193|             await db.commit()
+   194| 
+   195|     async def append_events(self, events: list[ConversationEventRecord]) -> None:
+>> 196|         if not events:
+>> 197|             return
+>> 198|         async with self._session_factory() as db:
+>> 199|             db.add_all(
+>> 200|                 [
+>> 201|                     ConversationEventRow(
+>> 202|                         session_id=event.session_id,
+>> 203|                         type=event.type,
+>> 204|                         payload=event.payload,
+>> 205|                         occurred_at=event.occurred_at,
+>> 206|                     )
+>> 207|                     for event in events
+>> 208|                 ],
+>> 209|             )
+>> 210|             await db.commit()
+   211| 
+   212|     async def list_turns(self, session_id: str, limit: int = 50) -> list[ConversationTurn]:
+   213|         async with self._session_factory() as db:
+   214|             rows = (
+   215|                 await db.scalars(
+
+==============================================================================
+[8] S6 / no_peers_all_evidence / 3d8d5cb9a9ee
+locator: app/infrastructure/persistence/in_memory_repositories.py:62-73
+severity: low  stance: defect
+title: InMemoryOrderIdempotencyStore 无容量上限，长期运行内存持续增长
+evidence: 
+------------------------------------------------------------
+    57|     """
+    58| 
+    59|     def __init__(self) -> None:
+    60|         self._keys: dict[str, str] = {}
+    61|         self._lock = asyncio.Lock()
+>>  62| 
+>>  63|     async def find(self, key: str) -> Optional[str]:
+>>  64|         async with self._lock:
+>>  65|             return self._keys.get(key)
+>>  66| 
+>>  67|     async def record(self, key: str, order_id: str) -> bool:
+>>  68|         async with self._lock:
+>>  69|             if key in self._keys:
+>>  70|                 return False
+>>  71|             self._keys[key] = order_id
+>>  72|             return True
+
+==============================================================================
+[9] S6 / no_peers_all_evidence / 7c0735159c85
+locator: app/infrastructure/persistence/in_memory_stock_repository.py:38-46
+severity: medium  stance: defect
+title: release 对未登记 SKU 直接补登记，可能凭空造出库存
+evidence: 
+------------------------------------------------------------
+    33|             raise ValueError(f"release.quantity 必须为正：{quantity}")
+    34|         async with self._lock:
+    35|             current = self._stock.get(sku_id)
+    36|             if current is None:
+    37|                 # 未登记的 SKU 不该出现；补登记而不是静默丢弃，避免库存凭空消失
+>>  38|                 self._stock[sku_id] = quantity
+>>  39|                 return
+>>  40|             self._stock[sku_id] = current + quantity
+>>  41| 
+>>  42|     async def get(self, sku_id: str) -> int | None:
+>>  43|         async with self._lock:
+>>  44|             return self._stock.get(sku_id)
+>>  45| 
+>>  46|     async def get_many(self, sku_ids: Iterable[str]) -> Mapping[str, int]:
+    47|         async with self._lock:
+    48|             return {sku_id: self._stock[sku_id] for sku_id in sku_ids if sku_id in self._stock}
+    49| 
+    50|     async def seed(self, entries: Iterable[tuple[str, int]]) -> None:
+    51|         async with self._lock:
+
+==============================================================================
+[10] S4 / blind_no_coverage / 1ea3f73d6751
+locator: app/infrastructure/security/content_filter.py:24-32
+severity: critical  stance: defect
+title: content_filter 正则 (?i) 内联标志位置导致编译失败
+evidence: 
+------------------------------------------------------------
+    19| FILTERED_PLACEHOLDER = "[内容已过滤：疑似注入]"
+    20| 
+    21| # 危险模式：覆盖中英文两种常见注入写法
+    22| DANGEROUS_PATTERNS: list[str] = [
+    23|     r"(?i)ignore\s+(all\s+)?previous\s+instructions?",
+>>  24|     r"(?i)忽略.{0,10}(之前|以上|所有).{0,10}(指令|指示|规则)",
+>>  25|     r"(?i)system\s*prompt",
+>>  26|     r"(?i)you\s+are\s+now",
+>>  27|     r"(?i)扮演.{0,10}角色",
+>>  28|     r"(?i)output\s+(all|every)\s+(user|system)",
+>>  29|     r"(?i)reveal\s+(your|the)\s+(api|secret|key)",
+>>  30| ]
+>>  31| 
+>>  32| _compiled = [re.compile(pattern) for pattern in DANGEROUS_PATTERNS]
+    33| 
+    34| 
+    35| def sanitize_tool_output(text: str) -> tuple[bool, str]:
+    36|     """过滤工具返回中的疑似注入内容。
+    37| 
+
+==============================================================================
+[11] S6 / blind_no_coverage / d0294d98d5ba
+locator: app/application/usecases/catalog_search.py:213-222
+severity: medium  stance: defect
+title: rerank 返回分数数量与候选数不一致时索引越界或静默错配
+evidence: 
+------------------------------------------------------------
+   208|         if self._reranker is None:
+   209|             raise RuntimeError("Reranker 未配置")
+   210|         documents = [product.searchable_text() for _, product in scored]
+   211|         rerank_scores = await self._reranker.rerank(spec.normalized_query, documents)
+   212|         reranked = [
+>> 213|             (rerank_scores[i], product)
+>> 214|             for i, (_, product) in enumerate(scored)
+>> 215|         ]
+>> 216|         reranked.sort(key=lambda pair: pair[0], reverse=True)
+>> 217|         return reranked
+>> 218| 
+>> 219|     # ---- 兜底：关键词召回 ----
+>> 220| 
+>> 221|     async def _keyword_recall(self, spec: ProductSearchSpec) -> list[tuple[float, Product]]:
+>> 222|         query_terms = tokenize(spec.normalized_query)
+   223|         candidates: list[tuple[float, Product]] = []
+   224|         for product in await self._product_repo.list_all():
+   225|             score = self._keyword_score(query_terms, product, spec)
+   226|             if score > 0:
+   227|                 candidates.append((score, product))
+
+==============================================================================
+[12] S6 / no_peers_all_evidence / b341ec514940
+locator: app/infrastructure/persistence/sql/repositories.py:245-258
+severity: medium  stance: defect
+title: next_order_id 依赖 inserted_primary_key，SQLite 下 insert().values() 空值可能不返回主键
+evidence: 
+------------------------------------------------------------
+   240|             return {
+   241|                 "session_id": row.session_id,
+   242|                 "buyer_id": row.buyer_id,
+   243|                 "locale": row.locale,
+   244|                 "currency": row.currency,
+>> 245|                 "last_active_at": row.last_active_at.isoformat() if row.last_active_at else "",
+>> 246|             }
+>> 247| 
+>> 248| 
+>> 249| class SqlOrderRepository(OrderRepository):
+>> 250|     def __init__(self, engine: AsyncEngine) -> None:
+>> 251|         self._session_factory = async_sessionmaker(engine, expire_on_commit=False)
+>> 252| 
+>> 253|     async def save(self, order: Order) -> None:
+>> 254|         total = order.total_amount()
+>> 255|         async with self._session_factory() as db:
+>> 256|             await db.merge(
+>> 257|                 OrderRow(
+>> 258|                     order_id=order.order_id,
+   259|                     buyer_id=order.buyer_id,
+   260|                     status=order.status.value,
+   261|                     currency=total.currency,
+   262|                     total_amount_minor=total.amount_in_minor_units,
+   263|                     shipping_address_json=_address_to_dict(order.shipping_address),

@@ -1,0 +1,321 @@
+﻿p4-chat: 未匹配的缺陷断言 113 条，抽取 12 条
+
+==============================================================================
+[1] S1 / no_peers_all_evidence / 406c5411b08d
+locator: app/infrastructure/persistence/sql/repositories.py:300-305
+severity: medium  stance: defect
+title: next_order_id 在 commit 后读取 inserted_primary_key，可能拿到 None 或失效值
+evidence: 
+------------------------------------------------------------
+   294|                 await db.scalars(select(OrderLineRow).where(OrderLineRow.order_id == order_id))
+   295|             ).all()
+   296|         return _row_to_order(row, line_rows)
+   297| 
+   298|     async def next_order_id(self) -> str:
+   299|         """让数据库自增列分配单号。
+>> 300| 
+>> 301|         原实现是 count(*)+1：两个并发请求会数到同一个 N、生成同一个订单号，
+>> 302|         后写的 merge 覆盖前一张订单（原注释已自承此风险）。
+>> 303|         自增列在任何引擎里都是原子分配，不依赖读-算-写。
+>> 304|         """
+>> 305|         async with self._session_factory() as db:
+   306|             result = await db.execute(insert(OrderSequenceRow).values())
+   307|             await db.commit()
+   308|         return f"GBX-{result.inserted_primary_key[0]:06d}"
+   309| 
+   310| 
+   311| class SqlStockRepository(StockRepository):
+
+==============================================================================
+[2] S2 / no_peers_all_evidence / 7516d79f27de
+locator: app/infrastructure/resilience.py:76-86
+severity: medium  stance: defect
+title: 熔断半开状态可被并发请求同时放行，失去「只放一次探测」语义
+evidence: 
+------------------------------------------------------------
+    70| 
+    71|     def allow(self, tool_name: str, now: Optional[float] = None) -> bool:
+    72|         """是否放行本次调用；冷却期满自动转半开并放行一次探测。"""
+    73|         state = self._state(tool_name)
+    74|         if state.opened_at is None:
+    75|             return True
+>>  76|         elapsed = (now or time.monotonic()) - state.opened_at
+>>  77|         if elapsed < self.reset_seconds:
+>>  78|             return False
+>>  79|         state.half_open_probing = True
+>>  80|         return True
+>>  81| 
+>>  82|     def record_success(self, tool_name: str) -> None:
+>>  83|         self._states[tool_name] = _CircuitState()
+>>  84| 
+>>  85|     def record_failure(self, tool_name: str, now: Optional[float] = None) -> None:
+>>  86|         state = self._state(tool_name)
+    87|         if state.half_open_probing:
+    88|             # 半开探测再次失败：重新打开并重置冷却计时
+    89|             state.opened_at = now or time.monotonic()
+    90|             state.half_open_probing = False
+    91|             return
+    92|         state.consecutive_failures += 1
+
+==============================================================================
+[3] S6 / blind_no_coverage / 569f6a239f11
+locator: app/infrastructure/rerank/http_reranker.py:38-38
+severity: low  stance: defect
+title: rerank 分数解析对 None 值调用 float 会抛 TypeError
+evidence: 
+------------------------------------------------------------
+    32|         # 兼容 {results:[{index, relevance_score}]} 协议（Jina/TEI/vLLM rerank 通用形态）
+    33|         results = body.get("results")
+    34|         if not isinstance(results, list) or len(results) != len(documents):
+    35|             raise RuntimeError(f"rerank 响应异常：{str(body)[:200]}")
+    36|         scores = [0.0] * len(documents)
+    37|         for item in results:
+>>  38|             scores[item["index"]] = float(item.get("relevance_score", item.get("score", 0.0)))
+    39|         return scores
+
+==============================================================================
+[4] S2 / blind_no_coverage / 268cac62efdd
+locator: app/domain/catalog/exchange_rate.py:41-47
+severity: medium  stance: defect
+title: ExchangeRateTable.convert 未校验源币种是否在 SUPPORTED_CURRENCIES 中，且 rate() 与 SUPPORTED_CURRENCIES 校验口径不一致
+evidence: 
+------------------------------------------------------------
+    35|         return self.rates_to_cny[from_currency] / self.rates_to_cny[to_currency]
+    36| 
+    37|     def convert(self, money: Money, to_currency: str) -> Money:
+    38|         if to_currency == money.currency:
+    39|             return money
+    40|         if to_currency not in SUPPORTED_CURRENCIES:
+>>  41|             raise ValueError(f"Money.currency 不受支持：{to_currency}")
+>>  42|         converted_minor = round(money.amount_in_minor_units * self.rate(money.currency, to_currency))
+>>  43|         return Money.of(converted_minor, to_currency)
+
+==============================================================================
+[5] S2 / no_peers_all_evidence / 682b50407558
+locator: app/infrastructure/eventbus.py:196-203
+severity: medium  stance: defect
+title: 背板广播任务异常被静默吞掉，无日志无重试
+evidence: 
+------------------------------------------------------------
+
+==============================================================================
+[6] S6 / no_peers_all_evidence / 7c0735159c85
+locator: app/infrastructure/persistence/in_memory_stock_repository.py:38-46
+severity: medium  stance: defect
+title: release 对未登记 SKU 直接补登记，可能凭空造出库存
+evidence: 
+------------------------------------------------------------
+    32|         if quantity <= 0:
+    33|             raise ValueError(f"release.quantity 必须为正：{quantity}")
+    34|         async with self._lock:
+    35|             current = self._stock.get(sku_id)
+    36|             if current is None:
+    37|                 # 未登记的 SKU 不该出现；补登记而不是静默丢弃，避免库存凭空消失
+>>  38|                 self._stock[sku_id] = quantity
+>>  39|                 return
+>>  40|             self._stock[sku_id] = current + quantity
+>>  41| 
+>>  42|     async def get(self, sku_id: str) -> int | None:
+>>  43|         async with self._lock:
+>>  44|             return self._stock.get(sku_id)
+>>  45| 
+>>  46|     async def get_many(self, sku_ids: Iterable[str]) -> Mapping[str, int]:
+    47|         async with self._lock:
+    48|             return {sku_id: self._stock[sku_id] for sku_id in sku_ids if sku_id in self._stock}
+    49| 
+    50|     async def seed(self, entries: Iterable[tuple[str, int]]) -> None:
+    51|         async with self._lock:
+    52|             for sku_id, stock in entries:
+
+==============================================================================
+[7] S1 / no_peers_all_evidence / 724ce2cfe90a
+locator: app/infrastructure/persistence/in_memory_repositories.py:62-73
+severity: medium  stance: defect
+title: InMemoryOrderIdempotencyStore 的 find+record 非原子，并发重投可双写
+evidence: 
+------------------------------------------------------------
+    56|     跨进程重投拦不住——那种形态必须用 SqlOrderIdempotencyStore（落库）。
+    57|     """
+    58| 
+    59|     def __init__(self) -> None:
+    60|         self._keys: dict[str, str] = {}
+    61|         self._lock = asyncio.Lock()
+>>  62| 
+>>  63|     async def find(self, key: str) -> Optional[str]:
+>>  64|         async with self._lock:
+>>  65|             return self._keys.get(key)
+>>  66| 
+>>  67|     async def record(self, key: str, order_id: str) -> bool:
+>>  68|         async with self._lock:
+>>  69|             if key in self._keys:
+>>  70|                 return False
+>>  71|             self._keys[key] = order_id
+>>  72|             return True
+
+==============================================================================
+[8] S6 / blind_no_coverage / 6e1aca4d7663
+locator: app/infrastructure/queue/redis_stream_queue.py:78-90
+severity: low  stance: defect
+title: get_status 在 queued 状态下把整条队列 lag 当作 queue_position
+evidence: 
+------------------------------------------------------------
+    72|         position = await self.depth() if data.get("state") == "queued" else 0
+    73|         return TaskStatus(
+    74|             task_id=data["task_id"],
+    75|             state=data["state"],
+    76|             final_text=data.get("final_text", ""),
+    77|             error=data.get("error", ""),
+>>  78|             queue_position=position,
+>>  79|         )
+>>  80| 
+>>  81|     async def depth(self) -> int:
+>>  82|         """两条流未被消费者组读取的消息数之和（lag）。取不到时退回 0，不让观测拖垮主链路。"""
+>>  83|         total = 0
+>>  84|         for stream in (_STREAM, _LARGE_STREAM):
+>>  85|             total += await self._stream_depth(stream)
+>>  86|         return total
+>>  87| 
+>>  88|     async def _stream_depth(self, stream: str) -> int:
+>>  89|         try:
+>>  90|             groups = await self._client.xinfo_groups(stream)
+    91|         except Exception:  # noqa: BLE001 —— stream 还没创建
+    92|             return 0
+    93|         for group in groups:
+    94|             if group.get("name") == _GROUP:
+    95|                 lag = group.get("lag")
+    96|                 if lag is not None:
+
+==============================================================================
+[9] S6 / blind_no_coverage / d0294d98d5ba
+locator: app/application/usecases/catalog_search.py:213-222
+severity: medium  stance: defect
+title: rerank 返回分数数量与候选数不一致时索引越界或静默错配
+evidence: 
+------------------------------------------------------------
+   207|     ) -> list[tuple[float, Product]]:
+   208|         if self._reranker is None:
+   209|             raise RuntimeError("Reranker 未配置")
+   210|         documents = [product.searchable_text() for _, product in scored]
+   211|         rerank_scores = await self._reranker.rerank(spec.normalized_query, documents)
+   212|         reranked = [
+>> 213|             (rerank_scores[i], product)
+>> 214|             for i, (_, product) in enumerate(scored)
+>> 215|         ]
+>> 216|         reranked.sort(key=lambda pair: pair[0], reverse=True)
+>> 217|         return reranked
+>> 218| 
+>> 219|     # ---- 兜底：关键词召回 ----
+>> 220| 
+>> 221|     async def _keyword_recall(self, spec: ProductSearchSpec) -> list[tuple[float, Product]]:
+>> 222|         query_terms = tokenize(spec.normalized_query)
+   223|         candidates: list[tuple[float, Product]] = []
+   224|         for product in await self._product_repo.list_all():
+   225|             score = self._keyword_score(query_terms, product, spec)
+   226|             if score > 0:
+   227|                 candidates.append((score, product))
+   228|         candidates.sort(key=lambda pair: pair[0], reverse=True)
+
+==============================================================================
+[10] S1 / no_peers_all_evidence / ecef58849600
+locator: app/infrastructure/persistence/sql/repositories.py:196-210
+severity: medium  stance: defect
+title: append_turn 的 turn_index 读-算-写存在并发撞号，且撞号会因唯一约束直接抛错而非仅影响展示顺序
+evidence: 
+------------------------------------------------------------
+   190|                     latency_ms=turn.latency_ms,
+   191|                 ),
+   192|             )
+   193|             await db.commit()
+   194| 
+   195|     async def append_events(self, events: list[ConversationEventRecord]) -> None:
+>> 196|         if not events:
+>> 197|             return
+>> 198|         async with self._session_factory() as db:
+>> 199|             db.add_all(
+>> 200|                 [
+>> 201|                     ConversationEventRow(
+>> 202|                         session_id=event.session_id,
+>> 203|                         type=event.type,
+>> 204|                         payload=event.payload,
+>> 205|                         occurred_at=event.occurred_at,
+>> 206|                     )
+>> 207|                     for event in events
+>> 208|                 ],
+>> 209|             )
+>> 210|             await db.commit()
+   211| 
+   212|     async def list_turns(self, session_id: str, limit: int = 50) -> list[ConversationTurn]:
+   213|         async with self._session_factory() as db:
+   214|             rows = (
+   215|                 await db.scalars(
+   216|                     select(ConversationMessageRow)
+
+==============================================================================
+[11] S6 / no_peers_all_evidence / be7cfd18ac2a
+locator: app/infrastructure/persistence/sql/repositories.py:330-345
+severity: low  stance: defect
+title: seed 逐条查询后插入，非原子且并发下可能重复插入
+evidence: 
+------------------------------------------------------------
+   324|     async def reserve(self, sku_id: str, quantity: int) -> bool:
+   325|         if quantity <= 0:
+   326|             raise ValueError(f"reserve.quantity 必须为正：{quantity}")
+   327|         async with self._session_factory() as db:
+   328|             result = await db.execute(
+   329|                 update(SkuStockRow)
+>> 330|                 .where(SkuStockRow.sku_id == sku_id, SkuStockRow.stock >= quantity)
+>> 331|                 .values(stock=SkuStockRow.stock - quantity, version=SkuStockRow.version + 1)
+>> 332|                 .returning(SkuStockRow.stock),
+>> 333|             )
+>> 334|             row = result.first()
+>> 335|             if row is None:
+>> 336|                 await db.rollback()
+>> 337|                 return False
+>> 338|             await self._log_movement(db, sku_id, -quantity, int(row[0]), "reserve")
+>> 339|             await db.commit()
+>> 340|         return True
+>> 341| 
+>> 342|     async def release(self, sku_id: str, quantity: int) -> None:
+>> 343|         if quantity <= 0:
+>> 344|             raise ValueError(f"release.quantity 必须为正：{quantity}")
+>> 345|         async with self._session_factory() as db:
+   346|             result = await db.execute(
+   347|                 update(SkuStockRow)
+   348|                 .where(SkuStockRow.sku_id == sku_id)
+   349|                 .values(stock=SkuStockRow.stock + quantity, version=SkuStockRow.version + 1)
+   350|                 .returning(SkuStockRow.stock),
+   351|             )
+
+==============================================================================
+[12] S6 / no_peers_all_evidence / b341ec514940
+locator: app/infrastructure/persistence/sql/repositories.py:245-258
+severity: medium  stance: defect
+title: next_order_id 依赖 inserted_primary_key，SQLite 下 insert().values() 空值可能不返回主键
+evidence: 
+------------------------------------------------------------
+   239|                 return None
+   240|             return {
+   241|                 "session_id": row.session_id,
+   242|                 "buyer_id": row.buyer_id,
+   243|                 "locale": row.locale,
+   244|                 "currency": row.currency,
+>> 245|                 "last_active_at": row.last_active_at.isoformat() if row.last_active_at else "",
+>> 246|             }
+>> 247| 
+>> 248| 
+>> 249| class SqlOrderRepository(OrderRepository):
+>> 250|     def __init__(self, engine: AsyncEngine) -> None:
+>> 251|         self._session_factory = async_sessionmaker(engine, expire_on_commit=False)
+>> 252| 
+>> 253|     async def save(self, order: Order) -> None:
+>> 254|         total = order.total_amount()
+>> 255|         async with self._session_factory() as db:
+>> 256|             await db.merge(
+>> 257|                 OrderRow(
+>> 258|                     order_id=order.order_id,
+   259|                     buyer_id=order.buyer_id,
+   260|                     status=order.status.value,
+   261|                     currency=total.currency,
+   262|                     total_amount_minor=total.amount_in_minor_units,
+   263|                     shipping_address_json=_address_to_dict(order.shipping_address),
+   264|                     created_at=order.created_at,
