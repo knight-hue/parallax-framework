@@ -1,0 +1,1737 @@
+[
+  {
+    "claim_id": "d13cca11a22e",
+    "fingerprint": "app/application/memory/preference_selector.py#logic@80",
+    "statement": "[logic] app/application/memory/preference_selector.py:96-96 select() 在 top_k 截断时把 dislike 也裁掉，违反『dislike 全量保留』的安全底线（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/memory/preference_selector.py:96-96",
+    "rationale": "模块 docstring 明确声明 dislike 必须全量保留、不参与 top_k 截断，但最终返回语句是 `(dislikes + selected_likes)[:top_k]`，切片作用在 dislike 与 like 的拼接结果上。当 dislike 数量本身超过 top_k（或 dislike 数量 + selected_likes 数量超过 top_k）时，末尾的 dislike 会被切掉。更严重的是：当 len(likes) <= top_k 时 selected_likes 取全部 likes，此时 dislikes + likes 的长度必然 > top_k（只要 dislikes 非空），切片会优先丢弃排在后面的 like，但若 dislikes 数量 > top_k，则部分 dislike 直接被丢弃。触发条件：买家有 3 条 dislike、top_k=2，返回结果只含前 2 条 dislike，第 3 条黑名单丢失，可能推荐用户明确拒绝的商品。",
+    "title": "select() 在 top_k 截断时把 dislike 也裁掉，违反『dislike 全量保留』的安全底线",
+    "line_start": 96,
+    "line_end": 96,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "1ea202d2ad5b",
+        "adapter": "repo",
+        "locator": "app/application/memory/preference_selector.py:96-96",
+        "quote": "        return (dislikes + selected_likes)[:top_k]"
+      }
+    ]
+  },
+  {
+    "claim_id": "9ff7402ae7b7",
+    "fingerprint": "app/application/memory/preference_selector.py#logic@120",
+    "statement": "[logic] app/application/memory/preference_selector.py:128-130 _rank_by_relevance 注释声称回到原始相对顺序，实际按相似度排序输出（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/memory/preference_selector.py:128-130",
+    "rationale": "注释写『回到原始相对顺序输出，避免注入块的行序每轮抖动导致重复注入』，但代码 `picked = [preference for _, _, preference in scored[:top_k]]` 直接按相似度降序输出，并未按原始 index 重排。这与 _latest_first 的行为不一致（后者确实复原了原始顺序），且与注释承诺不符：注入块行序会随 query 变化而抖动，可能影响 prompt cache 命中与可测性。",
+    "title": "_rank_by_relevance 注释声称回到原始相对顺序，实际按相似度排序输出",
+    "line_start": 128,
+    "line_end": 130,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "1ea202d2ad5b",
+        "adapter": "repo",
+        "locator": "app/application/memory/preference_selector.py:128-130",
+        "quote": "        picked = [preference for _, _, preference in scored[:top_k]]\n        # 回到原始相对顺序输出，避免注入块的行序每轮抖动导致重复注入\n        return picked"
+      }
+    ]
+  },
+  {
+    "claim_id": "7f118957ca15",
+    "fingerprint": "app/application/memory/preference_selector.py#boundary@80",
+    "statement": "[boundary] app/application/memory/preference_selector.py:92-94 top_k <= 0 时提前返回空列表，dislike 也被丢弃（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/memory/preference_selector.py:92-94",
+    "rationale": "top_k<=0 表示预算为 0，不注入任何偏好是显式设计意图（注释已说明）。虽然与『dislike 全量保留』的绝对表述有张力，但预算为 0 时无法注入任何内容，返回空是合理边界行为，不构成缺陷。",
+    "title": "top_k <= 0 时提前返回空列表，dislike 也被丢弃",
+    "line_start": 92,
+    "line_end": 94,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "1ea202d2ad5b",
+        "adapter": "repo",
+        "locator": "app/application/memory/preference_selector.py:92-94",
+        "quote": "        if top_k <= 0:\n            # 预算为 0 时不注入任何偏好\n            return []"
+      }
+    ]
+  },
+  {
+    "claim_id": "3748c376e00b",
+    "fingerprint": "app/application/memory/preference_selector.py#error_handling@20",
+    "statement": "[error_handling] app/application/memory/preference_selector.py:33-34 _cosine 对长度不一致返回 0.0 而非报错，可能静默把有效偏好排到末尾（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/memory/preference_selector.py:33-34",
+    "rationale": "embed_batch 与 embed 返回的向量维度不一致时返回 0.0 相似度，属于防御性降级；上层已校验向量数量一致，维度不一致是异常输入，返回 0 不会崩溃且排序仍确定。不构成真实缺陷。",
+    "title": "_cosine 对长度不一致返回 0.0 而非报错，可能静默把有效偏好排到末尾",
+    "line_start": 33,
+    "line_end": 34,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "1ea202d2ad5b",
+        "adapter": "repo",
+        "locator": "app/application/memory/preference_selector.py:33-34",
+        "quote": "    if len(left) != len(right):\n        return 0.0"
+      }
+    ]
+  },
+  {
+    "claim_id": "54d25a28ee3a",
+    "fingerprint": "app/domain/catalog/product.py#logic@40",
+    "statement": "[logic] app/domain/catalog/product.py:47-52 Product.searchable_text 对空 detail 的亮点产生多余空格，且未包含 skus 信息（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product.py:47-52",
+    "rationale": "highlight_text 用 f\"{h.label} {h.detail}\" 拼接，当 detail 为空字符串时会留下尾随空格，但最终 join 后只是多一个空格，不影响召回语义；searchable_text 未包含 skus 是设计选择（文档字符串明确列出字段）。因此不构成缺陷。",
+    "title": "Product.searchable_text 对空 detail 的亮点产生多余空格，且未包含 skus 信息",
+    "line_start": 47,
+    "line_end": 52,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "570f58fa92ef",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product.py:47-52",
+        "quote": "        highlight_text = \" \".join(f\"{h.label} {h.detail}\" for h in self.highlights)\n        return \" \".join(\n            [self.title, self.brand, self.category, self.origin_country, self.description, highlight_text],\n        )"
+      }
+    ]
+  },
+  {
+    "claim_id": "2b81ae653b23",
+    "fingerprint": "app/domain/catalog/ports/retrieval_ports.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/ports/retrieval_ports.py:39-41 ProductVectorIndex.upsert_products 未校验 products 与 embeddings 长度一致（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/ports/retrieval_ports.py:39-41",
+    "rationale": "这是抽象端口声明，契约由实现方保证；在 ABC 中加校验并不常见，且文档未承诺长度校验。缺少校验属于实现层责任，不构成本文件缺陷。",
+    "title": "ProductVectorIndex.upsert_products 未校验 products 与 embeddings 长度一致",
+    "line_start": 39,
+    "line_end": 41,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "73fcc31c85be",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/ports/retrieval_ports.py:39-41",
+        "quote": "    @abstractmethod\n    async def upsert_products(self, products: list[Product], embeddings: list[list[float]]) -> None:\n        ..."
+      }
+    ]
+  },
+  {
+    "claim_id": "32667b6979c5",
+    "fingerprint": "app/domain/catalog/product.py#logic@20",
+    "statement": "[logic] app/domain/catalog/product.py:33-38 Product 为可变 dataclass 且 __post_init__ 只校验 skus 非空，未校验 skus 元素类型（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product.py:33-38",
+    "rationale": "类型标注已声明 list[Sku]，Python 运行时不做类型检查是语言特性；__post_init__ 只做业务不变量校验（product_id 非空、至少一个 sku），符合聚合根设计。不构成缺陷。",
+    "title": "Product 为可变 dataclass 且 __post_init__ 只校验 skus 非空，未校验 skus 元素类型",
+    "line_start": 33,
+    "line_end": 38,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "570f58fa92ef",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product.py:33-38",
+        "quote": "    def __post_init__(self) -> None:\n        if not self.product_id:\n            raise ValueError(\"Product.product_id required\")\n        if not self.skus:\n            raise ValueError(f\"Product 至少要有一个 Sku：{self.product_id}\")"
+      }
+    ]
+  },
+  {
+    "claim_id": "d22b8800e863",
+    "fingerprint": "app/domain/catalog/money.py#logic@20",
+    "statement": "[logic] app/domain/catalog/money.py:35-43 Money.add/multiply 直接构造实例绕过 of() 校验，可产生非法 Money（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/money.py:35-43",
+    "rationale": "of() 是唯一做非负整数与币种校验的入口，但 add/multiply 用 Money(...) 直接构造，跳过校验。虽然当前输入来自已校验实例，但 multiply 的 quantity 校验允许 bool 被排除、add 的 other 未校验类型；更关键的是 dataclass 本身没有 __post_init__ 校验，任何直接 Money(-1, 'XXX') 都能构造出违反不变量的对象，of() 的校验形同虚设。",
+    "title": "Money.add/multiply 直接构造实例绕过 of() 校验，可产生非法 Money",
+    "line_start": 35,
+    "line_end": 43,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "dc0b9e55138c",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/money.py:35-43",
+        "quote": "    def add(self, other: \"Money\") -> \"Money\":\n        self._assert_same_currency(other)\n        return Money(self.amount_in_minor_units + other.amount_in_minor_units, self.currency)\n\n    def multiply(self, quantity: int) -> \"Money\":\n        if not isinstance(quantity, int) or isinstance(quantity, bool) or quantity < 0:\n            raise ValueError(\"Money.multiply.quantity 必须是非负整数\")\n        return Money(self.amount_in_minor_units * quantity, self.currency)"
+      }
+    ]
+  },
+  {
+    "claim_id": "7b8dfaecfb14",
+    "fingerprint": "app/domain/catalog/money.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/money.py:20-25 Money.of 用 isinstance(amount, int) 会接受 bool（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/money.py:20-25",
+    "rationale": "multiply 特意排除了 bool（isinstance(quantity, bool)），说明作者知道 bool 是 int 子类；但 of() 只写 isinstance(amount, int)，Money.of(True, 'USD') 会通过校验得到 1 分。两处校验标准不一致，of() 的『必须是非负整数』不变量对 bool 失效。",
+    "title": "Money.of 用 isinstance(amount, int) 会接受 bool",
+    "line_start": 20,
+    "line_end": 25,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "dc0b9e55138c",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/money.py:20-25",
+        "quote": "    @staticmethod\n    def of(amount: int, currency: str) -> \"Money\":\n        if not isinstance(amount, int) or amount < 0:\n            raise ValueError(f\"Money.amount_in_minor_units 必须是非负整数，实际={amount}\")\n        if currency not in SUPPORTED_CURRENCIES:\n            raise ValueError(f\"Money.currency 不受支持：{currency}\")\n        return Money(amount, currency)"
+      }
+    ]
+  },
+  {
+    "claim_id": "4ff07efc3bbc",
+    "fingerprint": "app/domain/session/ports/conversation_store.py#boundary@20",
+    "statement": "[boundary] app/domain/session/ports/conversation_store.py:27-41 ConversationTurn 声明 role 但未校验，非法 role 可入库（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/session/ports/conversation_store.py:27-41",
+    "rationale": "模块定义了 VALID_ROLES = ('buyer', 'agent')，但 ConversationTurn.__post_init__ 只校验 session_id，从未使用 VALID_ROLES。role 字段注释写 buyer/agent，实际可传入任意字符串（如 'system'、空串）并被持久化，下游按 role 分流展示/回放时会出错。VALID_ROLES 成为死代码，说明校验被遗漏。",
+    "title": "ConversationTurn 声明 role 但未校验，非法 role 可入库",
+    "line_start": 27,
+    "line_end": 41,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "ab852961ba03",
+        "adapter": "repo",
+        "locator": "app/domain/session/ports/conversation_store.py:27-41",
+        "quote": "VALID_ROLES = (\"buyer\", \"agent\")\n\n\n@dataclass(frozen=True)\nclass ConversationTurn:\n    \"\"\"一轮完整问答。turn_index 由存储层按会话自增，写入时可留空。\"\"\"\n\n    session_id: str\n    buyer_id: str\n    role: str  # buyer / agent"
+      }
+    ]
+  },
+  {
+    "claim_id": "9500f7568788",
+    "fingerprint": "app/domain/session/ports/conversation_store.py#api_misuse@20",
+    "statement": "[api_misuse] app/domain/session/ports/conversation_store.py:28-41 ConversationTurn 文档声称 turn_index 可留空，但类中根本没有 turn_index 字段（确认存在缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/session/ports/conversation_store.py:28-41",
+    "rationale": "docstring 写『turn_index 由存储层按会话自增，写入时可留空』，list_turns 也承诺『按 turn_index 升序返回』，但 ConversationTurn 没有 turn_index 字段。存储层无法在值对象上携带/回填序号，list_turns 的排序契约无法通过该类型表达，实现者只能另造结构或依赖隐式顺序，接口契约自相矛盾。",
+    "title": "ConversationTurn 文档声称 turn_index 可留空，但类中根本没有 turn_index 字段",
+    "line_start": 28,
+    "line_end": 41,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "ab852961ba03",
+        "adapter": "repo",
+        "locator": "app/domain/session/ports/conversation_store.py:28-41",
+        "quote": "    \"\"\"一轮完整问答。turn_index 由存储层按会话自增，写入时可留空。\"\"\"\n\n    session_id: str\n    buyer_id: str\n    role: str  # buyer / agent\n    content: str\n    model: str = \"\"\n    latency_ms: int = 0\n    created_at: str = field(default_factory=_now_iso)"
+      }
+    ]
+  },
+  {
+    "claim_id": "982df359402a",
+    "fingerprint": "app/domain/buyer/preference.py#boundary@20",
+    "statement": "[boundary] app/domain/buyer/preference.py:22-31 BuyerPreference 未校验 buyer_id 非空（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/buyer/preference.py:22-31",
+    "rationale": "__post_init__ 校验了 kind 和 statement，却未校验 buyer_id。空 buyer_id 的偏好可被 append 并写入存储，list_by_buyer('') 会把它当作某个买家的偏好返回，造成跨买家串数据或孤儿记录。同文件对 statement 都做了 required 校验，buyer_id 缺失校验属于遗漏。",
+    "title": "BuyerPreference 未校验 buyer_id 非空",
+    "line_start": 22,
+    "line_end": 31,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "c41e59ee19fd",
+        "adapter": "repo",
+        "locator": "app/domain/buyer/preference.py:22-31",
+        "quote": "    def __post_init__(self) -> None:\n        if self.kind not in VALID_KINDS:\n            raise ValueError(f\"BuyerPreference.kind 必须是 {VALID_KINDS}：{self.kind}\")\n        if not self.statement or not self.statement.strip():\n            raise ValueError(\"BuyerPreference.statement required\")\n        if not self.created_at:\n            object.__setattr__(self, \"created_at\", datetime.now(timezone.utc).isoformat())"
+      }
+    ]
+  },
+  {
+    "claim_id": "26c0f59a19b8",
+    "fingerprint": "app/domain/catalog/money.py#logic@40",
+    "statement": "[logic] app/domain/catalog/money.py:45-49 Money.to_major_units 返回 float，与模块『避免浮点误差』目标冲突（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/money.py:45-49",
+    "rationale": "to_major_units 仅用于展示（__str__ 用 :.2f 格式化），不参与金额运算；内部存储仍是整数分。虽然返回 float 有精度隐患，但当前用途是格式化输出，不构成实际错误行为。",
+    "title": "Money.to_major_units 返回 float，与模块『避免浮点误差』目标冲突",
+    "line_start": 45,
+    "line_end": 49,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "dc0b9e55138c",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/money.py:45-49",
+        "quote": "    def to_major_units(self) -> float:\n        return self.amount_in_minor_units / 100\n\n    def __str__(self) -> str:\n        return f\"{self.to_major_units():.2f} {self.currency}\""
+      }
+    ]
+  },
+  {
+    "claim_id": "bb6437a777fc",
+    "fingerprint": "app/domain/buyer/preference.py#logic@40",
+    "statement": "[logic] app/domain/buyer/preference.py:44-52 PreferenceStore.delete 不区分 kind 会同时删除 like 与 dislike（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-0",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/buyer/preference.py:44-52",
+    "rationale": "docstring 明确声明『不按 kind 区分：同 statement 的 like 与 dislike 条目会一并清除』，这是刻意的设计决策而非缺陷。调用方按 statement 精确匹配删除，语义已文档化。",
+    "title": "PreferenceStore.delete 不区分 kind 会同时删除 like 与 dislike",
+    "line_start": 44,
+    "line_end": 52,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "c41e59ee19fd",
+        "adapter": "repo",
+        "locator": "app/domain/buyer/preference.py:44-52",
+        "quote": "    @abstractmethod\n    async def delete(self, buyer_id: str, statement: str) -> bool:\n        \"\"\"按 statement **精确匹配**删除；命中返回 True，未命中返回 False。"
+      }
+    ]
+  },
+  {
+    "claim_id": "aeafa3eda806",
+    "fingerprint": "app/application/memory/preference_selector.py#logic@80",
+    "statement": "[logic] app/application/memory/preference_selector.py:96-96 select() 的最终截断会把 dislike 一起裁掉，违反『dislike 全量保留』的安全底线（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/memory/preference_selector.py:96-96",
+    "rationale": "模块文档明确声明 dislike 全量保留、不参与 top_k 截断，但返回语句 `(dislikes + selected_likes)[:top_k]` 对拼接后的整体再做一次切片。当 dislikes 数量 >= top_k 时，所有 like 被裁掉尚可接受，但更严重的是当 dislikes 数量 > top_k 时，部分 dislike 会被丢弃；即使 dislikes 数量 <= top_k，只要 dislikes + likes 超过 top_k，被裁掉的也是尾部 like（这部分符合预期），但 dislike 本身在 dislikes 数量超过 top_k 时会被截断。触发条件：买家有 3 条 dislike、top_k=2，则只注入前 2 条 dislike，第 3 条黑名单丢失，可能推荐用户明确拒绝的商品。",
+    "title": "select() 的最终截断会把 dislike 一起裁掉，违反『dislike 全量保留』的安全底线",
+    "line_start": 96,
+    "line_end": 96,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "1ea202d2ad5b",
+        "adapter": "repo",
+        "locator": "app/application/memory/preference_selector.py:96-96",
+        "quote": "        return (dislikes + selected_likes)[:top_k]"
+      }
+    ]
+  },
+  {
+    "claim_id": "c2e1f94bb45f",
+    "fingerprint": "app/application/memory/preference_selector.py#logic@120",
+    "statement": "[logic] app/application/memory/preference_selector.py:128-130 _rank_by_relevance 注释声称回到原始相对顺序，实际按相似度排序输出（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/application/memory/preference_selector.py:128-130",
+    "rationale": "注释写『回到原始相对顺序输出，避免注入块的行序每轮抖动导致重复注入』，但代码 `picked = [preference for _, _, preference in scored[:top_k]]` 直接按 scored 的相似度降序取前 top_k，并未按原始 index 重排。结果注入块行序随 query 变化而抖动，与注释承诺相反，可能影响 prompt cache 命中与可测性。",
+    "title": "_rank_by_relevance 注释声称回到原始相对顺序，实际按相似度排序输出",
+    "line_start": 128,
+    "line_end": 130,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "1ea202d2ad5b",
+        "adapter": "repo",
+        "locator": "app/application/memory/preference_selector.py:128-130",
+        "quote": "        scored.sort(key=lambda item: (-item[0], item[1]))\n        picked = [preference for _, _, preference in scored[:top_k]]\n        # 回到原始相对顺序输出，避免注入块的行序每轮抖动导致重复注入\n        return picked"
+      }
+    ]
+  },
+  {
+    "claim_id": "17e466e8a4d5",
+    "fingerprint": "app/infrastructure/security/output_guard.py#error_handling@60",
+    "statement": "[error_handling] app/infrastructure/security/output_guard.py:60-62 audit_output 对空字符串返回安全，但 None 输入会抛异常（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:60-62",
+    "rationale": "`if not text: return True, text` 对空字符串和 None 都返回 (True, text)，不会进入正则处理，因此 None 不会抛异常。类型标注为 str，调用方传 None 属于契约外，但函数本身对 None 是安全的。",
+    "title": "audit_output 对空字符串返回安全，但 None 输入会抛异常",
+    "line_start": 60,
+    "line_end": 62,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "3af4356ea741",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:60-62",
+        "quote": "    if not text:\n        return True, text"
+      }
+    ]
+  },
+  {
+    "claim_id": "a60934d898aa",
+    "fingerprint": "app/infrastructure/security/output_guard.py#security@40",
+    "statement": "[security] app/infrastructure/security/output_guard.py:44-46 SENSITIVE_PATTERNS 中内部工具名正则未转义，但工具名均为安全字符（确认并非缺陷）",
+    "claim_type": "security",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:44-46",
+    "rationale": "`_INTERNAL_TOOLS` 中所有工具名只含字母和下划线，拼进正则后 `\\b(?:...)\\b` 能正确匹配。下划线在 Python re 中属于 \\w，`\\b` 边界在 `product_search_tool` 前后能正确识别（前面是空格/标点，后面是空格/标点）。不存在未转义的特殊字符导致误匹配。",
+    "title": "SENSITIVE_PATTERNS 中内部工具名正则未转义，但工具名均为安全字符",
+    "line_start": 44,
+    "line_end": 46,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "3af4356ea741",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:44-46",
+        "quote": "    r\"\\b(?:\" + \"|\".join(_INTERNAL_TOOLS) + r\")\\b\","
+      }
+    ]
+  },
+  {
+    "claim_id": "64fe03140726",
+    "fingerprint": "app/domain/catalog/product.py#logic@40",
+    "statement": "[logic] app/domain/catalog/product.py:47-52 Product.searchable_text 对空 highlights 产生多余空格，但不影响召回（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/product.py:47-52",
+    "rationale": "当 highlights 为空时 highlight_text 为空串，join 后末尾多一个空格，属于格式瑕疵，不影响检索语义。不构成缺陷。",
+    "title": "Product.searchable_text 对空 highlights 产生多余空格，但不影响召回",
+    "line_start": 47,
+    "line_end": 52,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "570f58fa92ef",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/product.py:47-52",
+        "quote": "        highlight_text = \" \".join(f\"{h.label} {h.detail}\" for h in self.highlights)\n        return \" \".join(\n            [self.title, self.brand, self.category, self.origin_country, self.description, highlight_text],\n        )"
+      }
+    ]
+  },
+  {
+    "claim_id": "0767ed0f06dc",
+    "fingerprint": "app/domain/catalog/sku.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/sku.py:26-30 Sku.stock 校验非负但未校验 price 非空（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/sku.py:26-30",
+    "rationale": "Sku 的 __post_init__ 只校验 sku_id 与 stock，未校验 price 是否为 None。但 price 类型标注为 Money，构造时若传 None 会在后续使用处报错。这属于契约外输入，且 Money 本身有校验，不构成明确缺陷。",
+    "title": "Sku.stock 校验非负但未校验 price 非空",
+    "line_start": 26,
+    "line_end": 30,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "00e2b01edb94",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/sku.py:26-30",
+        "quote": "    def __post_init__(self) -> None:\n        if not self.sku_id:\n            raise ValueError(\"Sku.sku_id required\")\n        if self.stock < 0:\n            raise ValueError(f\"Sku.stock 必须非负：{self.sku_id}\")"
+      }
+    ]
+  },
+  {
+    "claim_id": "8fea9ac7f19a",
+    "fingerprint": "app/infrastructure/cache/cached_embedding_client.py#logic@20",
+    "statement": "[logic] app/infrastructure/cache/cached_embedding_client.py:33-35 CachedEmbeddingClient._key 未包含 model，不同模型的向量会互相串用（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/cached_embedding_client.py:33-35",
+    "rationale": "模块 docstring 明确说 key 用 sha256(model + text)，但 _key 只对 text 做 sha256，self._model 完全没参与。同一 Redis 实例上若存在两个不同模型（或换模型后重启），相同文本会命中旧模型写入的向量，返回维度/语义都不匹配的 embedding，导致向量召回错误甚至维度不一致报错。",
+    "title": "CachedEmbeddingClient._key 未包含 model，不同模型的向量会互相串用",
+    "line_start": 33,
+    "line_end": 35,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "9208b40d6118",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/cached_embedding_client.py:33-35",
+        "quote": "    def _key(self, text: str) -> str:\n        digest = hashlib.sha256(text.encode()).hexdigest()\n        return f\"emb:{digest}\""
+      }
+    ]
+  },
+  {
+    "claim_id": "1c2a3a2d0c1e",
+    "fingerprint": "app/infrastructure/cache/cached_embedding_client.py#error_handling@60",
+    "statement": "[error_handling] app/infrastructure/cache/cached_embedding_client.py:76-80 embed_batch 用 `vector or []` 把合法空向量/None 静默替换为空列表，且长度可能与输入不一致（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/cached_embedding_client.py:76-80",
+    "rationale": "若 inner.embed_batch 返回的列表比 pending 短（上游异常/截断），zip 会静默丢弃尾部，results 中对应位置保持 None，最终 `vector or []` 变成空列表返回给调用方，调用方拿到长度正确但内容为空的向量，错误被吞掉而非抛出。同时 `vector or []` 也会把合法的空向量与失败混为一谈。",
+    "title": "embed_batch 用 `vector or []` 把合法空向量/None 静默替换为空列表，且长度可能与输入不一致",
+    "line_start": 76,
+    "line_end": 80,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "9208b40d6118",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/cached_embedding_client.py:76-80",
+        "quote": "        if pending:\n            fresh = await self._inner.embed_batch([text for _, text in pending])\n            for (index, text), vector in zip(pending, fresh):\n                results[index] = vector\n                await self._safe_set(self._key(text), vector)\n\n        return [vector or [] for vector in results]"
+      }
+    ]
+  },
+  {
+    "claim_id": "e984a31a8664",
+    "fingerprint": "app/infrastructure/cache/semantic_cache.py#logic@100",
+    "statement": "[logic] app/infrastructure/cache/semantic_cache.py:118-126 SemanticCache._bucket_key 忽略 scope 参数，偏好指纹未进入桶 key（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/semantic_cache.py:118-126",
+    "rationale": "docstring 与 2b 安全边界都强调桶 key 必须带买家偏好指纹 scope，偏好变更后旧回复必须失效。但 _bucket_key 的 digest 只拼接了 namespace 和 buyer_id，scope 参数完全未使用。因此偏好新增/撤回后仍会命中旧回复，向用户断言已删除的偏好，正是注释里说『实测踩过』的安全问题。",
+    "title": "SemanticCache._bucket_key 忽略 scope 参数，偏好指纹未进入桶 key",
+    "line_start": 118,
+    "line_end": 126,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "935e290d081c",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/semantic_cache.py:118-126",
+        "quote": "        digest = hashlib.sha256(\n            f\"{self._namespace}\\n{buyer_id}\".encode(),\n        ).hexdigest()[:16]\n        return f\"semcache:{digest}\""
+      }
+    ]
+  },
+  {
+    "claim_id": "26b46e88e8be",
+    "fingerprint": "app/infrastructure/cache/semantic_cache.py#logic@140",
+    "statement": "[logic] app/infrastructure/cache/semantic_cache.py:143-148 lookup 忽略 has_history 参数，带上下文的会话仍会命中缓存（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/semantic_cache.py:143-148",
+    "rationale": "安全边界 3 要求会话内已有多轮上下文时不命中。remember 里检查了 has_history，但 lookup 完全没有使用该参数，只要问句通过 is_cacheable_query 就会查缓存。像『那款多少钱』这类依赖上下文的问句若未被 _UNSAFE_RE 覆盖，会在多轮会话中被错误复用。",
+    "title": "lookup 忽略 has_history 参数，带上下文的会话仍会命中缓存",
+    "line_start": 143,
+    "line_end": 148,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "935e290d081c",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/semantic_cache.py:143-148",
+        "quote": "    async def lookup(\n        self, buyer_id: str, query: str, has_history: bool, scope: str = \"\",\n    ) -> Optional[SemanticHit]:\n        if not self._enabled or not is_cacheable_query(query):\n            return None"
+      }
+    ]
+  },
+  {
+    "claim_id": "3a3df6eeac30",
+    "fingerprint": "app/infrastructure/cache/semantic_cache.py#boundary@160",
+    "statement": "[boundary] app/infrastructure/cache/semantic_cache.py:178-183 remember 用 entries[:_BUCKET_LIMIT] 截断保留最旧条目，新写入的回复会被丢弃（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/semantic_cache.py:178-183",
+    "rationale": "注释说『保留最近条数』，但 append 后取前 _BUCKET_LIMIT 条，保留的是最早写入的 30 条，刚 append 的新条目在桶满时被直接丢弃。结果是新回复永远进不了缓存，缓存内容逐渐僵化为最早的 30 条，与设计意图相反。",
+    "title": "remember 用 entries[:_BUCKET_LIMIT] 截断保留最旧条目，新写入的回复会被丢弃",
+    "line_start": 178,
+    "line_end": 183,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "935e290d081c",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/semantic_cache.py:178-183",
+        "quote": "        entries.append({\"query\": _normalize(query), \"reply\": reply, \"vector\": vector})\n        try:\n            await self._cache.set_json(key, entries[:_BUCKET_LIMIT], _TTL_SECONDS)"
+      }
+    ]
+  },
+  {
+    "claim_id": "04dd312bd834",
+    "fingerprint": "app/infrastructure/cache/semantic_cache.py#error_handling@140",
+    "statement": "[error_handling] app/infrastructure/cache/semantic_cache.py:158-166 lookup 对 entry 的 vector 未做类型校验，非列表值会抛异常（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/semantic_cache.py:158-166",
+    "rationale": "_load_entries 只保证顶层是 list，未校验每个 entry 是 dict 且 vector 是 list。若缓存被污染或旧格式数据存在，entry.get 在非 dict 上会 AttributeError，_cosine 在 vector 为 None 时 len() 抛 TypeError，异常会冒泡出 lookup，破坏『缓存异常一律当未命中』的纵深防御承诺。",
+    "title": "lookup 对 entry 的 vector 未做类型校验，非列表值会抛异常",
+    "line_start": 158,
+    "line_end": 166,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "935e290d081c",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/semantic_cache.py:158-166",
+        "quote": "        for entry in entries:\n            similarity = _cosine(vector, entry.get(\"vector\", []))\n            if similarity >= self._threshold and (best is None or similarity > best.similarity):"
+      }
+    ]
+  },
+  {
+    "claim_id": "acbdca1f8d4b",
+    "fingerprint": "app/infrastructure/cache/cached_embedding_client.py#boundary@60",
+    "statement": "[boundary] app/infrastructure/cache/cached_embedding_client.py:63-72 CachedEmbeddingClient 缓存命中判断 `isinstance(cached, list) and cached` 会拒绝合法空向量（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/cached_embedding_client.py:63-72",
+    "rationale": "空向量对 embedding 无意义，把它当未命中回源是合理且安全的降级，不会产生错误结果，只是多一次调用。",
+    "title": "CachedEmbeddingClient 缓存命中判断 `isinstance(cached, list) and cached` 会拒绝合法空向量",
+    "line_start": 63,
+    "line_end": 72,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "9208b40d6118",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/cached_embedding_client.py:63-72",
+        "quote": "            cached = await self._safe_get(self._key(text))\n            if isinstance(cached, list) and cached:\n                self.hits += 1\n                results.append(cached)"
+      }
+    ]
+  },
+  {
+    "claim_id": "32e5d41d4fc0",
+    "fingerprint": "app/infrastructure/cache/semantic_cache.py#boundary@60",
+    "statement": "[boundary] app/infrastructure/cache/semantic_cache.py:62-64 SemanticCache._cosine 维度不一致返回 0.0 而非报错（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/semantic_cache.py:62-64",
+    "rationale": "维度不一致时返回 0.0 等价于未命中，是安全的降级行为，不会给出错误回复。",
+    "title": "SemanticCache._cosine 维度不一致返回 0.0 而非报错",
+    "line_start": 62,
+    "line_end": 64,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "935e290d081c",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/semantic_cache.py:62-64",
+        "quote": "def _cosine(left: list[float], right: list[float]) -> float:\n    if len(left) != len(right):\n        return 0.0"
+      }
+    ]
+  },
+  {
+    "claim_id": "df7c59b6e026",
+    "fingerprint": "app/domain/catalog/money.py#logic@20",
+    "statement": "[logic] app/domain/catalog/money.py:30-33 from_major_units 对零小数位币种按 100 倍换算（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/money.py:30-33",
+    "rationale": "SUPPORTED_CURRENCIES 包含 JPY，而 JPY 的最小单位就是 1 日元（无小数位）。from_major_units(1000, 'JPY') 会得到 100000 分，即 1000 日元被放大成 100000 日元，金额错误 100 倍。注释承认是简化，但这是真实业务金额错误，不是风格问题。",
+    "title": "from_major_units 对零小数位币种按 100 倍换算",
+    "line_start": 30,
+    "line_end": 33,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "dc0b9e55138c",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/money.py:30-33",
+        "quote": "    @staticmethod\n    def from_major_units(major: float, currency: str) -> \"Money\":\n        # 简化处理：所有支持币种均按 100 倍换算（JPY 实际为 1，demo 暂统一）\n        return Money.of(round(major * 100), currency)"
+      }
+    ]
+  },
+  {
+    "claim_id": "7ddaed6ff2bd",
+    "fingerprint": "app/domain/catalog/money.py#boundary@20",
+    "statement": "[boundary] app/domain/catalog/money.py:30-33 from_major_units 用 round() 做浮点转分存在舍入误差（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/catalog/money.py:30-33",
+    "rationale": "round() 使用银行家舍入（round-half-to-even），且 float 本身有二进制表示误差。例如 round(2.675*100)=267 而非 268；round(0.5*100) 等边界行为与业务预期的四舍五入不一致，跨境价格场景下会产生分位偏差。",
+    "title": "from_major_units 用 round() 做浮点转分存在舍入误差",
+    "line_start": 30,
+    "line_end": 33,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "dc0b9e55138c",
+        "adapter": "repo",
+        "locator": "app/domain/catalog/money.py:30-33",
+        "quote": "        return Money.of(round(major * 100), currency)"
+      }
+    ]
+  },
+  {
+    "claim_id": "c53fc98a7633",
+    "fingerprint": "app/infrastructure/cache/redis_cache.py#error_handling@60",
+    "statement": "[error_handling] app/infrastructure/cache/redis_cache.py:62-70 get_json 在 json.loads 失败时删除键，可能误删非 JSON 值（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/redis_cache.py:62-70",
+    "rationale": "get_json 只用于 JSON 值，脏值删除是设计意图；get_raw 已单独提供避免误删幂等键。但需注意：若同一 key 被 set_json 与 set_if_absent 混用（如幂等键），get_json 会删掉裸字符串。当前代码中 get_raw 的 docstring 已明确区分，属于调用方契约问题而非本方法缺陷。",
+    "title": "get_json 在 json.loads 失败时删除键，可能误删非 JSON 值",
+    "line_start": 62,
+    "line_end": 70,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "f072c7e4a6db",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/redis_cache.py:62-70",
+        "quote": "        try:\n            return json.loads(raw)\n        except ValueError:\n            # 脏值当未命中，顺手删掉\n            await self.delete(key)\n            return None"
+      }
+    ]
+  },
+  {
+    "claim_id": "16faf2d4728b",
+    "fingerprint": "app/infrastructure/cache/redis_cache.py#error_handling@100",
+    "statement": "[error_handling] app/infrastructure/cache/redis_cache.py:108-118 set_if_absent 在 Redis 异常时返回 True 放行，幂等保护失效（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "medium",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/redis_cache.py:108-118",
+    "rationale": "这是文档明确声明的降级策略（宁可无幂等也不拒绝服务），属于有意的可用性权衡而非缺陷。但需注意：若该 key 同时被用作分布式锁，异常时返回 True 会让多个 worker 同时获得锁，可能引发并发写。当前代码注释已说明取舍，判定为设计决策。",
+    "title": "set_if_absent 在 Redis 异常时返回 True 放行，幂等保护失效",
+    "line_start": 108,
+    "line_end": 118,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "f072c7e4a6db",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/redis_cache.py:108-118",
+        "quote": "        if self._client is None:\n            return True\n        try:\n            return bool(await self._client.set(key, value, ex=ttl_seconds, nx=True))\n        except Exception as err:  # noqa: BLE001\n            logger.warning(\"Redis SETNX 失败，放行本次请求：%s（%s）\", key, err)\n            return True"
+      }
+    ]
+  },
+  {
+    "claim_id": "d1b93614ea49",
+    "fingerprint": "app/infrastructure/cache/redis_cache.py#error_handling@120",
+    "statement": "[error_handling] app/infrastructure/cache/redis_cache.py:120-137 zadd_and_count 异常时返回 0 表示不限流（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [
+      "c04ded6f3531"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/redis_cache.py:120-137",
+    "rationale": "返回 0 表示窗口内计数为 0，调用方据此判定未超限，即 Redis 故障时放行。这是与 set_if_absent 一致的可用性优先策略，注释已声明。属于设计取舍，不是缺陷。",
+    "title": "zadd_and_count 异常时返回 0 表示不限流",
+    "line_start": 120,
+    "line_end": 137,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "f072c7e4a6db",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/redis_cache.py:120-137",
+        "quote": "        except Exception as err:  # noqa: BLE001\n            logger.warning(\"Redis 滑窗计数失败，按不限流处理：%s（%s）\", key, err)\n            return 0"
+      }
+    ]
+  },
+  {
+    "claim_id": "ef4d2eae9ba4",
+    "fingerprint": "app/infrastructure/security/content_filter.py#security@20",
+    "statement": "[security] app/infrastructure/security/content_filter.py:22-30 content_filter 正则未覆盖大小写混合的中文注入与多行绕过（确认并非缺陷）",
+    "claim_type": "security",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/content_filter.py:22-30",
+    "rationale": "正则过滤本就是尽力而为的 L1 防线，文档明确说明语义级判断交给 L4。模式覆盖常见写法，未覆盖的变体属于已知局限而非代码缺陷。",
+    "title": "content_filter 正则未覆盖大小写混合的中文注入与多行绕过",
+    "line_start": 22,
+    "line_end": 30,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "cb9cc59d2ef6",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/content_filter.py:22-30",
+        "quote": "DANGEROUS_PATTERNS: list[str] = [\n    r\"(?i)ignore\\s+(all\\s+)?previous\\s+instructions?\",\n    r\"(?i)忽略.{0,10}(之前|以上|所有).{0,10}(指令|指示|规则)\","
+      }
+    ]
+  },
+  {
+    "claim_id": "7ab2c46283a0",
+    "fingerprint": "app/infrastructure/security/content_filter.py#boundary@40",
+    "statement": "[boundary] app/infrastructure/security/content_filter.py:44-46 sanitize_tool_output 对空字符串返回原值（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-1",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/content_filter.py:44-46",
+    "rationale": "空字符串无内容可过滤，直接返回 (False, '') 是正确行为，不会导致错误。",
+    "title": "sanitize_tool_output 对空字符串返回原值",
+    "line_start": 44,
+    "line_end": 46,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "cb9cc59d2ef6",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/content_filter.py:44-46",
+        "quote": "    if not text:\n        return False, text"
+      }
+    ]
+  },
+  {
+    "claim_id": "71e79546fe78",
+    "fingerprint": "app/infrastructure/security/output_guard.py#logic@40",
+    "statement": "[logic] app/infrastructure/security/output_guard.py:41-41 output_guard 的 URL 正则未加词边界，会误伤正常域名（如 redis.example.com 或 vllm 前缀域名）（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [
+      "225ca509773b",
+      "225ca509773b"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:41-41",
+    "rationale": "模式 r\"https?://(?:vllm|reranker|qdrant|redis|opensearch)(?::\\d+)?(?:/\\S*)?\" 在主机名后没有要求边界（如 (?![\\w.-]) 或 / 或 : 或结尾）。因此 https://redis.example.com/docs 这类买家可见的合法外部链接会被匹配：'https://redis' 命中前缀，随后 (?::\\d+)? 不匹配，(?://\\S*)? 也不匹配，但 re.subn 仍会把 'https://redis' 替换成 [已脱敏]，留下 'example.com/docs' 这种残缺文本，同时把 safe 置为 False 触发误告警。同理 https://vllm.io 也会被误伤。这与模块文档『避免把买家可见的正常措辞误伤』的意图相悖。",
+    "title": "output_guard 的 URL 正则未加词边界，会误伤正常域名（如 redis.example.com 或 vllm 前缀域名）",
+    "line_start": 41,
+    "line_end": 41,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "3af4356ea741",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:41-41",
+        "quote": "    r\"https?://(?:vllm|reranker|qdrant|redis|opensearch)(?::\\d+)?(?:/\\S*)?\","
+      }
+    ]
+  },
+  {
+    "claim_id": "225ca509773b",
+    "fingerprint": "app/infrastructure/security/output_guard.py#logic@40",
+    "statement": "[logic] app/infrastructure/security/output_guard.py:58-64 audit_output 逐模式替换后 safe 标志正确，但多模式重叠替换可能产生嵌套脱敏文本（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [
+      "71e79546fe78"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:58-64",
+    "rationale": "循环对每个 pattern 依次 subn，前一次替换产生的 '[已脱敏]' 不含任何后续模式能匹配的字符（中文方括号），因此不会二次替换。safe 一旦置 False 不会被重置。逻辑正确。",
+    "title": "audit_output 逐模式替换后 safe 标志正确，但多模式重叠替换可能产生嵌套脱敏文本",
+    "line_start": 58,
+    "line_end": 64,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "3af4356ea741",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:58-64",
+        "quote": "    safe = True\n    cleaned = text\n    for pattern in _compiled:\n        cleaned, count = pattern.subn(REDACTED, cleaned)\n        if count:\n            safe = False\n    return safe, cleaned"
+      }
+    ]
+  },
+  {
+    "claim_id": "de629788640c",
+    "fingerprint": "app/infrastructure/security/output_guard.py#error_handling@40",
+    "statement": "[error_handling] app/infrastructure/security/output_guard.py:52-53 audit_output 对非 str 输入（如 None 之外的 bytes/对象）会抛异常，但空串处理正确（确认并非缺陷）",
+    "claim_type": "error_handling",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:52-53",
+    "rationale": "`if not text: return True, text` 覆盖了 None 和空串，返回 (True, None/''), 调用方拿到 None 文本可能有问题，但函数签名标注 text: str，None 属于调用方违约。对合法 str 输入行为正确，不构成缺陷。",
+    "title": "audit_output 对非 str 输入（如 None 之外的 bytes/对象）会抛异常，但空串处理正确",
+    "line_start": 52,
+    "line_end": 53,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "3af4356ea741",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:52-53",
+        "quote": "    if not text:\n        return True, text"
+      }
+    ]
+  },
+  {
+    "claim_id": "aeedcb639418",
+    "fingerprint": "app/infrastructure/security/output_guard.py#security@20",
+    "statement": "[security] app/infrastructure/security/output_guard.py:37-37 SENSITIVE_PATTERNS 中 shopping_session_id 模式只匹配带分隔符的赋值形式，裸 ID 值不被脱敏（确认存在缺陷）",
+    "claim_type": "security",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/output_guard.py:37-37",
+    "rationale": "模式 r\"shopping_session_id\\s*[:=]\\s*[\\w-]+\" 要求出现 'shopping_session_id' 这个键名。若 Agent 回复中直接写出会话 ID 的值（例如 '你的会话是 sess-abc123' 或 'session: sess-abc123'），键名不出现，则完全不会被脱敏。L4 的目标是拦截内部会话 ID 泄露，而实际泄露场景往往只带值不带键名，因此该模式覆盖不足，属于安全护栏的漏检。",
+    "title": "SENSITIVE_PATTERNS 中 shopping_session_id 模式只匹配带分隔符的赋值形式，裸 ID 值不被脱敏",
+    "line_start": 37,
+    "line_end": 37,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "3af4356ea741",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/output_guard.py:37-37",
+        "quote": "    r\"shopping_session_id\\s*[:=]\\s*[\\w-]+\","
+      }
+    ]
+  },
+  {
+    "claim_id": "045b3c986e42",
+    "fingerprint": "app/infrastructure/cache/cached_embedding_client.py#logic@20",
+    "statement": "[logic] app/infrastructure/cache/cached_embedding_client.py:33-35 CachedEmbeddingClient._key 未包含 model，不同模型的向量会互相串用（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/cached_embedding_client.py:33-35",
+    "rationale": "模块 docstring 明确声明 key 用 sha256(model + text)，但 _key 只对 text 做哈希，self._model 从未参与。若同一 Redis 实例上部署了多个模型（或切换模型后复用旧缓存），相同文本会命中另一模型生成的向量，维度/语义都不匹配，导致检索结果错误。_cosine 在维度不同时返回 0.0，但维度相同而语义空间不同的模型会静默返回错误相似度。",
+    "title": "CachedEmbeddingClient._key 未包含 model，不同模型的向量会互相串用",
+    "line_start": 33,
+    "line_end": 35,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "9208b40d6118",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/cached_embedding_client.py:33-35",
+        "quote": "    def _key(self, text: str) -> str:\n        digest = hashlib.sha256(text.encode()).hexdigest()\n        return f\"emb:{digest}\""
+      }
+    ]
+  },
+  {
+    "claim_id": "86c64fdf01d1",
+    "fingerprint": "app/infrastructure/cache/cached_embedding_client.py#error_handling@60",
+    "statement": "[error_handling] app/infrastructure/cache/cached_embedding_client.py:76-80 embed_batch 用 `vector or []` 把合法空向量/None 静默替换为空列表，且长度可能与输入不一致（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/cached_embedding_client.py:76-80",
+    "rationale": "若 inner.embed_batch 返回的 fresh 列表长度小于 pending（上游实现异常或部分失败），zip 会静默截断，results 中剩余位置保持 None，最终被 `vector or []` 变成空列表返回，调用方拿到与输入等长但含空向量的结果，且无任何告警。此外合法零向量（全 0 的 list 非空，`or` 不会触发）不受影响，但 None 被吞掉掩盖了上游错误。",
+    "title": "embed_batch 用 `vector or []` 把合法空向量/None 静默替换为空列表，且长度可能与输入不一致",
+    "line_start": 76,
+    "line_end": 80,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "9208b40d6118",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/cached_embedding_client.py:76-80",
+        "quote": "        return [vector or [] for vector in results]"
+      }
+    ]
+  },
+  {
+    "claim_id": "5de350be405a",
+    "fingerprint": "app/infrastructure/cache/semantic_cache.py#logic@100",
+    "statement": "[logic] app/infrastructure/cache/semantic_cache.py:118-126 SemanticCache._bucket_key 忽略 scope 参数，偏好指纹未进入桶 key（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/semantic_cache.py:118-126",
+    "rationale": "docstring 与模块注释（安全边界 2b）明确要求桶 key 带买家偏好指纹 scope，偏好变更后旧回复必须失效。但 _bucket_key 的 f-string 只拼接了 namespace 和 buyer_id，scope 形参完全未使用。结果：买家撤回『不要塑料』偏好后，仍会命中撤回前生成的、声称符合该偏好的旧回复，直接向用户断言已删除的偏好。",
+    "title": "SemanticCache._bucket_key 忽略 scope 参数，偏好指纹未进入桶 key",
+    "line_start": 118,
+    "line_end": 126,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "935e290d081c",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/semantic_cache.py:118-126",
+        "quote": "        digest = hashlib.sha256(\n            f\"{self._namespace}\\n{buyer_id}\".encode(),\n        ).hexdigest()[:16]\n        return f\"semcache:{digest}\""
+      }
+    ]
+  },
+  {
+    "claim_id": "1680077ae2b6",
+    "fingerprint": "app/infrastructure/cache/semantic_cache.py#logic@140",
+    "statement": "[logic] app/infrastructure/cache/semantic_cache.py:143-148 lookup 忽略 has_history 参数，带上下文的会话仍会命中缓存（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "high",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/semantic_cache.py:143-148",
+    "rationale": "模块注释安全边界 3 要求『会话内已有多轮上下文时不命中』，remember 侧确实检查了 has_history，但 lookup 侧完全没有使用该参数。带上下文的会话（如『那款多少钱』虽被 _UNSAFE_RE 部分拦截，但仍有漏网问句）会命中跨会话缓存，给出脱离上下文的错误回复。",
+    "title": "lookup 忽略 has_history 参数，带上下文的会话仍会命中缓存",
+    "line_start": 143,
+    "line_end": 148,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "935e290d081c",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/semantic_cache.py:143-148",
+        "quote": "    async def lookup(\n        self, buyer_id: str, query: str, has_history: bool, scope: str = \"\",\n    ) -> Optional[SemanticHit]:\n        if not self._enabled or not is_cacheable_query(query):\n            return None"
+      }
+    ]
+  },
+  {
+    "claim_id": "2ae03ec7f536",
+    "fingerprint": "app/infrastructure/cache/semantic_cache.py#boundary@160",
+    "statement": "[boundary] app/infrastructure/cache/semantic_cache.py:178-183 remember 用 entries[:_BUCKET_LIMIT] 截断保留最旧条目，新写入的回复会被丢弃（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/semantic_cache.py:178-183",
+    "rationale": "entries.append 把新条目追加到末尾，随后 entries[:_BUCKET_LIMIT] 取前 30 条。桶满后新条目永远落在切片之外被丢弃，缓存内容冻结在最早的 30 条，与注释『保留最近条数』相反，热点新问句永远无法进入缓存。",
+    "title": "remember 用 entries[:_BUCKET_LIMIT] 截断保留最旧条目，新写入的回复会被丢弃",
+    "line_start": 178,
+    "line_end": 183,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "935e290d081c",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/semantic_cache.py:178-183",
+        "quote": "        entries = await self._load_entries(buyer_id, scope)\n        entries.append({\"query\": _normalize(query), \"reply\": reply, \"vector\": vector})\n        try:\n            await self._cache.set_json(key, entries[:_BUCKET_LIMIT], _TTL_SECONDS)"
+      }
+    ]
+  },
+  {
+    "claim_id": "21d2e067042b",
+    "fingerprint": "app/infrastructure/cache/semantic_cache.py#error_handling@140",
+    "statement": "[error_handling] app/infrastructure/cache/semantic_cache.py:158-166 lookup 对 entry 的 vector 未做类型校验，非列表值会抛异常（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/semantic_cache.py:158-166",
+    "rationale": "_load_entries 只校验顶层是 list，未校验每个 entry 是 dict、vector 是 list。若缓存被污染或旧版本写入格式不同，entry.get('vector', []) 可能返回 None 或字符串，_cosine 中 len(None) 抛 TypeError，异常逃逸出 lookup（该处无 try 包裹），导致主链路失败。",
+    "title": "lookup 对 entry 的 vector 未做类型校验，非列表值会抛异常",
+    "line_start": 158,
+    "line_end": 166,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "935e290d081c",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/semantic_cache.py:158-166",
+        "quote": "        for entry in entries:\n            similarity = _cosine(vector, entry.get(\"vector\", []))"
+      }
+    ]
+  },
+  {
+    "claim_id": "6f603e751d06",
+    "fingerprint": "app/domain/session/ports/conversation_store.py#boundary@20",
+    "statement": "[boundary] app/domain/session/ports/conversation_store.py:27-41 ConversationTurn 声明 role 但未校验，非法 role 可入库（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/session/ports/conversation_store.py:27-41",
+    "rationale": "模块定义了 VALID_ROLES = ('buyer','agent')，但 __post_init__ 只校验 session_id，role 字段无任何约束。传入 'system' 或空串也能构造成功并落库，破坏下游按 role 分流的逻辑。",
+    "title": "ConversationTurn 声明 role 但未校验，非法 role 可入库",
+    "line_start": 27,
+    "line_end": 41,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "ab852961ba03",
+        "adapter": "repo",
+        "locator": "app/domain/session/ports/conversation_store.py:27-41",
+        "quote": "    def __post_init__(self) -> None:\n        if not self.session_id:\n            raise ValueError(\"ConversationTurn.session_id required\")"
+      }
+    ]
+  },
+  {
+    "claim_id": "aba663721c9e",
+    "fingerprint": "app/domain/session/ports/conversation_store.py#api_misuse@20",
+    "statement": "[api_misuse] app/domain/session/ports/conversation_store.py:28-41 ConversationTurn 文档声称 turn_index 可留空，但类中根本没有 turn_index 字段（确认存在缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/session/ports/conversation_store.py:28-41",
+    "rationale": "docstring 写『turn_index 由存储层按会话自增，写入时可留空』，但 dataclass 字段列表中没有 turn_index，list_turns 的 docstring 又声称『按 turn_index 升序返回』。实现方无法通过该值对象携带或读取 turn_index，接口契约自相矛盾。",
+    "title": "ConversationTurn 文档声称 turn_index 可留空，但类中根本没有 turn_index 字段",
+    "line_start": 28,
+    "line_end": 41,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "ab852961ba03",
+        "adapter": "repo",
+        "locator": "app/domain/session/ports/conversation_store.py:28-41",
+        "quote": "    \"\"\"一轮完整问答。turn_index 由存储层按会话自增，写入时可留空。\"\"\"\n\n    session_id: str\n    buyer_id: str\n    role: str  # buyer / agent\n    content: str"
+      }
+    ]
+  },
+  {
+    "claim_id": "741d75a02ea1",
+    "fingerprint": "app/infrastructure/cache/redis_cache.py#logic@60",
+    "statement": "[logic] app/infrastructure/cache/redis_cache.py:70-76 RedisCache.get_json 在 JSON 解析失败时调用 delete，但 delete 内部吞异常，且脏值删除可能误删并发写入的新值（确认并非缺陷）",
+    "claim_type": "logic",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/redis_cache.py:70-76",
+    "rationale": "get_json 读到脏值时调用 self.delete(key) 删除。虽然存在并发窗口（读到脏值后、删除前其他进程写入新值会被误删），但这是缓存场景，最坏结果是未命中，不影响正确性。且 delete 本身吞异常，不会抛错。属于可接受的缓存降级行为，不构成真实缺陷。",
+    "title": "RedisCache.get_json 在 JSON 解析失败时调用 delete，但 delete 内部吞异常，且脏值删除可能误删并发写入的新值",
+    "line_start": 70,
+    "line_end": 76,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "f072c7e4a6db",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/redis_cache.py:70-76",
+        "quote": "        try:\n            return json.loads(raw)\n        except ValueError:\n            # 脏值当未命中，顺手删掉\n            await self.delete(key)\n            return None"
+      }
+    ]
+  },
+  {
+    "claim_id": "c04ded6f3531",
+    "fingerprint": "app/infrastructure/cache/redis_cache.py#error_handling@120",
+    "statement": "[error_handling] app/infrastructure/cache/redis_cache.py:137-152 zadd_and_count 在 Redis 不可用时返回 0，导致限流失效（放行全部请求）（确认存在缺陷）",
+    "claim_type": "error_handling",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [
+      "d1b93614ea49"
+    ],
+    "status": "disputed",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/cache/redis_cache.py:137-152",
+    "rationale": "zadd_and_count 用于跨进程限流。当 Redis 不可用或 pipeline 抛异常时返回 0，调用方通常以『窗口内计数 >= 阈值则拒绝』判断，返回 0 意味着永远不触发限流，所有请求被放行。这与 set_if_absent 的『放行』策略一致（可用性优先），但限流是安全/资源保护机制，静默失效会让下游被打爆。文档注释也承认『按不限流处理』，属于有意的降级，但降级方向对限流场景是危险的——应至少返回一个哨兵值让调用方能区分『Redis 故障』与『窗口为空』。",
+    "title": "zadd_and_count 在 Redis 不可用时返回 0，导致限流失效（放行全部请求）",
+    "line_start": 137,
+    "line_end": 152,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "f072c7e4a6db",
+        "adapter": "repo",
+        "locator": "app/infrastructure/cache/redis_cache.py:137-152",
+        "quote": "        except Exception as err:  # noqa: BLE001\n            logger.warning(\"Redis 滑窗计数失败，按不限流处理：%s（%s）\", key, err)\n            return 0"
+      }
+    ]
+  },
+  {
+    "claim_id": "48958eff2d4b",
+    "fingerprint": "app/infrastructure/security/content_filter.py#logic@20",
+    "statement": "[logic] app/infrastructure/security/content_filter.py:24-32 content_filter 正则未加词边界，'system prompt' 等模式会误伤正常商品描述（确认存在缺陷）",
+    "claim_type": "logic",
+    "polarity": 1,
+    "severity": "low",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/content_filter.py:24-32",
+    "rationale": "DANGEROUS_PATTERNS 中 r\"(?i)system\\s*prompt\" 会匹配任何包含 'system prompt' 子串的文本，包括正常商品描述如『this system prompts the user to...』或技术文档。虽然过滤只替换命中片段而非整条丢弃，但会把正常内容替换为占位符，造成信息丢失。同理 'you are now' 会匹配 'you are now able to...' 这类正常英文。这是过度匹配导致的误伤。",
+    "title": "content_filter 正则未加词边界，'system prompt' 等模式会误伤正常商品描述",
+    "line_start": 24,
+    "line_end": 32,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "cb9cc59d2ef6",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/content_filter.py:24-32",
+        "quote": "    r\"(?i)system\\s*prompt\",\n    r\"(?i)you\\s+are\\s+now\","
+      }
+    ]
+  },
+  {
+    "claim_id": "e42d74129da0",
+    "fingerprint": "app/infrastructure/security/content_filter.py#boundary@40",
+    "statement": "[boundary] app/infrastructure/security/content_filter.py:47-49 sanitize_tool_output 对空字符串返回 (False, text)，但 text 为 None 时返回 (False, None) 违反类型标注（确认并非缺陷）",
+    "claim_type": "boundary",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-1",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/infrastructure/security/content_filter.py:47-49",
+    "rationale": "函数签名标注 text: str，调用方应传字符串。`if not text` 对 None 也成立并返回 (False, None)，虽然返回类型与标注不符，但这是防御性写法，且 None 输入本身违反契约。不构成真实缺陷。",
+    "title": "sanitize_tool_output 对空字符串返回 (False, text)，但 text 为 None 时返回 (False, None) 违反类型标注",
+    "line_start": 47,
+    "line_end": 49,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "cb9cc59d2ef6",
+        "adapter": "repo",
+        "locator": "app/infrastructure/security/content_filter.py:47-49",
+        "quote": "    if not text:\n        return False, text"
+      }
+    ]
+  },
+  {
+    "claim_id": "680ec6879d08",
+    "fingerprint": "app/domain/buyer/preference.py#boundary@20",
+    "statement": "[boundary] app/domain/buyer/preference.py:22-31 BuyerPreference 未校验 buyer_id 非空（确认存在缺陷）",
+    "claim_type": "boundary",
+    "polarity": 1,
+    "severity": "medium",
+    "stance": "defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-0",
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/buyer/preference.py:22-31",
+    "rationale": "__post_init__ 校验了 kind 和 statement，但未校验 buyer_id。空 buyer_id 的偏好会被写入存储，list_by_buyer('') 可能返回所有空 buyer 的偏好，或导致存储层 key 冲突。作为值对象，buyer_id 是核心标识，缺失校验会让非法状态进入领域模型。",
+    "title": "BuyerPreference 未校验 buyer_id 非空",
+    "line_start": 22,
+    "line_end": 31,
+    "verification_status": "unverified",
+    "independent_support": 2,
+    "source_refs": [
+      {
+        "evidence_id": "c41e59ee19fd",
+        "adapter": "repo",
+        "locator": "app/domain/buyer/preference.py:22-31",
+        "quote": "    def __post_init__(self) -> None:\n        if self.kind not in VALID_KINDS:\n            raise ValueError(f\"BuyerPreference.kind 必须是 {VALID_KINDS}：{self.kind}\")\n        if not self.statement or not self.statement.strip():\n            raise ValueError(\"BuyerPreference.statement required\")"
+      }
+    ]
+  },
+  {
+    "claim_id": "7014256ab288",
+    "fingerprint": "app/domain/buyer/preference.py#api_misuse@40",
+    "statement": "[api_misuse] app/domain/buyer/preference.py:47-56 PreferenceStore.delete 文档声称不按 kind 区分，但接口无法表达『同 statement 的 like 与 dislike 一并清除』的原子性（确认并非缺陷）",
+    "claim_type": "api_misuse",
+    "polarity": -1,
+    "severity": "low",
+    "stance": "not_a_defect",
+    "extracted_by": "reader-r0-2",
+    "round_index": 0,
+    "verified_by": [
+      "reader-r0-2"
+    ],
+    "disputed_with": [],
+    "status": "pending",
+    "confidence": 0.5,
+    "locator": "app/domain/buyer/preference.py:47-56",
+    "rationale": "delete 签名 (buyer_id, statement) -> bool 足以表达按 statement 精确匹配删除，文档说明不区分 kind 是契约的一部分，实现方需遵守。接口本身没有缺陷，只是文档约束。",
+    "title": "PreferenceStore.delete 文档声称不按 kind 区分，但接口无法表达『同 statement 的 like 与 dislike 一并清除』的原子性",
+    "line_start": 47,
+    "line_end": 56,
+    "verification_status": "unverified",
+    "independent_support": 1,
+    "source_refs": [
+      {
+        "evidence_id": "c41e59ee19fd",
+        "adapter": "repo",
+        "locator": "app/domain/buyer/preference.py:47-56",
+        "quote": "    @abstractmethod\n    async def delete(self, buyer_id: str, statement: str) -> bool:"
+      }
+    ]
+  }
+]
