@@ -16,6 +16,11 @@ bug 反而被降级成重复。
     - 只接受 polarity=1（ASSERT）且 stance="defect" 的 claim
     - 匹配条件：同一文件，且 claim 行区间与缺陷行区间距离 <= TOLERANCE_LINES
     - 一对一贪心：一条 claim 只能记一次命中，一个缺陷也只能被记一次
+
+> **容差是可调参数，不是真理。** 25 行是宽松口径，会把「附近另一个问题」
+> 当成命中；S7-hard 上实测，同一批运行在 25 行下是 5/5，逐条人工裁定只有
+> 3/5。因此对外报召回必须同时给出容差敏感度（见
+> `tools/tolerance_sensitivity.py`），不能只拿单个数字说话。
 """
 
 from __future__ import annotations
@@ -63,7 +68,7 @@ def distance(a: tuple[int, int], b: tuple[int, int]) -> int:
     return 0
 
 
-def score(claims: list[dict], defects: list[dict]) -> dict:
+def score(claims: list[dict], defects: list[dict], tolerance: int = TOLERANCE_LINES) -> dict:
     usable = [c for c in claims if is_defect_assertion(c)]
     dropped = len(claims) - len(usable)
 
@@ -75,7 +80,7 @@ def score(claims: list[dict], defects: list[dict]) -> dict:
                 continue
             claim_lines = parse_lines(claim.get("locator", ""), defect_lines[0])
             gap = distance(claim_lines, defect_lines)
-            if gap <= TOLERANCE_LINES:
+            if gap <= tolerance:
                 pairs.append((gap, di, ci))
     pairs.sort()
 
@@ -92,6 +97,7 @@ def score(claims: list[dict], defects: list[dict]) -> dict:
 
     return {
         "defects_total": len(defects),
+        "tolerance": tolerance,
         "hits": len(hit_defects),
         "recall": len(hit_defects) / len(defects) if defects else 0.0,
         "claims_total": len(claims),
@@ -107,6 +113,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--claims", type=Path, required=True, help="claims.json")
     parser.add_argument("--ground-truth", type=Path, required=True, help="ground_truth.json")
+    parser.add_argument(
+        "--tolerance",
+        type=int,
+        default=TOLERANCE_LINES,
+        help=f"行距容差（默认 {TOLERANCE_LINES}）。0 = 必须落在缺陷行区间内",
+    )
     parser.add_argument("--out", type=Path, default=None, help="打分结果写入 json")
     args = parser.parse_args()
 
@@ -115,9 +127,10 @@ def main() -> int:
         claims = claims.get("claims", [])
     truth = json.loads(args.ground_truth.read_text(encoding="utf-8"))
 
-    report = score(claims, truth["defects"])
+    report = score(claims, truth["defects"], tolerance=args.tolerance)
     print(
         f"召回 {report['hits']}/{report['defects_total']} = {report['recall']:.0%}"
+        f"（容差 {report['tolerance']} 行）"
         f"｜claim {report['claims_total']} 条（参与打分 {report['claims_scored']}，"
         f"剔除非缺陷断言 {report['claims_dropped_non_defect_stance']}）"
     )
