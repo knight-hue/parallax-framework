@@ -1,0 +1,91 @@
+{
+  "note": "S7-hard 逐条人工裁定。true=有 claim 明确描述该缺陷且 stance=defect；false=无或指的是别的问题；dismissed=准确指出但被判成 not_a_defect。",
+  "defects": [
+    "h1-relevance-sort-direction-inverted",
+    "h2-sliding-window-lower-bound-off-by-one",
+    "h3-cosine-drops-dimension-guard",
+    "h4-similarity-threshold-exclusive",
+    "h5-sku-rejects-zero-stock"
+  ],
+  "runs": {
+    "e1/no_peers_all_evidence": {
+      "config": "3 readers, equal_exposure cap 9, max_evidence=6",
+      "auto": 1,
+      "manual": 1,
+      "verdict": {
+        "h1-relevance-sort-direction-inverted": "true: 0c4da0 / 21d74e / 2cc4e7 三条独立 claim 均指出排序方向反了",
+        "h2-sliding-window-lower-bound-off-by-one": "false: 该文件未被读到",
+        "h3-cosine-drops-dimension-guard": "false: 该文件未被读到",
+        "h4-similarity-threshold-exclusive": "false: 该文件未被读到",
+        "h5-sku-rejects-zero-stock": "false: 该文件未被读到"
+      }
+    },
+    "e1/blind_no_coverage": {
+      "config": "3 readers, equal_exposure cap 9, max_evidence=6",
+      "auto": 5,
+      "manual": 3,
+      "verdict": {
+        "h1-relevance-sort-direction-inverted": "true: 2cc4e7",
+        "h2-sliding-window-lower-bound-off-by-one": "dismissed: d2be7d 准确写出「上界多减 1 秒」，但 stance=not_a_defect",
+        "h3-cosine-drops-dimension-guard": "true: d5edd7",
+        "h4-similarity-threshold-exclusive": "false: 自动命中来自 8763a2「remember 读-改-写非原子」，与该缺陷无关",
+        "h5-sku-rejects-zero-stock": "true: 73880b"
+      }
+    },
+    "e3b/sharded_shared": {
+      "config": "3 readers, full read, max_evidence=6",
+      "auto": 5,
+      "manual": 4,
+      "verdict": {
+        "h1-relevance-sort-direction-inverted": "true: 21d74e / 2cc4e7",
+        "h2-sliding-window-lower-bound-off-by-one": "true: 327ac4",
+        "h3-cosine-drops-dimension-guard": "true: b03cc4 / d5edd7",
+        "h4-similarity-threshold-exclusive": "dismissed: c40052 与 9442ea 都准确写出「严格大于、等于阈值不命中」，但均 stance=not_a_defect",
+        "h5-sku-rejects-zero-stock": "true: 73880b / ca5962"
+      }
+    },
+    "e3b/sharded_blind": {
+      "config": "3 readers, full read, max_evidence=6",
+      "auto": 5,
+      "manual": 4,
+      "verdict": {
+        "h1-relevance-sort-direction-inverted": "true: 21d74e / 2cc4e7",
+        "h2-sliding-window-lower-bound-off-by-one": "true: 327ac4 / 53b725",
+        "h3-cosine-drops-dimension-guard": "true: d5edd7 / c26d58",
+        "h4-similarity-threshold-exclusive": "dismissed: c40052 准确写出「用 > 而非 >=」，理由是「与文档一致」，stance=not_a_defect",
+        "h5-sku-rejects-zero-stock": "true: 73880b / ca5962"
+      }
+    },
+    "single/blind_no_coverage": {
+      "config": "1 reader, batch 6, reads all 26",
+      "auto": 5,
+      "manual": 3,
+      "verdict": {
+        "h1-relevance-sort-direction-inverted": "true: 2cc4e7",
+        "h2-sliding-window-lower-bound-off-by-one": "true: 5f6dd1",
+        "h3-cosine-drops-dimension-guard": "true: dc5c50",
+        "h4-similarity-threshold-exclusive": "dismissed: 837616 写出「等于阈值视为未命中」，stance=not_a_defect",
+        "h5-sku-rejects-zero-stock": "false: 3eae41 写出「拒绝 0 库存」，但 stance=not_a_defect"
+      }
+    },
+    "single-context/blind_no_coverage": {
+      "config": "1 reader, batch 13, reads all 26 in 2 calls",
+      "auto": 4,
+      "manual": 3,
+      "verdict": {
+        "h1-relevance-sort-direction-inverted": "true: 2cc4e7",
+        "h2-sliding-window-lower-bound-off-by-one": "true: 5f6dd1",
+        "h3-cosine-drops-dimension-guard": "false: 无近邻 claim",
+        "h4-similarity-threshold-exclusive": "dismissed: 837616",
+        "h5-sku-rejects-zero-stock": "true: 73880b"
+      }
+    }
+  },
+  "cost": {
+    "calls": 37,
+    "prompt_tokens": 128583,
+    "completion_tokens": 72091,
+    "cny": 11.53,
+    "cumulative_cny": 272.9
+  }
+}

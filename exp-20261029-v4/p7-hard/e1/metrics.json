@@ -1,0 +1,221 @@
+{
+  "generated_at": "2026-10-30T15:39:19+00:00",
+  "arms": [
+    {
+      "arm": "no_peers_all_evidence",
+      "task_id": "S7-hard",
+      "reader_count": 3,
+      "recall": 0.2,
+      "precision": 0.3684,
+      "redundancy": 0.5263,
+      "effective_channels": 1.3831,
+      "agent_count": 3,
+      "assigned_reader_count": 3,
+      "coverage_fill_rate": 0.0625,
+      "rounds": 1,
+      "total_claims": 19,
+      "distinct_fingerprints": 9,
+      "hits": 1,
+      "planted": 5,
+      "duplicates": 6,
+      "unmatched": 12,
+      "llm_calls": 6,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "split_retries": 0,
+      "dropped_chunks": 0,
+      "readers_failed": 0,
+      "reader_units": {
+        "reader-r0-0": 9,
+        "reader-r0-1": 9,
+        "reader-r0-2": 9
+      },
+      "reader_union": 9,
+      "prompt_tokens": 15276,
+      "completion_tokens": 6804,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "h1-relevance-sort-direction-inverted",
+          "title": "相关性排序方向反了，选出的是最不相关的偏好",
+          "defect_class": "semantic",
+          "file": "app/application/memory/preference_selector.py",
+          "found_by": [
+            "reader-r0-0",
+            "reader-r0-1",
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "h2-sliding-window-lower-bound-off-by-one",
+          "title": "滑动窗口清理上界多留 1 秒，窗口边界的旧请求仍被计数",
+          "defect_class": "boundary",
+          "file": "app/infrastructure/cache/redis_cache.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "h3-cosine-drops-dimension-guard",
+          "title": "余弦相似度丢了维度检查，两份同实现已不一致",
+          "defect_class": "cross_file",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "h4-similarity-threshold-exclusive",
+          "title": "相似度阈值从「不低于」改成「高于」，恰好等于阈值被判未命中",
+          "defect_class": "boundary",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": []
+        },
+        {
+          "defect_id": "h5-sku-rejects-zero-stock",
+          "title": "库存不变量被收紧成「必须为正」，售罄 SKU 构造即失败",
+          "defect_class": "invariant",
+          "file": "app/domain/catalog/sku.py",
+          "found_by": []
+        }
+      ],
+      "elapsed_s": 15.26,
+      "errors": [],
+      "config": {
+        "model": "deepseek-chat",
+        "reasoning_effort": null,
+        "readers": 3,
+        "redundancy": 3,
+        "support_threshold": 2,
+        "max_rounds": 1,
+        "visibility": "blind",
+        "seed": 0,
+        "max_evidence_per_call": 6,
+        "max_units_per_reader": 0,
+        "equal_exposure": true,
+        "max_batch_chars": 24000,
+        "max_output_tokens": 16000,
+        "max_llm_calls": 0,
+        "max_tokens": 0,
+        "min_independent_support": 2,
+        "max_evidence_overlap_rate": 1.0,
+        "adaptive_scheduling": false,
+        "llm_falsifier": false,
+        "semantic_partitioning": false,
+        "partition_assignment": "greedy",
+        "git_revision": "5f245149b3aaec8082b0c2b63e7f6134c5147c58",
+        "implementation_sha256": "38a1314e62352306801b261d124d5a104d526ffd2cee6904a877fbd9a44d688d",
+        "task": "S7-hard",
+        "group_depth": 3
+      },
+      "valid": true
+    },
+    {
+      "arm": "blind_no_coverage",
+      "task_id": "S7-hard",
+      "reader_count": 3,
+      "recall": 1.0,
+      "precision": 0.3793,
+      "redundancy": 0.0345,
+      "effective_channels": 2.6667,
+      "agent_count": 3,
+      "assigned_reader_count": 3,
+      "coverage_fill_rate": 0.225,
+      "rounds": 1,
+      "total_claims": 29,
+      "distinct_fingerprints": 28,
+      "hits": 5,
+      "planted": 5,
+      "duplicates": 6,
+      "unmatched": 18,
+      "llm_calls": 6,
+      "llm_failures": 0,
+      "schema_retries": 0,
+      "split_retries": 0,
+      "dropped_chunks": 0,
+      "readers_failed": 0,
+      "reader_units": {
+        "reader-r0-0": 9,
+        "reader-r0-1": 9,
+        "reader-r0-2": 8
+      },
+      "reader_union": 26,
+      "prompt_tokens": 16744,
+      "completion_tokens": 10134,
+      "stop_reason": "max_rounds_reached",
+      "defects": [
+        {
+          "defect_id": "h1-relevance-sort-direction-inverted",
+          "title": "相关性排序方向反了，选出的是最不相关的偏好",
+          "defect_class": "semantic",
+          "file": "app/application/memory/preference_selector.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        },
+        {
+          "defect_id": "h2-sliding-window-lower-bound-off-by-one",
+          "title": "滑动窗口清理上界多留 1 秒，窗口边界的旧请求仍被计数",
+          "defect_class": "boundary",
+          "file": "app/infrastructure/cache/redis_cache.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "h3-cosine-drops-dimension-guard",
+          "title": "余弦相似度丢了维度检查，两份同实现已不一致",
+          "defect_class": "cross_file",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "h4-similarity-threshold-exclusive",
+          "title": "相似度阈值从「不低于」改成「高于」，恰好等于阈值被判未命中",
+          "defect_class": "boundary",
+          "file": "app/infrastructure/cache/semantic_cache.py",
+          "found_by": [
+            "reader-r0-2"
+          ]
+        },
+        {
+          "defect_id": "h5-sku-rejects-zero-stock",
+          "title": "库存不变量被收紧成「必须为正」，售罄 SKU 构造即失败",
+          "defect_class": "invariant",
+          "file": "app/domain/catalog/sku.py",
+          "found_by": [
+            "reader-r0-0"
+          ]
+        }
+      ],
+      "elapsed_s": 22.91,
+      "errors": [],
+      "config": {
+        "model": "deepseek-chat",
+        "reasoning_effort": null,
+        "readers": 3,
+        "redundancy": 1,
+        "support_threshold": 2,
+        "max_rounds": 1,
+        "visibility": "blind",
+        "seed": 0,
+        "max_evidence_per_call": 6,
+        "max_units_per_reader": 0,
+        "equal_exposure": true,
+        "max_batch_chars": 24000,
+        "max_output_tokens": 16000,
+        "max_llm_calls": 0,
+        "max_tokens": 0,
+        "min_independent_support": 2,
+        "max_evidence_overlap_rate": 1.0,
+        "adaptive_scheduling": false,
+        "llm_falsifier": false,
+        "semantic_partitioning": false,
+        "partition_assignment": "greedy",
+        "git_revision": "5f245149b3aaec8082b0c2b63e7f6134c5147c58",
+        "implementation_sha256": "38a1314e62352306801b261d124d5a104d526ffd2cee6904a877fbd9a44d688d",
+        "task": "S7-hard",
+        "group_depth": 3
+      },
+      "valid": true
+    }
+  ]
+}

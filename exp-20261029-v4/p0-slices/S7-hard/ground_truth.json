@@ -1,0 +1,81 @@
+{
+  "task_id": "S7-hard",
+  "slice": "S4-session-cache",
+  "description": "S7-hard 加难版：与 S4-session-cache 同一份 26 文件语料、同一批易缺陷位置，但**只植入 5 条难缺陷**（跨文件不一致 / 边界条件 / 无显眼标记的语义错）。对照 S4 的 12 条易缺陷，用来回答「召回贴天花板是题目太简单还是方法不行」。",
+  "defect_count": 5,
+  "easy_count": 0,
+  "hard_count": 5,
+  "files_touched": [
+    "app/application/memory/preference_selector.py",
+    "app/domain/catalog/sku.py",
+    "app/infrastructure/cache/redis_cache.py",
+    "app/infrastructure/cache/semantic_cache.py"
+  ],
+  "defects": [
+    {
+      "id": "h1-relevance-sort-direction-inverted",
+      "file": "app/application/memory/preference_selector.py",
+      "line_start": 120,
+      "line_end": 120,
+      "defect_class": "semantic",
+      "difficulty": "hard",
+      "title": "相关性排序方向反了，选出的是最不相关的偏好",
+      "marker": "scored.sort(key=lambda item: (item[0], item[1]))",
+      "rationale": "原实现是 (-item[0], item[1])：相似度降序、同分按原始下标升序。去掉负号后排序变成升序，scored[:top_k] 取到的是**最不相关**的 top_k。代码仍在排序、仍取前 k、仍回到原始相对顺序输出，注释「index 作为次序键，保证同分时顺序稳定可测」依旧成立——单看这一行没有任何可疑之处，只有理解「负号是为了降序」才看得出。后果：注入给模型的是与 query 最不相关的偏好，相关性选择变成了反向选择。",
+      "triggers_test": "TestH1RelevancePicksMostSimilar::test_most_relevant_like_is_selected",
+      "reader_owner": "any"
+    },
+    {
+      "id": "h2-sliding-window-lower-bound-off-by-one",
+      "file": "app/infrastructure/cache/redis_cache.py",
+      "line_start": 122,
+      "line_end": 122,
+      "defect_class": "boundary",
+      "difficulty": "hard",
+      "title": "滑动窗口清理上界多留 1 秒，窗口边界的旧请求仍被计数",
+      "marker": "pipe.zremrangebyscore(key, 0, now - window_seconds - 1)",
+      "rationale": "契约是窗口左闭右开：t=0 的请求在 t=window 时正好过期，必须被清掉。上界再多减 1 秒后，这条请求在 t=window 时仍留在 zset 里，计数变成 2。它只在「恰好满一个窗口」这一个精确时刻错，平时完全看不出来；而 `- 1` 读起来像给时钟漂移留余量的防御性写法，不带任何错误标记。后果：限流窗口被隐性地拉长，边界上的请求被多算一次，表现为用户比预期更早被限流。",
+      "triggers_test": "TestH2SlidingWindowEvictsAtBoundary::test_member_exactly_one_window_old_is_evicted",
+      "reader_owner": "any"
+    },
+    {
+      "id": "h3-cosine-drops-dimension-guard",
+      "file": "app/infrastructure/cache/semantic_cache.py",
+      "line_start": 58,
+      "line_end": 59,
+      "defect_class": "cross_file",
+      "difficulty": "hard",
+      "title": "余弦相似度丢了维度检查，两份同实现已不一致",
+      "marker": "def _cosine(left: list[float], right: list[float]) -> float:",
+      "rationale": "`_cosine` 在这份代码里有两份：`semantic_cache._cosine` 与 `preference_selector._cosine`，原本逐字相同，第一行都是 `if len(left) != len(right): return 0.0`。只把 semantic_cache 这份的维度检查删掉后，函数仍然能跑——`zip` 按短边截断、不抛异常，返回一个**看起来合法**的相似度。换 embedding 模型后旧向量与新向量维度不同，本该判为不可比（0），现在会被算成接近 1 从而直接命中旧模型的回复。必须把两个文件放在一起比对，才发现其中一份少了这段守卫。",
+      "triggers_test": "TestH3DimensionMismatchNeverHits::test_different_vector_dim_does_not_hit",
+      "reader_owner": "any"
+    },
+    {
+      "id": "h4-similarity-threshold-exclusive",
+      "file": "app/infrastructure/cache/semantic_cache.py",
+      "line_start": 140,
+      "line_end": 140,
+      "defect_class": "boundary",
+      "difficulty": "hard",
+      "title": "相似度阈值从「不低于」改成「高于」，恰好等于阈值被判未命中",
+      "marker": "if similarity > self._threshold and (best is None or similarity > best.similarity):",
+      "rationale": "阈值语义是 >=（不低于阈值即命中），改一个字符变成 >。行为差异只出现在相似度**恰好等于**阈值的样本上，其余全部相同；而 `>` 在比较里比 `>=` 更常见，读起来不刺眼。后果：阈值被隐性抬高，命中率下降，且下降量取决于相似度恰好落在阈值上的概率，很难归因。",
+      "triggers_test": "TestH4ThresholdIsInclusive::test_similarity_at_threshold_hits",
+      "reader_owner": "any"
+    },
+    {
+      "id": "h5-sku-rejects-zero-stock",
+      "file": "app/domain/catalog/sku.py",
+      "line_start": 29,
+      "line_end": 30,
+      "defect_class": "invariant",
+      "difficulty": "hard",
+      "title": "库存不变量被收紧成「必须为正」，售罄 SKU 构造即失败",
+      "marker": "if self.stock <= 0:",
+      "rationale": "正确的不变量是「非负」：stock=0 表示已售罄，是合法状态。模块 docstring 写明 stock 是初始库存、用于首次播种与库存服务不可用时的展示兜底——0 库存商品必须能被播出来展示「已售罄」。把 `< 0` 改成 `<= 0` 之后，异常文案也一起改成「必须为正」，代码与文案自洽，没有任何错误痕迹；只有把「售罄」当成一种必须存在的业务状态，才看得出这条约束收得过紧。",
+      "triggers_test": "TestH5SoldOutSkuIsLegal::test_zero_stock_is_legal",
+      "reader_owner": "any"
+    }
+  ]
+}

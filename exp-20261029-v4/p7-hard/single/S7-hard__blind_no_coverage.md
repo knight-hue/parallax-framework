@@ -1,0 +1,211 @@
+# Parallax 运行报告 `c43dd05c5ca0`
+
+**审查目标**：审查这个代码仓库，找出其中真实存在的缺陷。只报告你能引用具体代码作为依据的问题。
+
+## 结论概览
+
+| 结论 | 条数 | 含义 |
+| --- | ---: | --- |
+| 高置信 | 0 | 独立支持通道满足运行阈值（事实仍需验证） |
+| 待验证 | 26 | 支持不足、相关性超限或尚待验证 |
+| 争议 | 0 | 存在极性相反的主张，需外部裁决 |
+
+## 运行审计
+
+- 插件：`code_audit`｜轮次：1｜停止原因：`max_rounds_reached`
+- 参与 Reader：1 个（每轮全新身份）
+- 账本条目：26
+- 独立性画像：有效通道 1.00 / 1，归一化 100.0%，证据重叠 0.0%，输出隔离 `verified`
+- 相关性预算：`满足`｜证据重叠上限 100.0%
+- 证据血缘：55 个节点 / 78 条边
+- 去共同上游后的通道：1；共同推理上游：0；未解析血缘：0
+
+| 轮次 | Reader 数 | 本轮新主体 | 证据覆盖 | 矩阵填充 |
+| ---: | ---: | ---: | ---: | ---: |
+| 0 | 1 | 26 | 0% | 0% |
+
+## 高置信结论
+
+（无）
+
+## 待验证（孤证）
+
+- **[boundary/low]** [boundary] app/application/memory/preference_selector.py:30-37 embed_batch 返回的向量维度与 query 向量不一致时 _cosine 静默返回 0，全部同分（确认并非缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/application/memory/preference_selector.py:30-37`
+  - 依据：_cosine 在维度不一致时返回 0.0 而非抛异常，属于防御性设计；配合 index 次序键排序稳定，不会崩溃。虽然会导致排序退化为按原始顺序，但这是可接受的降级，且上层已有向量数量校验。不构成缺陷。
+- **[logic/high]** [logic] app/application/memory/preference_selector.py:118-124 相关性排序取的是相似度最低的 top_k（排序方向反了）（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/application/memory/preference_selector.py:118-124`
+  - 依据：scored 中每项为 (cosine, index, preference)，随后 scored.sort(key=lambda item: (item[0], item[1])) 按相似度升序排序，再取 scored[:top_k]，即选出与 query 最不相关的 top_k 条 like 偏好，而把最相关的偏好丢弃。这与函数 docstring「按 statement 与 query 的余弦相似度取 top_k」以及模块整体目标（挑选与本轮 query 最相关的偏好）完全相反。触发条件：relevance_enabled=True 且 embedder 可用、likes 数量 > top_k。此时注入的恰好是最不相关的偏好，最相关的被裁掉。
+- **[logic/medium]** [logic] app/application/memory/preference_selector.py:125-126 用 `p in picked` 依赖对象相等性，BuyerPreference 若为普通 dataclass 会按值比较导致误选/重复（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/application/memory/preference_selector.py:125-126`
+  - 依据：`return [p for p in likes if p in picked]` 用成员判断恢复原始顺序。若 BuyerPreference 是 dataclass（默认 eq=True）且两条偏好 statement/kind/created_at 完全相同（例如用户重复表达同一偏好，或 created_at 精度只到秒），则 `p in picked` 对两条都返回 True，导致返回条数超过 top_k，把本应被截断的重复偏好也注入。同理 _latest_first 中 `p in newest` 有相同问题。触发条件：存在两条字段完全相等的 like 偏好且 likes 数量 > top_k。
+- **[api_misuse/low]** [api_misuse] app/domain/buyer/preference.py:47-55 PreferenceStore.delete 文档声明同 statement 的 like/dislike 一并清除，但接口无 kind 参数，实现需自行保证（确认并非缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/domain/buyer/preference.py:47-55`
+  - 依据：这是抽象端口，文档明确说明不按 kind 区分、同 statement 一并删除。接口签名 (buyer_id, statement) 与文档一致，没有矛盾。实现层是否遵守属于实现文件的问题，不在本文件审查范围。
+- **[logic/medium]** [logic] app/domain/buyer/preference.py:20-31 BuyerPreference 为 frozen dataclass，__eq__ 按值比较，影响下游去重逻辑（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/domain/buyer/preference.py:20-31`
+  - 依据：BuyerPreference 是 @dataclass(frozen=True)，默认生成按字段值比较的 __eq__。其他审查者已指出 preference_selector.py 用 `p in picked` 依赖对象相等性，若两条偏好 buyer_id/kind/statement 相同但 created_at 不同则不等，若全部相同则相等——这会导致去重行为依赖 created_at 是否恰好相同，语义脆弱。虽然缺陷主体在 selector，但根因是此值对象未定义身份语义（如按 (buyer_id, kind, statement) 判等）。
+- **[boundary/high]** [boundary] app/domain/catalog/money.py:33-36 from_major_units 对 JPY 等零小数位币种按 100 倍换算，金额放大 100 倍（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/domain/catalog/money.py:33-36`
+  - 依据：SUPPORTED_CURRENCIES 包含 JPY，而 JPY 的最小货币单位就是 1 日元（无小数位）。from_major_units 对所有币种统一乘 100，导致 Money.from_major_units(1000, 'JPY') 得到 100000 minor units，即 1000 日元被当成 100000 日元。to_major_units 同样除以 100，往返不一致。注释承认这是 demo 简化，但这是真实的价格错误，跨境场景下会直接导致报价错误。
+- **[logic/medium]** [logic] app/domain/catalog/money.py:40-47 Money.add/multiply 绕过 of() 校验，可构造非法 Money（负数/不支持币种）（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/domain/catalog/money.py:40-47`
+  - 依据：Money.of() 是唯一做不变量校验的入口（非负整数、受支持币种），但 add() 和 multiply() 直接调用 Money(...) 构造器，绕过校验。虽然 add 会检查币种一致，但 multiply 完全不检查币种；更关键的是 dataclass 构造器本身不做任何校验，因此任何通过 add/multiply 得到的 Money 都未经验证。当前 add/multiply 的输入若都来自 of()，结果仍合法；但 Money 是公开 dataclass，调用方可以直接 Money(-5, 'XXX') 构造非法实例，再经 add 传播。此外 from_major_units 用 round() 对 float 做四舍五入，round(0.5) 在 Python 中为 0（银行家舍入），且 float 精度问题会导致 19.99*100=1998.9999... 被 round 成 1999 尚可，但 1.005*100=100.49999 会得到 100 而非 101，金额少 1 分。
+- **[boundary/low]** [boundary] app/domain/catalog/product.py:39-40 primary_sku 在 skus 为空时依赖 __post_init__ 保证，但 dataclass 非 frozen 可被后续清空（确认并非缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/domain/catalog/product.py:39-40`
+  - 依据：__post_init__ 已强制 skus 非空，构造阶段安全。Product 是可变 dataclass，理论上外部可在构造后执行 product.skus.clear() 再调用 primary_sku() 触发 IndexError，但这是调用方破坏聚合不变量的行为，且代码库内未见此类用法，不构成该函数本身的缺陷。
+- **[logic/low]** [logic] app/domain/catalog/product.py:47-51 Product.searchable_text 对 ProductHighlight.detail 为 None 时会产生 'None' 文本（确认并非缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/domain/catalog/product.py:47-51`
+  - 依据：ProductHighlight.detail 的默认值是空字符串 ""，类型标注为 str，因此正常构造下不会出现 None。f-string 对 str 类型安全。除非调用方显式传入 None（违反类型约定），否则不会产生 'None' 文本。这属于调用方违约，不是本函数缺陷。
+- **[boundary/low]** [boundary] app/domain/catalog/sku.py:30-33 Sku.stock 校验拒绝 0 库存，无法表示售罄商品（确认并非缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/domain/catalog/sku.py:30-33`
+  - 依据：文档说明 stock 是初始库存（只读参考数据），用于首次播种库存表。初始库存为 0 的商品通常不应上架，拒绝 0 是合理约束；可变库存由 StockRepository 管理。不构成缺陷。
+- **[boundary/low]** [boundary] app/domain/session/ports/conversation_store.py:33-44 ConversationTurn 未校验 content 与 buyer_id，空内容轮次可入库（确认并非缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/domain/session/ports/conversation_store.py:33-44`
+  - 依据：__post_init__ 只校验 role 和 session_id，未校验 content/buyer_id 非空。但这是端口值对象，是否允许空内容取决于业务语义（如 agent 的空回复可能代表工具调用轮次），且没有代码证据表明空内容会导致错误行为。不构成可确认缺陷。
+- **[boundary/low]** [boundary] app/infrastructure/cache/cached_embedding_client.py:60-61 embed() 依赖 embed_batch 返回非空列表，空文本列表边界安全（确认并非缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/infrastructure/cache/cached_embedding_client.py:60-61`
+  - 依据：embed 传入 [text] 单元素列表，embed_batch 对非空列表返回长度 1 的结果，[0] 索引安全。空字符串 text 也会走正常路径（key 基于空串计算），不会越界。
+- **[error_handling/low]** [error_handling] app/infrastructure/cache/cached_embedding_client.py:76-80 embed_batch 中 zip(pending, fresh) 在 inner 少返回时静默截断，导致部分结果保持 None 后抛 RuntimeError 而非明确错误（确认并非缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/infrastructure/cache/cached_embedding_client.py:76-80`
+  - 依据：zip 在 fresh 比 pending 短时会截断，剩余 results 保持 None，随后 missing 检查会抛 RuntimeError 暴露问题，符合注释“不静默补零向量”的设计意图。若 fresh 比 pending 长，多余向量被丢弃但不会造成错误结果。行为可接受，不构成缺陷。
+- **[performance/low]** [performance] app/infrastructure/cache/cached_embedding_client.py:63-80 embed_batch 对重复文本重复回源，未在 pending 内去重（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/infrastructure/cache/cached_embedding_client.py:63-80`
+  - 依据：同一批次内若出现相同文本（如多个商品标题相同），第一次循环时缓存未命中，每个重复文本都会加入 pending，随后 inner.embed_batch 会对相同文本重复计算 embedding，且 _safe_set 也会重复写同一 key。虽然结果正确，但浪费了回源调用与缓存写入，违背了“批量请求只对未命中的文本回源”的注释意图。
+- **[boundary/low]** [boundary] app/infrastructure/cache/redis_cache.py:137-148 zadd_and_count 清理边界多减 1 秒，窗口计数偏小（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/infrastructure/cache/redis_cache.py:137-148`
+  - 依据：zremrangebyscore(key, 0, now - window_seconds - 1) 多减了 1 秒，导致窗口边界附近的成员被提前清理，zcard 返回的计数偏小，限流会放行本应被限的请求。注释说“清理过期成员”，但 -1 使窗口实际比 window_seconds 短 1 秒。
+- **[error_handling/medium]** [error_handling] app/infrastructure/cache/redis_cache.py:118-128 set_if_absent 在 Redis 异常时返回 True，幂等键失效（确认并非缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/infrastructure/cache/redis_cache.py:118-128`
+  - 依据：这是文档明确声明的降级策略：Redis 不可用时返回 True 视为抢到，宁可退化成没有幂等保护也不拒绝服务。属于有意的可用性权衡，不是缺陷。
+- **[error_handling/low]** [error_handling] app/infrastructure/cache/redis_cache.py:76-80 get_json 解析失败时 await delete 未捕获异常，可能抛出（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/infrastructure/cache/redis_cache.py:76-80`
+  - 依据：get_json 在 json.loads 抛 ValueError 后调用 await self.delete(key)。delete 内部虽吞异常，但若 delete 本身在 await 期间抛出非 Exception 之外的情况（如 CancelledError）或 delete 实现变更，get_json 的“脏值当未命中”承诺会被打破。更直接的问题是：delete 的异常被吞掉，但 get_json 的注释承诺“脏值当未命中”，若 delete 抛 CancelledError 会向上传播。这属于边界处理不严，但影响有限。
+- **[boundary/low]** [boundary] app/infrastructure/cache/semantic_cache.py:148-156 lookup 使用严格大于阈值，等于阈值视为未命中（确认并非缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/infrastructure/cache/semantic_cache.py:148-156`
+  - 依据：相似度恰好等于 0.95 时不算命中，属于保守策略，与文档“低于阈值视为未命中”一致（等于阈值边界行为未明确，但保守方向不会导致错误回复）。不构成缺陷。
+- **[concurrency/medium]** [concurrency] app/infrastructure/cache/semantic_cache.py:168-176 语义缓存桶读-改-写无并发保护，并发 remember 会丢失条目（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/infrastructure/cache/semantic_cache.py:168-176`
+  - 依据：remember 先 _load_entries 读出整个列表，append 后再 set_json 整体覆盖写回。两个并发请求（同一 buyer、同一 scope）同时读到同一份 entries，各自 append 后写回，后写者会覆盖前者的条目，导致缓存条目丢失。虽然丢失条目只影响命中率、不影响正确性，但这是真实的并发缺陷；且 _BUCKET_LIMIT 截断逻辑也基于可能过期的快照。
+- **[logic/low]** [logic] app/infrastructure/cache/semantic_cache.py:78-84 lookup 中 _cosine 对维度不一致的向量静默截断比较（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/infrastructure/cache/semantic_cache.py:78-84`
+  - 依据：_cosine 用 zip(left, right) 求和，当缓存条目里的向量维度与当前 embedder 返回的向量维度不同（例如换了 embedding 模型但 namespace 未变、或旧条目残留），zip 会静默截断到较短长度，算出一个无意义的相似度，可能误命中并返回错误回复。namespace 本应包含模型名，但代码未强制校验，且 _bucket_key 只做哈希，无法发现维度不匹配。
+- **[error_handling/medium]** [error_handling] app/infrastructure/security/__init__.py:12-20 security 包 __init__ 导入 content_filter/output_guard，但给定文件列表中不存在这些模块（确认并非缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/infrastructure/security/__init__.py:12-20`
+  - 依据：该 __init__ 从 app.infrastructure.security.content_filter 与 output_guard 导入符号。这两个子模块未出现在本次审查的文件列表中，但文件列表只是审查范围子集，不代表仓库中不存在。无法据此断定 ImportError。若确实缺失则导入即失败，但缺乏证据，故不判为缺陷。
+- **[error_handling/low]** [error_handling] app/infrastructure/security/content_filter.py:44-56 sanitize_tool_output 对非字符串输入（如 None 以外的非 str）会抛异常，且空字符串判断掩盖了类型问题（确认并非缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/infrastructure/security/content_filter.py:44-56`
+  - 依据：函数签名声明 text: str，`if not text: return False, text` 对空串和 None 都安全返回；对非 str 类型（如 dict/list）会在 pattern.subn 处抛 TypeError，但类型标注已排除该用法，且工具输出在调用方应已序列化为字符串。因此不构成确认缺陷。
+- **[logic/low]** [logic] app/infrastructure/security/content_filter.py:50-56 占位符替换文本本身可能被后续模式再次匹配，导致重复替换/嵌套（确认并非缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/infrastructure/security/content_filter.py:50-56`
+  - 依据：占位符为「[内容已过滤：疑似注入]」，不含任何 DANGEROUS_PATTERNS 的关键词（ignore/previous/system prompt/you are now/扮演/忽略…指令/reveal 等），因此后续 pattern.subn 不会再次命中占位符，不存在重复替换或嵌套问题。
+- **[performance/low]** [performance] app/infrastructure/security/content_filter.py:24-32 正则模式使用 (?i) 内联标志但未做 ReDoS 防护，部分模式含 .{0,10} 与可选组，长文本下可能回溯放大（确认并非缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/infrastructure/security/content_filter.py:24-32`
+  - 依据：各模式均为线性或带固定上界量词（.{0,10}、\s+、可选组），不存在嵌套量词或指数回溯结构；对任意长度输入最坏为 O(n) 级别。文档要求微秒级，实际对超长文本（如数 MB 网页正文）仍是线性扫描，但不会灾难性回溯，不构成确认缺陷。
+- **[security/low]** [security] app/infrastructure/security/content_filter.py:25-25 英文模式 `ignore\s+(all\s+)?previous\s+instructions?` 无法匹配「ignore all the previous instructions」等常见变体（确认存在缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/infrastructure/security/content_filter.py:25-25`
+  - 依据：模式在 all 与 previous 之间只允许 \s+，不允许冠词 the；「ignore all the previous instructions」这类极常见注入写法不命中。属于覆盖不足导致的漏检，但威胁模型明确说明这层只是正则粗筛、语义判断交给 L4，因此严重度低。
+- **[security/low]** [security] app/infrastructure/security/output_guard.py:40-46 output_guard 的 URL 正则未覆盖带路径前缀的内部地址，且工具名匹配可能误伤（确认并非缺陷）
+  - 独立来源 1 个：reader-r0-0｜置信度 0.5
+  - 反证状态：`unverified`
+  - 源：`app/infrastructure/security/output_guard.py:40-46`
+  - 依据：内部服务地址正则 `https?://(?:vllm|reranker|qdrant|redis|opensearch)(?::\d+)?(?:/\S*)?` 要求主机名紧跟协议，能覆盖 http://qdrant:6333/collections 这类形态；工具名用 \b 边界逐个列出，符合文档声明的收窄范围。未发现可引用的实际漏检代码路径，故不判为缺陷。
+
+## 争议（需裁决）
+
+（无）
+
+## 独立性准入闸门
+
+- 判定：`accept`（放行）
+- 原因：独立性达标：有效通道 1.00 ≥ 0.00，归一化 100.00% ≥ 0.00%
+- 有效通道：1.00｜归一化 100.0%｜重分区尝试 0 次
+
+## 覆盖缺口归因
+
+- 漏派（系统层）：26｜漏检候选（读者层）：0｜覆盖正常：0｜无法判定：0
+- 单 Reader 检出率：无法估计（无重捕，不给伪精度）
+- 待补检分组：app, app/application/memory, app/infrastructure/security, app/infrastructure, app/domain/buyer, app/domain/catalog, app/domain/session, app/infrastructure/cache, app/domain, app/application
+
+| 证据 | Reader 数 | claim 数 | 归因 | 全员漏检概率 |
+| --- | ---: | ---: | --- | ---: |
+| `0505c2ad4786` | 1 | 0 | `partition_gap` | — |
+| `17da7cc20bb4` | 1 | 0 | `partition_gap` | — |
+| `269088b25c46` | 1 | 1 | `partition_gap` | — |
+| `5249eda27566` | 1 | 0 | `partition_gap` | — |
+| `538d958c9657` | 1 | 0 | `partition_gap` | — |
+| `570f58fa92ef` | 1 | 2 | `partition_gap` | — |
+| `5d929055a8d9` | 1 | 0 | `partition_gap` | — |
+| `5e837c68a39e` | 1 | 1 | `partition_gap` | — |
+| `62b74df5111f` | 1 | 3 | `partition_gap` | — |
+| `63c335dd31c2` | 1 | 0 | `partition_gap` | — |
+| …另有 16 条未列出 | | | | |
+
+> `reader_miss` 是漏检候选，不是缺陷结论；零检出同样可能是证据真的干净。
+
+## 覆盖率矩阵
+
+| 维度 \ 类型 | logic | concurrency | boundary | error_handling | resource_leak | security | performance | api_misuse |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `app` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `app/application` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `app/application/memory` | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
+| `app/domain` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `app/domain/buyer` | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
+| `app/domain/catalog` | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
+| `app/domain/session` | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
+| `app/infrastructure` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `app/infrastructure/cache` | 1 | 1 | 1 | 1 | 0 | 0 | 1 | 0 |
+| `app/infrastructure/security` | 1 | 0 | 0 | 1 | 0 | 1 | 1 | 0 |
+
+矩阵填充率 20%（单元格值 = 独立 Agent 数）
