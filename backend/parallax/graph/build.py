@@ -33,8 +33,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Mapping
+from pathlib import Path
 
 from langgraph.graph import END, START, StateGraph
 
@@ -48,10 +50,37 @@ from parallax.core.independence import (
     evidence_overlap_rate,
 )
 from parallax.domain.enums import ClaimStatus, Polarity, RoundStopReason
-from parallax.domain.models import EvidenceUnit, RoundRecord
+from parallax.domain.models import Claim, EvidenceUnit, RoundRecord
 from parallax.graph.state import ParallaxRuntime, ParallaxState
 
 logger = logging.getLogger(__name__)
+
+_PRIOR_CLAIM_CACHE: dict[tuple[str, float], list[Claim]] = {}
+"""按 (绝对路径, mtime) 缓存已加载的注入结论，避免每轮每 Reader 重读磁盘。"""
+
+
+def load_prior_claims(settings) -> list[Claim]:
+    """读取 E2 污染剂量实验要注入的「既有结论」。空路径或空文件 = 不注入。
+
+    与「同伴在本次运行中产出的结论」分开存放：前者是**外部既有**信息（自变量），
+    后者是运行内部的共享传播（因变量侧的表征）。混在一起就没法归因。
+    """
+    raw_path = (getattr(settings, "prior_claim_path", "") or "").strip()
+    if not raw_path:
+        return []
+    path = Path(raw_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"prior_claim_path 不存在：{path}")
+    key = (str(path.resolve()), path.stat().st_mtime)
+    cached = _PRIOR_CLAIM_CACHE.get(key)
+    if cached is not None:
+        return cached
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    items = payload.get("claims", payload) if isinstance(payload, dict) else payload
+    claims = [Claim.model_validate(item) for item in items]
+    _PRIOR_CLAIM_CACHE[key] = claims
+    logger.info("已载入 %d 条既有结论用于注入：%s", len(claims), path.name)
+    return claims
 
 
 def build_graph(runtime: ParallaxRuntime):
@@ -162,6 +191,9 @@ def build_graph(runtime: ParallaxRuntime):
             question=state["question"],
             reputation_lookup=runtime.reputation_of,
             usage_hook=runtime.record_usage,
+            # 只有 visibility="shared" 的臂会用它；盲读臂在 run_round 里直接忽略，
+            # 因此同一个 prior_claim_path 可以同时喂给两臂而不污染盲读组。
+            prior_claims=load_prior_claims(runtime.settings),
         )
         for outcome in outcomes:
             runtime.emit(

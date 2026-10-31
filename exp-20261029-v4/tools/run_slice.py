@@ -81,6 +81,12 @@ def main() -> int:
         action="store_true",
         help="不加 --equal-exposure（每臂按各自 redundancy 读满），用于 E3 五臂消融",
     )
+    parser.add_argument(
+        "--prior-claims",
+        default=None,
+        help="E2 污染剂量：注入给共享臂的既有结论 JSON（只影响 visibility=shared 的臂）。"
+        "用 backend/tools/make_poison.py 生成",
+    )
     args = parser.parse_args()
 
     corpus = EXP / args.corpus
@@ -97,6 +103,8 @@ def main() -> int:
     ]
     if not args.full_read:
         cmd.append("--equal-exposure")
+    if args.prior_claims:
+        cmd += ["--prior-claims", str(Path(args.prior_claims).resolve())]
     cmd += [
         "--partition-assignment", "greedy",
         "--group-depth", "3",

@@ -130,6 +130,11 @@ def build_parser() -> argparse.ArgumentParser:
     experiment.add_argument("--tasks", default=None, help="逗号分隔的任务 id，默认全部")
     experiment.add_argument("--list-arms", action="store_true", help="只列出可用实验臂后退出")
     experiment.add_argument(
+        "--prior-claims",
+        default=None,
+        help="E2 污染剂量实验：注入给共享臂的「既有结论」JSON（只影响 visibility=shared 的臂）",
+    )
+    experiment.add_argument(
         "--repeat",
         type=int,
         default=1,
@@ -282,6 +287,7 @@ def _overrides(args: argparse.Namespace) -> dict:
         "max_units_per_reader": getattr(args, "max_units_per_reader", None),
         "partition_assignment": getattr(args, "partition_assignment", None),
         "equal_exposure": getattr(args, "equal_exposure", None),
+        "prior_claim_path": getattr(args, "prior_claims", None),
     }
     return {k: v for k, v in pairs.items() if v is not None}
 

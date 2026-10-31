@@ -179,6 +179,19 @@ class Settings(BaseSettings):
     深度 3 意味着 6 → 3 → 1；到上限仍写不出来就如实记成丢批（`dropped_chunks`），
     让实验闸门拦住，而不是继续烧钱。
     """
+    prior_claim_path: str = ""
+    """E2 污染剂量实验：要注入给共享臂的「既有结论」JSON 文件路径。空 = 不注入。
+
+    只在 `visibility="shared"` 的臂上生效——`ReaderPool.run_round` 只在共享路径
+    把 `prior_claims` 拼进注入块，盲读路径直接忽略。这正是要测的自变量：
+    **外面已经流通着（错误的）结论时，能被同伴结论污染与不能，召回差多少。**
+
+    文件格式：`{"claims": [ <parallax Claim JSON>, ... ]}`，或直接一个数组。
+    每条 claim 必须带至少一个 `source_ref`（账本硬约束）。
+
+    为什么必须从文件读而不是现场生成：污染内容是自变量，它得能被审计、
+    能被换掉、能在两臂之间保持完全一致；写死在代码里就只能测一个剂量。
+    """
     report_max_items: int = 40
     """报告每个结论档位最多列出多少条。
 

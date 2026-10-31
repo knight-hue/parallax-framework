@@ -190,6 +190,7 @@ def config_snapshot(settings: Settings, **extra: object) -> dict:
         "max_evidence_per_call": settings.max_evidence_per_call,
         "max_units_per_reader": settings.max_units_per_reader,
         "equal_exposure": settings.equal_exposure,
+        "prior_claim_path": settings.prior_claim_path,
         "max_batch_chars": settings.llm_max_batch_chars,
         "max_output_tokens": settings.llm_max_output_tokens,
         "max_llm_calls": settings.max_llm_calls,
