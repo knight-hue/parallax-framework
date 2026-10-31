@@ -1,4 +1,6 @@
-# Parallax（视差）
+# Parallax
+
+**抗从众的多智能体证据装配通用框架**
 
 [![CI](https://github.com/knight-hue/parallax-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/knight-hue/parallax-framework/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
