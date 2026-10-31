@@ -247,6 +247,24 @@ jobs:
         working-directory: gateway
         run: mvn -B -Pit verify
 
+      # GitHub 上失败详情要登录才能看日志，而 check-run **注解是匿名可读的**。
+      # 所以这里把 failsafe 报告摘要打成 ::error:: 注解，让失败原因可以在不登录的情况下排查。
+      - name: 失败用例摘要
+        if: failure()
+        working-directory: gateway
+        run: |
+          for f in target/failsafe-reports/*.txt; do
+            [ -e "$f" ] || continue
+            echo "=== $f"
+            cat "$f"
+            msg=$(head -n 14 "$f" | tr '\n' '|' | cut -c1-900)
+            echo "::error::$(basename "$f"): $msg"
+          done
+          if [ -f target/failsafe-reports/failsafe-summary.xml ]; then
+            echo "=== failsafe-summary.xml"
+            cat target/failsafe-reports/failsafe-summary.xml
+          fi
+
       - name: 上传失败时的测试报告
         if: failure()
         uses: actions/upload-artifact@v4
