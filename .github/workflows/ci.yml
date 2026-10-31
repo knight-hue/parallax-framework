@@ -232,14 +232,8 @@ jobs:
   #   · 两个网关实例共享同一份配额，以及 Redis 挂掉后限流降级而服务仍可用
   # 这三条正是"生产级"与"能跑通"之间的差别。
   gateway-it:
-    name: Java 网关集成测试（真实 PostgreSQL + Redis）
+    name: Java 网关集成测试（真实 Redis）
     runs-on: ubuntu-latest
-    # ⚠️ 已知未通过，原因未定位：三个 Testcontainers 用例在 GitHub 托管 runner 上
-    # 稳定 exit 1，而失败详情只在需要鉴权的运行日志里（annotations 只有 "exit code 1"）。
-    #
-    # 这里显式标为「允许失败」：这个 job 仍会跑、结果仍可见，但不阻断主流程。
-    # 这是已知缺口的临时处置，**不是已修复**。定位到原因后应改回严格模式。
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 

@@ -45,7 +45,9 @@ class RedisRateLimitIT {
     static final GenericContainer<?> REDIS =
             new GenericContainer<>(DockerImageName.parse(
                     System.getProperty("parallax.test.redis-image", "redis:7-alpine")))
-                    .withImagePullPolicy(image -> false).withExposedPorts(REDIS_PORT);
+                    // 不再禁止拉取：原策略（永不拉取）在干净 CI runner 上必然启动失败。
+                    // 默认策略是「本地有就用、没有才拉」，对本地开发行为没有副作用。
+                    .withExposedPorts(REDIS_PORT);
 
     private static String redisUrl() {
         return "redis://" + REDIS.getHost() + ":" + REDIS.getMappedPort(REDIS_PORT);

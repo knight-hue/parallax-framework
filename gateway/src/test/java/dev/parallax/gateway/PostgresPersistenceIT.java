@@ -25,6 +25,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.junit.jupiter.api.Disabled;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -54,6 +55,10 @@ import org.testcontainers.utility.DockerImageName;
  *
  * 没有 Docker 时整类自动跳过（`disabledWithoutDocker`），不让它成为本地开发的阻塞项。
  */
+@Disabled(
+        "PostgreSQL 运行档（legacy-postgres）已被 MySQL 取代，平台默认运行档早已切到 MySQL。"
+                + "本类作为历史参考保留：它验证的迁移/类型推导差异在 MySQL 迁移后不再具有约束力。"
+                + "如需重新启用：去掉本注解并确保本地或 CI 可拉取 postgres 镜像。")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("legacy-postgres")
 @Testcontainers(disabledWithoutDocker = true)
