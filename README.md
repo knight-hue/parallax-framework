@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/knight-hue/parallax-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/knight-hue/parallax-framework/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](backend/pyproject.toml)
+[![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue.svg)](backend/pyproject.toml)
 
 > **面向研发团队的智能代码审查与修复协作平台，以独立证据装配为审查引擎，由 Java 主导平台业务。**
 > 单眼无法判断深度，必须靠两只眼睛从不同位置观察，才能恢复被压平的立体信息。

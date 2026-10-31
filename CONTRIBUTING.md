@@ -6,7 +6,7 @@
 
 ## 1. 环境准备
 
-需要 **Python 3.11+**。
+需要 **Python 3.12+**。
 
 ```bat
 cd backend

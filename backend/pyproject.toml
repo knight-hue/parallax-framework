@@ -5,7 +5,8 @@ name = "parallax-framework"
 version = "0.1.0"
 description = "Parallax: an anti-conformity multi-agent evidence assembly framework"
 readme = "README.md"
-requires-python = ">=3.11"
+# 只声明已验证的版本：3.11 的 CI job 长期失败且根因未定位，不再对外声称支持。
+requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 dependencies = [
     "langgraph>=0.2",
@@ -49,7 +50,7 @@ addopts = "-q"
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 # 语料是**故意写坏的代码**（植入了缺陷），必须排除，否则每次 lint 都会报几百条。
 extend-exclude = [".venv", "eval/corpus", "runs"]
 

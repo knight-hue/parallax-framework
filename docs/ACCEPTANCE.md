@@ -55,7 +55,7 @@
 
 审阅发现原测试启动命令的导入路径问题，操作员创建新提案，修正启动方式、增加非零输入断言后才批准。Docker 无网络、只读源码/根文件系统、非 root、资源上限、禁止拉取；原副本出现指定 AssertionError，exit 1，修复副本同一测试 exit 0，状态 regression_passed。原始源码未改变，补丁未写回。
 
-缓存 ibmcom/db2:latest 的 Python 3.6.8 仅供标准库夹具展示隔离机制，不是项目生产运行镜像；后端要求 Python ≥3.11。容器隔离不能替代敌对租户的专用 VM。
+缓存 ibmcom/db2:latest 的 Python 3.6.8 仅供标准库夹具展示隔离机制，不是项目生产运行镜像；后端要求 Python ≥3.12。容器隔离不能替代敌对租户的专用 VM。
 
 证据：[verification.json](../eval/acceptance/20261020/repair/verification.json)、[review.diff](../eval/acceptance/20261020/repair/review.diff)，同目录保留模型原提案、审阅后提案、Claim、manifest、源码摘要。
 
