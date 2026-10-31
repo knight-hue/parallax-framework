@@ -375,9 +375,7 @@ async def run_experiment(
     for task in tasks:
         for arm in arms:
             logger.info("══ 任务 %s ｜ 实验臂 %s ══", task.task_id, arm.name)
-            result = await run_arm(
-                task, arm, base_settings, factory, group_depth=group_depth
-            )
+            result = await run_arm(task, arm, base_settings, factory, group_depth=group_depth)
             results.append(result)
             if on_arm_done:
                 on_arm_done(task, arm, result)

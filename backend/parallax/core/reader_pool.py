@@ -174,9 +174,7 @@ class ReaderPool:
 
         async def guarded(part: Partition) -> ReaderOutcome:
             async with semaphore:
-                return await self._run_one(
-                    part, question, reputation_lookup, usage_hook, cap=cap
-                )
+                return await self._run_one(part, question, reputation_lookup, usage_hook, cap=cap)
 
         return list(await asyncio.gather(*(guarded(p) for p in partitions)))
 

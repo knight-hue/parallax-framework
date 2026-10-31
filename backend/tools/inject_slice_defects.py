@@ -245,9 +245,7 @@ def locate(text: str, snippet: str) -> tuple[int, int]:
     return start, end
 
 
-def compute_reader_map(
-    repo: Path, n_readers: int = 3, redundancy: int = 1
-) -> dict[str, str]:
+def compute_reader_map(repo: Path, n_readers: int = 3, redundancy: int = 1) -> dict[str, str]:
     """用与实验完全相同的分区器算出每个文件归属哪个 Reader。
 
     必须在**注入之后**算：evidence_id 含内容哈希，内容一变、组内排序就变，
@@ -258,9 +256,9 @@ def compute_reader_map(
     from parallax.plugins.code_audit import RepoAdapter
 
     units = RepoAdapter(repo, extensions=(".py",), group_depth=2).load("审查代码中的缺陷")
-    parts = BlindPartitioner(
-        n_readers=n_readers, redundancy=redundancy, seed=0
-    ).partition(units, round_index=0)
+    parts = BlindPartitioner(n_readers=n_readers, redundancy=redundancy, seed=0).partition(
+        units, round_index=0
+    )
     mapping: dict[str, str] = {}
     for part in parts:
         for unit in part.units:

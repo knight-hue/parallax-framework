@@ -40,11 +40,13 @@ P0 = Path(r"E:\开放原子大赛\抗从众的多智能体证据装配通用框�
 def load_spec(slice_name: str):
     module_name = slice_name.replace("-", "_").lower()
     module = importlib.import_module(f"slice_defects.{module_name}")
-    injections: list[Injection] = getattr(module, "INJECTIONS")
-    test_source: str = getattr(module, "TEST_SOURCE")
+    injections: list[Injection] = module.INJECTIONS
+    test_source: str = module.TEST_SOURCE
     if not injections:
         raise SystemExit(f"{slice_name} 的 INJECTIONS 为空")
-    unknown = [i.triggers_test for i in injections if i.triggers_test.split("::")[-1] not in test_source]
+    unknown = [
+        i.triggers_test for i in injections if i.triggers_test.split("::")[-1] not in test_source
+    ]
     if unknown:
         raise SystemExit(f"这些缺陷声明的测试在 TEST_SOURCE 里找不到：{unknown}")
     return injections, test_source
@@ -73,9 +75,9 @@ def compute_reader_map(repo: Path, n_readers: int = 3, redundancy: int = 1) -> d
         return {}
 
     units = RepoAdapter(repo, extensions=(".py",), group_depth=2).load("审查代码中的缺陷")
-    parts = BlindPartitioner(
-        n_readers=n_readers, redundancy=redundancy, seed=0
-    ).partition(units, round_index=0)
+    parts = BlindPartitioner(n_readers=n_readers, redundancy=redundancy, seed=0).partition(
+        units, round_index=0
+    )
     mapping: dict[str, str] = {}
     for part in parts:
         for unit in part.units:
@@ -165,9 +167,15 @@ def build(slice_name: str, out_name: str | None = None, with_reader_map: bool = 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--slice", dest="slice_name", required=True, help="切片目录名，如 S4-session-cache")
-    parser.add_argument("--out", dest="out_name", default=None, help="输出目录名，默认 <切片>-injected")
-    parser.add_argument("--no-reader-map", action="store_true", help="跳过 Reader 归属计算（需要 parallax）")
+    parser.add_argument(
+        "--slice", dest="slice_name", required=True, help="切片目录名，如 S4-session-cache"
+    )
+    parser.add_argument(
+        "--out", dest="out_name", default=None, help="输出目录名，默认 <切片>-injected"
+    )
+    parser.add_argument(
+        "--no-reader-map", action="store_true", help="跳过 Reader 归属计算（需要 parallax）"
+    )
     args = parser.parse_args()
     build(args.slice_name, args.out_name, with_reader_map=not args.no_reader_map)
     return 0

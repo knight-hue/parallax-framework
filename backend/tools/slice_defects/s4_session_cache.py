@@ -32,7 +32,10 @@ INJECTIONS: list[Injection] = [
             "改成对合并结果统一取 [:top_k] 后，读起来像「尊重预算」，实际把安全底线变成可裁剪项。"
         ),
         edits=(
-            ("        return dislikes + selected_likes\n", "        return (dislikes + selected_likes)[:top_k]\n"),
+            (
+                "        return dislikes + selected_likes\n",
+                "        return (dislikes + selected_likes)[:top_k]\n",
+            ),
         ),
         triggers_test="TestD1DislikesNotTruncated::test_all_dislikes_survive_total_budget",
     ),
@@ -191,8 +194,7 @@ INJECTIONS: list[Injection] = [
             (
                 '        if not reply or reply.startswith("[error]"):\n'
                 "            return  # 失败回复绝不能进缓存，否则错误会被反复复用\n",
-                "        if not reply:\n"
-                "            return\n",
+                "        if not reply:\n            return\n",
             ),
         ),
         triggers_test="TestD9ErrorReplyNotCached::test_error_reply_is_not_reusable",
@@ -209,10 +211,10 @@ INJECTIONS: list[Injection] = [
         ),
         edits=(
             (
-                '        digest = hashlib.sha256(\n'
+                "        digest = hashlib.sha256(\n"
                 '            f"{self._namespace}\\n{buyer_id}\\n{scope}".encode(),\n'
                 "        ).hexdigest()[:16]\n",
-                '        digest = hashlib.sha256(\n'
+                "        digest = hashlib.sha256(\n"
                 '            f"{self._namespace}\\n{buyer_id}".encode(),\n'
                 "        ).hexdigest()[:16]\n",
             ),
@@ -248,8 +250,7 @@ INJECTIONS: list[Injection] = [
         ),
         edits=(
             (
-                "    # API Key 形态\n"
-                '    r"sk-[a-zA-Z0-9]{20,}",\n',
+                '    # API Key 形态\n    r"sk-[a-zA-Z0-9]{20,}",\n',
                 "    # API Key 形态由上游网关负责，这里不再重复匹配\n",
             ),
         ),

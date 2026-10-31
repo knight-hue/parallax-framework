@@ -31,7 +31,7 @@ INJECTIONS: list[Injection] = [
         title="自增主键丢掉 SQLite 变体，内存库上主键不能自增",
         rationale=(
             "注释写明：SQLite 的 AUTOINCREMENT 只能用于 INTEGER PRIMARY KEY，故用 "
-            "`BigInteger().with_variant(Integer, \"sqlite\")`。去掉 variant 后建表仍然成功，"
+            '`BigInteger().with_variant(Integer, "sqlite")`。去掉 variant 后建表仍然成功，'
             "但 SQLite 里该列是 BIGINT，不是 rowid 别名，插入不带 id 就会违反非空——"
             "生产库（PG）完全正常，只有单测与本地 SQLite 会炸，极易被当成环境问题。"
         ),
@@ -158,8 +158,8 @@ INJECTIONS: list[Injection] = [
         defect_class="io",
         title="JSONL 流水改成覆盖写，每次追加都把历史抹掉",
         rationale=(
-            "模块 docstring 写明「一行一条记录，追加写不覆盖」。把 `open(\"a\")` 改成 "
-            "`open(\"w\")` 后，方法名 `_append_line` 与调用点都没变，"
+            '模块 docstring 写明「一行一条记录，追加写不覆盖」。把 `open("a")` 改成 '
+            '`open("w")` 后，方法名 `_append_line` 与调用点都没变，'
             "单次写入的测试也照常通过，只有连续两轮对话才会发现只剩最后一条。"
         ),
         edits=(
@@ -177,8 +177,8 @@ INJECTIONS: list[Injection] = [
         title="list_turns 不再跳过事件行，把过程事件当对话解析",
         rationale=(
             "同一个 JSONL 里混着 turn 与 event 两类记录，list_turns 只应收录 turn。"
-            "把 `kind != \"turn\"` 放宽成「只要 kind 存在就继续」后，事件行会走到 "
-            "`record[\"role\"]` 直接 KeyError——表现为「有事件就没法恢复对话」。"
+            '把 `kind != "turn"` 放宽成「只要 kind 存在就继续」后，事件行会走到 '
+            '`record["role"]` 直接 KeyError——表现为「有事件就没法恢复对话」。'
         ),
         edits=(
             (
@@ -201,7 +201,7 @@ INJECTIONS: list[Injection] = [
         edits=(
             (
                 "        remaining = [p for p in existing if p.statement != statement]\n",
-                '        remaining = [\n'
+                "        remaining = [\n"
                 "            p\n"
                 "            for p in existing\n"
                 '            if not (p.statement == statement and p.kind == "dislike")\n'

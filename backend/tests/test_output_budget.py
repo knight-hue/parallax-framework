@@ -42,14 +42,12 @@ class BudgetLimitedClient:
 
     async def complete_json(self, messages, schema, *, temperature=0.0, max_tokens=None):
         user = next(m.content for m in messages if m.role == "user")
-        files = [
-            line[len("FILE ") :] for line in user.splitlines() if line.startswith("FILE ")
-        ]
+        files = [line[len("FILE ") :] for line in user.splitlines() if line.startswith("FILE ")]
         self.batch_sizes.append(len(files))
         if len(files) > self.limit:
             raise OutputBudgetExceeded(
                 "模型返回了空 content（finish_reason='length'，"
-                f"reasoning_content 长度=61732）。推理型模型需要更大的 max_tokens。"
+                "reasoning_content 长度=61732）。推理型模型需要更大的 max_tokens。"
             )
         return schema(findings=[{"path": path} for path in files])
 
@@ -60,9 +58,7 @@ def make_units(count: int):
 
 async def run_single(pool: ReaderPool, unit_count: int):
     part = Partition(reader_id=READER_ID, round_index=0, units=tuple(make_units(unit_count)))
-    outcomes = await pool.run_round(
-        [part], question="q", reputation_lookup=lambda _reader: 1.0
-    )
+    outcomes = await pool.run_round([part], question="q", reputation_lookup=lambda _reader: 1.0)
     return outcomes[0]
 
 

@@ -61,7 +61,9 @@ def test_sole_source_counts_single_finder_defects() -> None:
         reader_count=3,
         agent_count=3,
         defects=[
-            DefectOutcome(defect_id="d1", title="t", defect_class="c", file="f.py", found_by=["r1"]),
+            DefectOutcome(
+                defect_id="d1", title="t", defect_class="c", file="f.py", found_by=["r1"]
+            ),
             DefectOutcome(
                 defect_id="d2", title="t", defect_class="c", file="f.py", found_by=["r1", "r2"]
             ),

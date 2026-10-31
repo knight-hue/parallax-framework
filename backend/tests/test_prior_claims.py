@@ -24,9 +24,8 @@ import pytest
 from parallax.config import Settings
 from parallax.core.partitioning import Partition
 from parallax.core.reader_pool import ReaderPool
-from parallax.graph.build import _PRIOR_CLAIM_CACHE, load_prior_claims
-from parallax.infra.llm_fake import FakeLLMClient, RecordingLLMClient
-from parallax.ports.llm import ChatMessage
+from parallax.graph.build import load_prior_claims
+from parallax.infra.llm_fake import RecordingLLMClient
 from tests.conftest import make_unit
 from tests.test_reader_pool import StubPlugin, responder
 
