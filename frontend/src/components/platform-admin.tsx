@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Building2, FolderKanban, Loader2, Plus, RefreshCw, ScrollText, GitBranch } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { isGatewayUnavailable } from '@/lib/utils';
 import type {
   PlatformOrganization,
   PlatformPolicy,
@@ -106,7 +107,7 @@ export function PlatformAdmin({ onSelectProject }: { onSelectProject?: (projectI
       right={<Button variant="ghost" onClick={() => void run(async () => { await loadOrganizations(); })}><RefreshCw size={12} />刷新</Button>}
     />
     <CardBody className="space-y-4 text-xs">
-      {message ? <div className="rounded border border-[var(--color-danger)]/40 p-2 text-[var(--color-danger)]">{message}</div> : null}
+      {message && !isGatewayUnavailable(message) ? <div className="rounded border border-[var(--color-danger)]/40 p-2 text-[var(--color-danger)]">{message}</div> : null}
 
       <section className="space-y-2">
         <div className="flex items-center gap-1 text-[var(--color-muted)]"><Building2 size={12} />组织</div>
@@ -242,3 +243,4 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
     />
   </label>;
 }
+

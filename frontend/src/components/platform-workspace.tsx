@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import { CheckCircle2, Loader2, RefreshCw, Send, ShieldCheck, XCircle } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { isGatewayUnavailable } from '@/lib/utils';
 import type { PlatformRepairReview, PlatformTask } from '@/lib/types';
 import { Badge, Button, Card, CardBody, CardHeader, EmptyState } from '@/components/ui/primitives';
 
@@ -85,7 +86,7 @@ export function PlatformWorkspace({ projectId: controlledProjectId, onProjectIdC
         <Input label="Token 预算" value={budget} onChange={setBudget} placeholder="1000" />
       </div>
       <Button onClick={() => void submit()} disabled={busy || !projectId || !repositoryId || !policyVersion || !commitSha}><Send size={12} />提交 Java 审查</Button>
-      {message ? <div className="rounded border border-[var(--color-danger)]/40 p-2 text-[var(--color-danger)]">{message}</div> : null}
+      {message && !isGatewayUnavailable(message) ? <div className="rounded border border-[var(--color-danger)]/40 p-2 text-[var(--color-danger)]">{message}</div> : null}
       {tasks.length === 0 ? <EmptyState>输入项目 ID 后加载任务</EmptyState> : <div className="grid gap-2 md:grid-cols-2">
         {tasks.map((task) => <button key={task.id} type="button" onClick={() => { setSelected(task); setReview(null); }} className="rounded border border-[var(--color-border)] p-3 text-left hover:bg-[var(--color-surface-2)]">
           <div className="flex items-center justify-between"><span className="mono">{task.id}</span><Badge tone={taskTone[task.state]}>{task.state}</Badge></div>
@@ -110,3 +111,4 @@ export function PlatformWorkspace({ projectId: controlledProjectId, onProjectIdC
 function Input({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder: string }) {
   return <label className="space-y-1"><span className="block text-[var(--color-muted)]">{label}</span><input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="w-full rounded border border-[var(--color-border)] bg-[var(--color-canvas)] p-2" /></label>;
 }
+

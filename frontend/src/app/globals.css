@@ -65,3 +65,9 @@ pre,
 .live-dot {
   animation: pulse-dot 1.4s ease-in-out infinite;
 }
+
+/* 1080p 投屏/录制下的可读性：整站放大约 20%。
+   这个控制台的信息密度靠面板而非字号堆出来的，放大后正文才看得清。 */
+body {
+  zoom: 1.2;
+}

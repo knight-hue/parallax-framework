@@ -6,6 +6,8 @@
 
 实际密钥只写 `backend/.env`，不要填写或提交 `.env.example`。支持 `PARALLAX_LLM_*` 和 `OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL`；PARALLAX 配置优先。兼容服务的模型别名不能当作官方 OpenAI 型号证明。
 
+逐步构建（后端 → 网关 → 前端 → 材料导出）与每步的期望输出见 [完整构建清单](完整构建清单.md)；本节只说明配置项语义，不重复命令。
+
 ### 模型供应商差异（`PARALLAX_LLM_PROVIDER`）
 
 当前接入 DeepSeek（OpenAI 兼容协议）。`PARALLAX_LLM_PROVIDER` 取 `auto`（默认，按 `base_url` 域名推断）/ `openai` / `openai_compat` / `deepseek`，差异只影响请求参数，不改协议：
