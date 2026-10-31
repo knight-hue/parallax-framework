@@ -1,0 +1,209 @@
+{
+  "module": "mysql-explain-analyze-and-deadlock-detect-off",
+  "date": "2026-10-31",
+  "mysql": "8.4.0",
+  "isolation_default": "REPEATABLE-READ",
+  "dataset": {
+    "table": "lab_index_probe",
+    "rows": 50000,
+    "engine": "InnoDB",
+    "probe_query": "SELECT id, name FROM lab_index_probe WHERE email = 'user37777@example.com'"
+  },
+  "checks": {
+    "explain_analyze_timing": {
+      "passed": 3,
+      "failed": 0
+    },
+    "deadlock_detect_off_timeout": {
+      "passed": 1,
+      "failed": 0
+    }
+  },
+  "verified_behaviors": [
+    "Without a secondary index the equality query plans as type=ALL and actually reads 50,001 rows (Handler_read_rnd_next) over 50,000 rows; EXPLAIN ANALYZE reports actual time 19.8..26.1 ms",
+    "Adding idx_email turns the plan into type=ref/key=idx_email with Handler_read_next=1, and the 5-run median wall time drops from 23.451 ms to 0.713 ms (32.9x)",
+    "A composite idx_email_name (email, name) produces Extra=Using index (covering), median 0.965 ms, Handler_read_key=1 and no table lookup",
+    "A prefix LIKE query uses type=range on idx_email_name, reading only 11 rows (Extra=Using where; Using index)",
+    "With innodb_deadlock_detect=ON the opposite-order update pair produces MySQL error 1213 (deadlock) on one session after 1015 ms while the other commits",
+    "With innodb_deadlock_detect=OFF the same workload produces error 1205 (lock wait timeout) on BOTH sessions after ~5868 ms with innodb_lock_wait_timeout=5, and no 1213 at all",
+    "innodb_deadlock_detect is a GLOBAL-only variable in 8.4 (SET SESSION fails with 1229); the probe therefore flips it server-wide and restores it to ON afterwards (verified: @@global.innodb_deadlock_detect=1)"
+  ],
+  "limitations": [
+    "Single instance, no replication or crash recovery drill",
+    "Timing is a local warm-buffer single-instance measurement, not a capacity result",
+    "The deadlock-detection switch is a server-global variable, so the OFF run affects every session on that instance",
+    "No slow-query-log or optimizer-trace analysis was performed; conclusions come from EXPLAIN / EXPLAIN ANALYZE / Handler counters"
+  ],
+  "raw": {
+    "index_steps": [
+      {
+        "label": "no_index",
+        "query": "SELECT id, name FROM lab_index_probe WHERE email = 'user37777@example.com'",
+        "explain": [
+          {
+            "table": "lab_index_probe",
+            "type": "ALL",
+            "key": null,
+            "rows": "50286",
+            "Extra": "Using where"
+          }
+        ],
+        "explain_analyze": [
+          "-> Filter: (lab_index_probe.email = 'user37777@example.com')  (cost=5069 rows=5029) (actual time=19.1..25 rows=1 loops=1)\n    -> Table scan on lab_index_probe  (cost=5069 rows=50286) (actual time=0.0722..18 rows=50000 loops=1)\n"
+        ],
+        "handler_delta": {
+          "Handler_read_first": 1,
+          "Handler_read_key": 1,
+          "Handler_read_rnd_next": 50001
+        },
+        "rows_returned": 1,
+        "wall_ms_runs": [
+          22.349,
+          22.5324,
+          23.451,
+          24.1665,
+          26.373
+        ],
+        "wall_ms_median": 23.451
+      },
+      {
+        "label": "idx_email",
+        "query": "SELECT id, name FROM lab_index_probe WHERE email = 'user37777@example.com'",
+        "explain": [
+          {
+            "table": "lab_index_probe",
+            "type": "ref",
+            "key": "idx_email",
+            "rows": "1",
+            "Extra": null
+          }
+        ],
+        "explain_analyze": [
+          "-> Index lookup on lab_index_probe using idx_email (email='user37777@example.com')  (cost=0.35 rows=1) (actual time=0.0358..0.0379 rows=1 loops=1)\n"
+        ],
+        "handler_delta": {
+          "Handler_read_key": 1,
+          "Handler_read_next": 1
+        },
+        "rows_returned": 1,
+        "wall_ms_runs": [
+          0.6262,
+          0.6739,
+          0.713,
+          0.7256,
+          0.8398
+        ],
+        "wall_ms_median": 0.713
+      },
+      {
+        "label": "covering_idx_email_name",
+        "query": "SELECT email, name FROM lab_index_probe WHERE email = 'user37777@example.com'",
+        "explain": [
+          {
+            "table": "lab_index_probe",
+            "type": "ref",
+            "key": "idx_email_name",
+            "rows": "1",
+            "Extra": "Using index"
+          }
+        ],
+        "explain_analyze": [
+          "-> Covering index lookup on lab_index_probe using idx_email_name (email='user37777@example.com')  (cost=1.1 rows=1) (actual time=0.0249..0.0293 rows=1 loops=1)\n"
+        ],
+        "handler_delta": {
+          "Handler_read_key": 1,
+          "Handler_read_next": 1
+        },
+        "rows_returned": 1,
+        "wall_ms_runs": [
+          0.916,
+          0.9459,
+          0.965,
+          0.9987,
+          1.1005
+        ],
+        "wall_ms_median": 0.965
+      },
+      {
+        "label": "prefix_like_range",
+        "query": "SELECT id, name FROM lab_index_probe WHERE email LIKE 'user3777%'",
+        "explain": [
+          {
+            "table": "lab_index_probe",
+            "type": "range",
+            "key": "idx_email_name",
+            "rows": "11",
+            "Extra": "Using where; Using index"
+          }
+        ],
+        "explain_analyze": [
+          "-> Filter: (lab_index_probe.email like 'user3777%')  (cost=4.12 rows=11) (actual time=0.0328..0.0749 rows=11 loops=1)\n    -> Covering index range scan on lab_index_probe using idx_email_name over ('user3777' <= email <= 'user3777􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿􏿿')  (cost=4.12 rows=11) (actual time=0.0304..0.0698 rows=11 loops=1)\n"
+        ],
+        "handler_delta": {
+          "Handler_read_key": 1,
+          "Handler_read_next": 11
+        },
+        "rows_returned": 11,
+        "wall_ms_runs": [
+          0.8103,
+          0.8691,
+          0.8972,
+          0.9323,
+          1.0116
+        ],
+        "wall_ms_median": 0.897
+      }
+    ],
+    "deadlock": {
+      "lock_wait_timeout_s": 5,
+      "note": "innodb_deadlock_detect 在 8.4 是 GLOBAL 变量，无法按会话设置，因此两档都是整台服务器级别；跑完立即恢复为 ON",
+      "detect_on": {
+        "T1": {
+          "reader": "T1",
+          "order": "1->2",
+          "first_lock_ms": 9,
+          "outcome": "failed",
+          "error_code": 1213,
+          "sql_state": "40001",
+          "message": "Deadlock found when trying to get lock; try restarting transaction",
+          "elapsed_ms": 1015
+        },
+        "T2": {
+          "reader": "T2",
+          "order": "2->1",
+          "first_lock_ms": 116,
+          "outcome": "committed",
+          "error_code": 0,
+          "elapsed_ms": 833
+        },
+        "deadlock_1213": 1,
+        "lock_wait_timeout_1205": 0
+      },
+      "detect_off": {
+        "T1": {
+          "reader": "T1",
+          "order": "1->2",
+          "first_lock_ms": 12,
+          "outcome": "failed",
+          "error_code": 1205,
+          "sql_state": "40001",
+          "message": "Lock wait timeout exceeded; try restarting transaction",
+          "elapsed_ms": 5868
+        },
+        "T2": {
+          "reader": "T2",
+          "order": "2->1",
+          "first_lock_ms": 125,
+          "outcome": "failed",
+          "error_code": 1205,
+          "sql_state": "40001",
+          "message": "Lock wait timeout exceeded; try restarting transaction",
+          "elapsed_ms": 5868
+        },
+        "deadlock_1213": 0,
+        "lock_wait_timeout_1205": 2
+      },
+      "restored_to": "1"
+    }
+  }
+}

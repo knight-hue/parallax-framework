@@ -5,9 +5,26 @@
   "isolation_default": "REPEATABLE-READ",
   "innodb_deadlock_detect": true,
   "checks": {
-    "index_access_path": {"passed": 1, "failed": 0},
-    "isolation_levels": {"passed": 3, "failed": 0},
-    "locking_and_deadlock": {"passed": 2, "failed": 0}
+    "index_access_path": {
+      "passed": 1,
+      "failed": 0
+    },
+    "isolation_levels": {
+      "passed": 3,
+      "failed": 0
+    },
+    "locking_and_deadlock": {
+      "passed": 2,
+      "failed": 0
+    },
+    "index_timing_compare": {
+      "passed": 3,
+      "failed": 0
+    },
+    "deadlock_detect_off": {
+      "passed": 1,
+      "failed": 0
+    }
   },
   "verified_behaviors": [
     "Without a secondary index the same equality query plans as a full table scan (type=ALL) over 20000 rows",
@@ -21,7 +38,10 @@
   ],
   "limitations": [
     "Single instance, no replication or crash recovery drill",
-    "Index conclusions come from EXPLAIN/ANALYZE rather than InnoDB page-level inspection",
+    "Index conclusions come from EXPLAIN/ANALYZE rather than InnoDB page-level inspection"
+  ],
+  "supplemented_by": "mysql-extra.json（2026-10-31，EXPLAIN ANALYZE 耗时对比 + innodb_deadlock_detect=OFF 超时路径）",
+  "superseded_limitations": [
     "No EXPLAIN ANALYZE timing comparison or slow-query tuning",
     "Only the default deadlock detection path is covered, not innodb_deadlock_detect=OFF timeouts"
   ]

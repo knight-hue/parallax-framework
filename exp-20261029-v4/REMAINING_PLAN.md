@@ -75,7 +75,7 @@
 | P-3 | VM 级隔离（当前是容器级，共享宿主内核） | ❌ 未做 |
 | P-4 | 生产 Prometheus 采集 / 跨主机部署 | ❌ 未做 |
 | P-5 | 组织 / 项目管理 UI 完善 | ❌ 未做 |
-| P-6 | MySQL 原理实验补全 | 部分（`eval/labs/mysql.json` 已有，待补 EXPLAIN ANALYZE） |
+| P-6 | MySQL 原理实验补全 | ✅ **已完成（2026-10-31）**：新增 `eval/labs/mysql-extra.json`——EXPLAIN ANALYZE 耗时对比（5 万行，Handler 50,001→1，中位 23.45ms→0.71ms，**32.9×**）与 `innodb_deadlock_detect=OFF` 超时路径（两侧均 1205，无 1213） |
 | P-7 | 独立短链域名 + 热点容量 | ❌ 未做 |
 
 **注意**：这批与实验线互不影响，可以并行推进。
