@@ -42,7 +42,7 @@ class PlatformPolicyCacheRedisIT {
     static final GenericContainer<?> REDIS =
             new GenericContainer<>(DockerImageName.parse(
                     System.getProperty("parallax.test.redis-image", "redis:7-alpine")))
-                    .withImagePullPolicy(image -> false)
+                    // 不再禁止拉取：干净 CI runner 没有本地镜像，永不拉取会直接启动失败。
                     .withExposedPorts(REDIS_PORT);
 
     private static RedissonClient client;
