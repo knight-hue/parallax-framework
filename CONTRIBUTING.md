@@ -14,9 +14,17 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
 
+前端首次安装（Node >= 20）：
+
+```bat
+cd ..\frontend
+npm ci --no-audit --no-fund
+```
+
 跑测试：
 
 ```bat
+cd ..\backend
 .venv\Scripts\python.exe -m pytest
 ```
 

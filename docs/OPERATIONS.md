@@ -28,6 +28,8 @@
 
 不联网构建：Python 使用已有 `.venv`；前端执行已有 `node_modules` 中的 lint、typecheck、build；网关执行 `mvn -o verify`。禁止用 `npm ci`、pip 安装或 Docker build 来冒充离线验证。
 
+全新克隆首次安装除外：需要联网各执行一次 `pip install -e ".[dev]"` 与 `npm ci`；安装完成后的复现仍按上面的离线口径。
+
 本机没有全局 JDK/Maven/Node 时，使用仓内便携工具链 `.toolchain/`（JDK 21、Maven、Node；不入库）：把 `.toolchain/jdk` 设为 `JAVA_HOME`，并把 `.toolchain/maven/bin`、`.toolchain/node` 加入 `PATH`。版本与缓存先核查本地已有资源，不自动下载。
 
 生产 Compose 覆盖文件要求预先准备项目镜像和基础设施镜像，缺少就失败，不会下载：

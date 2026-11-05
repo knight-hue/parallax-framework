@@ -210,10 +210,31 @@ Java 模块化单体管理用户/组织/项目、仓库、策略、任务状态�
 
 > 完整构建（含网关与前端）见 [`docs/完整构建清单.md`](docs/完整构建清单.md)——每一步都有实测耗时与期望输出。本节只给最短路径。
 
+### 全新克隆：先装依赖（仅首次）
+
+需要 Python 3.12+、Node 20+、JDK 21、Maven 3.8+；首次安装需要联网：
+
 ```bat
 cd backend
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -e ".[dev]"
 
-:: 使用已有虚拟环境与依赖；先核查本地工具，不自动安装
+cd ..\frontend
+npm ci --no-audit --no-fund
+
+:: Java：安装 JDK 21 + Maven，或使用仓库内便携工具链 .toolchain/（不入库）
+
+:: 回到仓库根目录
+cd ..
+```
+
+> `.venv/`、`node_modules/`、`.toolchain/` 都不在仓库里，必须按上面生成。
+> 只跑 Python 测试不需要 Java、Node、Docker 或任何中间件。
+
+### 已有环境：最短路径
+
+```bat
+cd backend
 
 :: 跑测试（不依赖网络与 API key）
 .venv\Scripts\python.exe -m pytest
@@ -228,7 +249,7 @@ cd backend
 .venv\Scripts\python.exe -m parallax.cli audit .\parallax --out runs\report.md
 ```
 
-> 使用本机已有 Python、Node、JDK 21、Maven 和 Docker，先定位工具及缓存。当前完整链路与离线验证见 [OPERATIONS.md](docs/OPERATIONS.md)；已有 `.toolchain/` 仅为本地缓存，不作为重新下载或安装的理由。
+> 已有 `.toolchain/`、`.venv/`、`node_modules/` 时可直接按上面的最短路径跑；没有就按「全新克隆」先装一次。当前完整链路与离线验证见 [OPERATIONS.md](docs/OPERATIONS.md)。
 
 ### 常用参数
 

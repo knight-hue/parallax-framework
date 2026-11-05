@@ -157,8 +157,9 @@ export PARALLAX_CALLBACK_TOKEN=$PARALLAX_GATEWAY_INTERNAL_TOKEN
 ## 测试
 
 ```bat
-mvn -o test       :: 当前单元/集成；历史数量见 ../docs/ACCEPTANCE.md
-mvn -o -Pit verify :: 需本地已有兼容测试镜像，禁拉取与覆盖配置见运行文档
+mvn -o test        :: 单元测试；不需要 Docker / 中间件；历史数量见 ../docs/ACCEPTANCE.md
+mvn -o -Pit verify :: 集成测试；需要 Docker，缺失的 redis:7-alpine 会按需拉取
+                   :: 离线可先 docker pull，或用 -Dparallax.test.redis-image=redis:latest 覆盖
 python tools/mutation_audit.py :: Java 关键策略变异门禁（临时副本，不修改工作树）
 ```
 
