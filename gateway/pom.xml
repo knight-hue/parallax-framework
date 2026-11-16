@@ -164,7 +164,7 @@
     <!--
       H2 只用于**默认测试档**，让整套测试在没有 Docker 的机器上也能跑：
       测试 schema 从 MySQL 迁移脚本转换而来，在 H2 的 MySQL 兼容模式下执行。
-      真实 MySQL 由 gateway-it 单独跑一遍——H2 不能替代真实 MySQL。
+      真实 MySQL 由 MysqlPersistenceIT 显式开启后运行——H2 不能替代真实 MySQL。
     -->
     <dependency>
       <groupId>com.h2database</groupId>
