@@ -12,8 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Inserts share links in their own transaction so a token-hash collision can be
- * retried without poisoning the caller's transaction (PostgreSQL aborts a
- * transaction after a unique-key violation).
+ * retried without poisoning the caller's transaction after a unique-key violation.
  */
 @Component
 public class PlatformShareStore {

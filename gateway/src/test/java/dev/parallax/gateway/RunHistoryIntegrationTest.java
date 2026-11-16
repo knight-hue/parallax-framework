@@ -33,8 +33,7 @@ import org.springframework.test.context.DynamicPropertySource;
  * C2 端到端：提交 → 落记录 → 完成回调补统计 → 按状态/凭据/时间过滤与分页 → 事件留痕。
  *
  * 其中"服务重启后记录不丢"这条无法用内存库证明——H2 的内存库随进程消失而消失。
- * 那一项由 gateway-it（Testcontainers 真实 PostgreSQL）负责，见
- * `IdentityPostgresIT`。
+ * 那一项由 gateway-it 的真实 MySQL 集成测试负责，见 `MysqlPersistenceIT`。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")

@@ -11,10 +11,7 @@ spring:
     name: parallax-gateway
   datasource:
     # 平台能力（身份/配额/账本/运行记录）的存储。
-    # Legacy fallback; the default mysql profile provides the platform datasource.
-    url: ${PARALLAX_DB_URL:jdbc:postgresql://127.0.0.1:5432/parallax}
-    username: ${PARALLAX_DB_USER:parallax}
-    password: ${PARALLAX_DB_PASSWORD:parallax}
+    # 具体连接由 application-mysql.yml / application-test.yml 提供。
     hikari:
       # 数据库不可用时快速失败：默认 30s 会让请求一直挂着，健康检查也测不出问题。
       connection-timeout: ${PARALLAX_DB_CONNECTION_TIMEOUT_MS:3000}
@@ -31,7 +28,7 @@ spring:
           time_zone: UTC
   flyway:
     enabled: true
-    locations: classpath:db/migration
+    locations: classpath:db/mysql
   mvc:
     # ⚠️ 关键配置：一次审查任务的 SSE 流会持续几分钟，
     # 而 Tomcat 的异步请求默认超时是 30 秒——不显式放宽的话，

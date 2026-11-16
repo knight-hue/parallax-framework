@@ -344,7 +344,8 @@ backend/                        Python 编排核心（唯一包含机制的部�
 
 frontend/                       Next.js 工作台（提交 / 实时事件流 / 账本 / 覆盖率矩阵 / Java 平台任务）
 gateway/                        Java 平台业务后端（身份、项目、任务、预算、Worker 协调、审批与 webhook）
-├─ src/main/resources/db/migration/   Flyway 迁移（PG 与 H2 都可执行）
+├─ src/main/resources/db/mysql/       Flyway MySQL 迁移（V1–V11）
+├─ src/test/resources/db/h2/          单元测试 H2 schema
 ├─ src/test/java/.../support/         测试用的上游 HTTP 服务桩
 └─ README.md                          网关自身的说明与取舍
 
@@ -362,7 +363,7 @@ exp-20261029-v4/                当前一轮对照实验的计划、切片与结
 
 ## 8. 运行当前实现
 
-使用已有工具、依赖与缓存镜像，按 [OPERATIONS.md](docs/OPERATIONS.md) 配置并运行。当前默认运行档为工作台 → Java → Python + MySQL/Redis；旧本机全链路验收显式使用 legacy-postgres。MySQL 真库与迁移检查见 [MySQL 运维](gateway/MYSQL_OPERATIONS.md)，RabbitMQ 尚未接管执行。
+使用已有工具、依赖与缓存镜像，按 [OPERATIONS.md](docs/OPERATIONS.md) 配置并运行。当前默认运行档为工作台 → Java → Python + MySQL/Redis；PostgreSQL 运行档已移除。MySQL 真库与迁移检查见 [MySQL 运维](gateway/MYSQL_OPERATIONS.md)，RabbitMQ 尚未接管执行。
 
 仅校验生产合并配置，不启动服务或下载镜像：
 

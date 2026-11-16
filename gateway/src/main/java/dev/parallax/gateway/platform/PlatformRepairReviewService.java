@@ -53,7 +53,7 @@ public class PlatformRepairReviewService {
         identity.project(actor, projectId, ProjectRole.REVIEWER);
         tasks.get(actor, projectId, taskId);
         // Serialize duplicate proposals without catching a uniqueness error inside a
-        // transaction (PostgreSQL marks such a transaction aborted).
+        // transaction, which can leave the transaction in an uncertain state.
         var task = tasks.current(taskId, true);
         if (task.state() != TaskState.SUCCEEDED) throw conflict("A repair requires a successful audit result");
         validateProposal(request, task.commitSha());

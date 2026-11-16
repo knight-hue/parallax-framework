@@ -1,14 +1,14 @@
 # Parallax 项目状态
 
-更新：2026-10-29。验收依据见 [ACCEPTANCE.md](ACCEPTANCE.md)，运行方式见 [OPERATIONS.md](OPERATIONS.md)，v4 实验线见 [exp-20261029-v4/STATE.md](../exp-20261029-v4/STATE.md)。
+更新：2026-11-16。验收依据见 [ACCEPTANCE.md](ACCEPTANCE.md)，运行方式见 [OPERATIONS.md](OPERATIONS.md)，v4 实验线见 [exp-20261029-v4/STATE.md](../exp-20261029-v4/STATE.md)。
 
 最终目标已校准为：**Java 主导的智能代码审查与修复协作平台，以独立证据装配为审查引擎，平台统一使用 MySQL。** 目标与范围见 [PROJECT_GOALS.md](PROJECT_GOALS.md)，实施细节见 [JAVA_BACKEND_PLAN_V2.md](JAVA_BACKEND_PLAN_V2.md)。
 
-Java 默认运行档和 Compose 已切为 MySQL，旧 PostgreSQL 作为显式回归/迁移入口保留；任务执行仍由 Python 管理。当前交付包含核心审查、人工审批后的隔离修复、协议适配和单机生产配置；本机服务链路已经实测，公网生产部署尚未发生。下面的历史验收不表示新的最终目标已完成。
+Java 默认运行档和 Compose 已切为 MySQL，PostgreSQL 运行档与迁移入口已于 2026-11-16 移除；任务执行仍由 Python 管理。当前交付包含核心审查、人工审批后的隔离修复、协议适配和单机生产配置；本机服务链路已经实测，公网生产部署尚未发生。下面的历史验收不表示新的最终目标已完成。
 
 ## 新目标待完成范围
 
-实施已开始：任务协议/生命周期、用户/组织/项目权限基础及 MySQL 运行档已落地；用户 JWT 禁止访问未关联项目的旧接口。已验证本机 MySQL 8.0.19 和 PostgreSQL → MySQL 离线复制，目标 8.4 尚待现场验收，尚未接管当前 runner。各模块记录见 [CHANGELOG.md](../CHANGELOG.md)。
+实施已开始：任务协议/生命周期、用户/组织/项目权限基础及 MySQL 运行档已落地；用户 JWT 禁止访问未关联项目的旧接口。已验证本机 MySQL 8.0.19；PostgreSQL 离线复制路径已随迁移工具移除。目标 8.4 尚待现场验收，尚未接管当前 runner。各模块记录见 [CHANGELOG.md](../CHANGELOG.md)。
 
 | 范围 | 当前差距 |
 | --- | --- |

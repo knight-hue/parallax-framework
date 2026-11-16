@@ -2,7 +2,7 @@
 
 最终方向：Java 管理组织/项目权限、任务、预算、报告和审批，平台统一使用 MySQL；Python 保留证据装配与隔离执行。见 [最终目标](../docs/PROJECT_GOALS.md) 和 [升级方案](../docs/JAVA_BACKEND_PLAN_V2.md)。
 
-本文配置、端点及测试描述当前网关实现，数据库仍为 PostgreSQL。新平台能力尚未实施，不能只改 JDBC URL 当作完成迁移。
+本文配置、端点及测试描述当前网关实现，默认运行档为 MySQL 8.4。
 
 ## 当前能力与后续职责
 
@@ -20,7 +20,7 @@ Python 配置内部令牌后会校验内部调用凭据，但不提供完整组�
 
 Java 采用模块化单体管理平台业务生命周期，Python 负责分区、盲读、Claim 来源、反证和聚合。不再受旧“仅身份/配额/持久化/可观测性”清单限制；每项能力必须明确业务归属、状态权威和故障处理。
 
-MySQL、Outbox、消息幂等和 attempt/fencing 按阶段落地。XA/TCC/Seata、秒杀为独立实验，不加入默认平台拓扑。
+MySQL、Outbox、消息幂等和 attempt/fencing 已落地。XA/TCC/Seata、秒杀为独立实验，不加入默认平台拓扑。
 
 ## 五条踩过的坑（都写进了代码注释）
 
@@ -92,7 +92,7 @@ curl -X DELETE -H "Authorization: Bearer $TOKEN" \
 
 ## 运行
 
-### 当前容器运行档（PostgreSQL 与 Redis）
+### 当前容器运行档（MySQL 与 Redis）
 
 ```bash
 docker compose --env-file ../backend/.env -f ../docker-compose.yml -f ../docker-compose.production.yml --profile gateway up -d --no-build --pull never
@@ -101,7 +101,7 @@ docker compose --env-file ../backend/.env -f ../docker-compose.yml -f ../docker-
 ### 本地
 
 ```bash
-# 1) 备好 PostgreSQL（Flyway 会在启动时自动建表）
+# 1) 备好 MySQL（Flyway 会在启动时自动建表）
 # 2) 起上游
 cd ../backend && python -m parallax.service.app
 # 3) 起网关
@@ -141,7 +141,7 @@ export PARALLAX_CALLBACK_TOKEN=$PARALLAX_GATEWAY_INTERNAL_TOKEN
 | --- | --- | --- |
 | `PARALLAX_GATEWAY_PORT` | `8080` | 网关端口 |
 | `PARALLAX_UPSTREAM_URL` | `http://127.0.0.1:8000` | 上游编排服务地址 |
-| `PARALLAX_DB_URL` / `_USER` / `_PASSWORD` | `jdbc:postgresql://127.0.0.1:5432/parallax` | 平台数据存储 |
+| `PARALLAX_MYSQL_URL` / `PARALLAX_DB_USER` / `PARALLAX_DB_PASSWORD` | `jdbc:mysql://127.0.0.1:3306/parallax?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true` | 平台数据存储 |
 | `PARALLAX_IDENTITY_ENABLED` | `false` | 是否启用身份与配额（生产必须打开） |
 | `PARALLAX_GATEWAY_INTERNAL_TOKEN` | 空 | 与上游共享的内部令牌（回调校验用） |
 | `PARALLAX_GATEWAY_REQUIRE_AUTH` | `false` | 是否要求 JWT |
@@ -157,9 +157,10 @@ export PARALLAX_CALLBACK_TOKEN=$PARALLAX_GATEWAY_INTERNAL_TOKEN
 ## 测试
 
 ```bat
-mvn -o test        :: 单元测试；不需要 Docker / 中间件；历史数量见 ../docs/ACCEPTANCE.md
-mvn -o -Pit verify :: 集成测试；需要 Docker，缺失的 redis:7-alpine 会按需拉取
-                   :: 离线可先 docker pull，或用 -Dparallax.test.redis-image=redis:latest 覆盖
+mvn -o test        :: 116 项单元测试；H2 MySQL 兼容模式；不需要 Docker / 中间件
+mvn -o -Pit verify :: 集成测试；Redis/RabbitMQ 由 Testcontainers 启动
+                   :: MySQL IT 另需真实库：设置 PARALLAX_TEST_DB_URL 并加 -Dparallax.test.mysql=true
+                   :: 缺失的 redis:7-alpine 会按需拉取；离线可先 docker pull
 python tools/mutation_audit.py :: Java 关键策略变异门禁（临时副本，不修改工作树）
 ```
 
@@ -169,17 +170,18 @@ python tools/mutation_audit.py :: Java 关键策略变异门禁（临时副本�
 
 ### 默认档为什么用 H2，以及这样做的代价
 
-贡献者机器上不一定有 Docker；本机已安装，仍需先检查实际路径与缓存。如果整套测试都要求真实 PG，
+贡献者机器上不一定有 Docker；本机已安装，仍需先检查实际路径与缓存。如果整套测试都要求真实 MySQL，
 本地就只能跑单元测试，集成测试会长期处于"只有 CI 知道"的状态。
 
-代价必须说清楚：**H2 不能替代真实 PostgreSQL 做验证**。它验证的是
-"迁移脚本能被解析、JPA 映射与表结构一致、业务逻辑正确"，
-而 PG 特有的行为（类型推导、`coalesce(sum(bigint))` 返回 numeric、时区往返、
-并发与隔离级别）一概没测到。所以另有 `PostgresPersistenceIT` 与 `RedisRateLimitIT`
-跑真库，CI 上必跑（独立的 `gateway-it` 任务）。
+代价必须说清楚：**H2 不能替代真实 MySQL 做验证**。它验证的是
+"测试 schema 能被解析、JPA 映射与表结构一致、业务逻辑正确"，
+而 MySQL 特有的行为（类型推导、`coalesce(sum(bigint))` 返回 DECIMAL、时区往返、
+并发与隔离级别）一概没测到。所以另有 `MysqlPersistenceIT` 与 `RedisRateLimitIT`
+跑真库。`gateway-it` 跑 Redis/RabbitMQ；`MysqlPersistenceIT` 需要显式开启
+（`-Dparallax.test.mysql=true` + `PARALLAX_TEST_DB_URL`）。
 
-两个 IT 都用 `disabledWithoutDocker = true`，本地无 Docker 时自动跳过——
-不让基础设施成为本地开发的阻塞项。
+Redis/RabbitMQ 的 IT 用 `disabledWithoutDocker = true`，本地无 Docker 时自动跳过；
+`MysqlPersistenceIT` 由系统属性显式开启，不会误连本机库。
 
 > 本机没有全局 Maven / JDK 21 时，用仓内便携工具链：
 >

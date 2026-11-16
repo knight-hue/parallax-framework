@@ -207,7 +207,6 @@ volumes:
   runs:
   redis-data:
   qdrant-data:
-  postgres-data:
   mysql-data:
   prometheus-data:
   grafana-data:

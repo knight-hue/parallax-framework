@@ -25,7 +25,7 @@
     <resilience4j.version>2.2.0</resilience4j.version>
     <springdoc.version>2.8.9</springdoc.version>
     <!--
-      默认跳过集成测试：它们要 Docker（Testcontainers 起真实 PostgreSQL 与 Redis）。
+      默认跳过集成测试：它们要 Docker / 真实中间件（MySQL、RabbitMQ、Redis）。
       不跳的话，没有 Docker 的机器 `mvn verify` 就会失败——本地开发会被基础设施卡住。
       需要真实基础设施时用 `-Pit`，CI 上的 gateway-it 任务就是这么做。
     -->
@@ -34,7 +34,7 @@
 
   <profiles>
     <profile>
-      <!-- 真实 PostgreSQL + Redis 的集成测试 -->
+      <!-- 真实中间件（MySQL / RabbitMQ / Redis）的集成测试 -->
       <id>it</id>
       <properties>
         <skipITs>false</skipITs>
@@ -72,20 +72,11 @@
     </dependency>
     <dependency>
       <groupId>org.flywaydb</groupId>
-      <artifactId>flyway-database-postgresql</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.flywaydb</groupId>
       <artifactId>flyway-mysql</artifactId>
     </dependency>
     <dependency>
       <groupId>com.mysql</groupId>
       <artifactId>mysql-connector-j</artifactId>
-      <scope>runtime</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.postgresql</groupId>
-      <artifactId>postgresql</artifactId>
       <scope>runtime</scope>
     </dependency>
 
@@ -172,10 +163,8 @@
 
     <!--
       H2 只用于**默认测试档**，让整套测试在没有 Docker 的机器上也能跑：
-      同一份 Flyway 迁移脚本在 H2 的 PostgreSQL 兼容模式下执行，
-      迁移语法错误因此每次测试都会被暴露。
-      真实 PostgreSQL 由 gateway-it（Testcontainers）单独跑一遍——
-      H2 无法替代真实 PG 做验证，两者是互补而不是二选一。
+      测试 schema 从 MySQL 迁移脚本转换而来，在 H2 的 MySQL 兼容模式下执行。
+      真实 MySQL 由 gateway-it 单独跑一遍——H2 不能替代真实 MySQL。
     -->
     <dependency>
       <groupId>com.h2database</groupId>
@@ -185,11 +174,6 @@
     <dependency>
       <groupId>org.testcontainers</groupId>
       <artifactId>junit-jupiter</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.testcontainers</groupId>
-      <artifactId>postgresql</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

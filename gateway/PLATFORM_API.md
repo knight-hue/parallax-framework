@@ -1,8 +1,7 @@
 # Platform identity API
 
 This module adds project ownership boundaries without changing legacy audit ownership.
-Schema is managed by Flyway with MySQL as the default runtime and a legacy PostgreSQL
-profile for migration/regression. Organization members currently inherit their role for all
+Schema is managed by Flyway with MySQL as the only runtime. Organization members currently inherit their role for all
 projects in that organization; per-project membership overrides are not implemented.
 
 1. An existing system administrator provisions a user with `POST /api/v1/platform/users`

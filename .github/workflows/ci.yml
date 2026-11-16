@@ -223,12 +223,12 @@ jobs:
         working-directory: gateway
         run: python tools/mutation_audit.py
 
-  # 真实 PostgreSQL + Redis 上的集成测试。
+  # 真实 MySQL + Redis 上的集成测试。
   #
-  # 为什么必须单独存在：默认测试档用的是 H2（PostgreSQL 兼容模式）与内存桶，
+  # 为什么必须单独存在：默认测试档用的是 H2（MySQL 兼容模式）与内存桶，
   # 它们能让整套测试在没有 Docker 的机器上跑起来，但**不能证伪**以下三件事——
-  #   · 迁移在真实 PG 上是否可执行
-  #   · `coalesce(sum(bigint), 0)` 在 PG 上返回 numeric 时的映射
+  #   · 迁移在真实 MySQL 上是否可执行
+  #   · `coalesce(sum(bigint), 0)` 在 MySQL 上返回 DECIMAL 时的映射
   #   · 两个网关实例共享同一份配额，以及 Redis 挂掉后限流降级而服务仍可用
   # 这三条正是"生产级"与"能跑通"之间的差别。
   gateway-it:

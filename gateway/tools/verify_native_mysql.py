@@ -3,96 +3,13 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import secrets
 import socket
 import subprocess
 import tempfile
 import time
-from contextlib import contextmanager
 from pathlib import Path
-
-
-@contextmanager
-def postgres_source(image: str | None, password: str, flags: int):
-    if not image:
-        yield None
-        return
-    name = "parallax-transfer-" + secrets.token_hex(6)
-    env = os.environ.copy()
-    env["POSTGRES_PASSWORD"] = password
-    try:
-        subprocess.run(
-            [
-                "docker",
-                "run",
-                "--pull=never",
-                "--rm",
-                "--detach",
-                "--name",
-                name,
-                "-e",
-                "POSTGRES_PASSWORD",
-                "-e",
-                "POSTGRES_USER=parallax_test",
-                "-e",
-                "POSTGRES_DB=source",
-                "-p",
-                "127.0.0.1::5432",
-                image,
-            ],
-            env=env,
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            creationflags=flags,
-            timeout=30,
-        )
-        details = subprocess.run(
-            ["docker", "inspect", name],
-            check=True,
-            capture_output=True,
-            text=True,
-            creationflags=flags,
-            timeout=10,
-        )
-        port = json.loads(details.stdout)[0]["NetworkSettings"]["Ports"]["5432/tcp"][0][
-            "HostPort"
-        ]
-        for _ in range(100):
-            ready = subprocess.run(
-                [
-                    "docker",
-                    "exec",
-                    name,
-                    "pg_isready",
-                    "-U",
-                    "parallax_test",
-                    "-d",
-                    "source",
-                ],
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=flags,
-                timeout=3,
-            )
-            if ready.returncode == 0:
-                break
-            time.sleep(0.2)
-        else:
-            raise RuntimeError("Temporary PostgreSQL did not become ready")
-        yield f"jdbc:postgresql://127.0.0.1:{port}/source"
-    finally:
-        subprocess.run(
-            ["docker", "rm", "-f", name],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=flags,
-            timeout=20,
-        )
 
 
 def main() -> int:
@@ -101,10 +18,6 @@ def main() -> int:
     parser.add_argument("--maven", type=Path, required=True)
     parser.add_argument("--java-home", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument(
-        "--postgres-image",
-        help="Existing cached image for real PostgreSQL-to-MySQL transfer",
-    )
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     home = args.mysql_home.resolve(strict=True)
@@ -123,10 +36,7 @@ def main() -> int:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
     root_password, password = secrets.token_hex(24), secrets.token_hex(24)
-    with (
-        postgres_source(args.postgres_image, password, flags) as source_url,
-        tempfile.TemporaryDirectory(prefix="parallax-mysql-") as temporary,
-    ):
+    with tempfile.TemporaryDirectory(prefix="parallax-mysql-") as temporary:
         data = Path(temporary) / "data"
         log = output / "mysql-server.log"
         with log.open("wb") as stream:
@@ -191,7 +101,7 @@ def main() -> int:
                     time.sleep(0.2)
                 if not ready:
                     raise RuntimeError("Temporary MySQL did not become ready")
-                sql = f"CREATE DATABASE parallax_test CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin; CREATE DATABASE parallax_transfer CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin; CREATE USER 'parallax_test'@'127.0.0.1' IDENTIFIED BY '{password}'; GRANT ALL ON parallax_test.* TO 'parallax_test'@'127.0.0.1'; GRANT ALL ON parallax_transfer.* TO 'parallax_test'@'127.0.0.1'; ALTER USER 'root'@'localhost' IDENTIFIED BY '{root_password}';"
+                sql = f"CREATE DATABASE parallax_test CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin; CREATE USER 'parallax_test'@'127.0.0.1' IDENTIFIED BY '{password}'; GRANT ALL ON parallax_test.* TO 'parallax_test'@'127.0.0.1'; ALTER USER 'root'@'localhost' IDENTIFIED BY '{root_password}';"
                 subprocess.run(
                     command,
                     input=sql,
@@ -215,8 +125,6 @@ def main() -> int:
                         env.pop(key)
                 url = f"jdbc:mysql://127.0.0.1:{port}/parallax_test?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&allowPublicKeyRetrieval=true&sslMode=DISABLED"
                 env["PARALLAX_TEST_DB_URL"] = url
-                if source_url:
-                    env["PARALLAX_TRANSFER_TEST_SOURCE_URL"] = source_url
                 with (output / "maven.log").open("wb") as gate_log:
                     result = subprocess.run(
                         [
